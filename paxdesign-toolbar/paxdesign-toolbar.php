@@ -3,7 +3,7 @@
  * Plugin Name:  PaxDesign Utility Dock
  * Plugin URI:   https://paxdesign.io
  * Description:  Enterprise-grade SaaS utility dock with AI services, cybersecurity intelligence, modular tools, and a full admin control panel.
- * Version:      2.0.0
+ * Version:      2.0.1
  * Author:       PaxDesign
  * Author URI:   https://paxdesign.io
  * License:      GPL-2.0-or-later
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'PDX_VERSION',   '2.0.0' );
+define( 'PDX_VERSION',   '2.0.1' );
 define( 'PDX_DIR',       plugin_dir_path( __FILE__ ) );
 define( 'PDX_URL',       plugin_dir_url( __FILE__ ) );
 define( 'PDX_SLUG',      'paxdesign-toolbar' );

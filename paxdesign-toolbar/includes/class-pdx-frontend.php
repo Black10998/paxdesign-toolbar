@@ -25,12 +25,16 @@ class PDX_Frontend {
 			PDX_VERSION
 		);
 
+		// Use defer strategy (WP 6.3+) so the script always runs after the DOM is ready.
+		// Falls back to in_footer=true on older WordPress, which is safe because
+		// dock.js wraps its init in a DOMContentLoaded guard.
+		$script_args = [ 'strategy' => 'defer', 'in_footer' => true ];
 		wp_enqueue_script(
 			'pdx-dock',
 			PDX_URL . 'assets/js/dock.js',
 			[],
 			PDX_VERSION,
-			true
+			$script_args
 		);
 
 		// Pass config to JS
