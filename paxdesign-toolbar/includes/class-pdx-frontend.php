@@ -97,12 +97,10 @@ class PDX_Frontend {
 			<nav id="pdx-dock" aria-label="Utility dock tools">
 				<?php $this->render_dock_items(); ?>
 			</nav>
-			<div id="pdx-backdrop" aria-hidden="true"></div>
-			<aside id="pdx-panel" role="dialog" aria-modal="true" aria-label="Tool panel">
-				<div id="pdx-panel-inner"></div>
-			</aside>
 		</div>
 		<?php
+		// #pdx-backdrop and #pdx-panel are created by dock.js and appended
+		// directly to <body> to avoid theme stacking-context traps.
 	}
 
 	private function render_dock_items(): void {
