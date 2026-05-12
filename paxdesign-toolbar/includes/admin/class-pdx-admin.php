@@ -34,6 +34,9 @@ class PDX_Admin {
 
 		add_submenu_page( PDX_SLUG, __( 'General',    'paxdesign-toolbar' ), __( 'General',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG,                    [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Modules',    'paxdesign-toolbar' ), __( 'Modules',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-modules',       [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Pricing',    'paxdesign-toolbar' ), __( 'Pricing',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-pricing',       [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'PayPal',     'paxdesign-toolbar' ), __( 'PayPal',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-payments',      [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Orders',     'paxdesign-toolbar' ), __( 'Orders',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-orders',        [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'API Keys',   'paxdesign-toolbar' ), __( 'API Keys',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-api',           [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'UI & Style', 'paxdesign-toolbar' ), __( 'UI & Style', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-ui',            [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Privacy',    'paxdesign-toolbar' ), __( 'Privacy',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-privacy',       [ $this, 'render_page' ] );
@@ -76,13 +79,16 @@ class PDX_Admin {
 	private function current_tab(): string {
 		$page = sanitize_key( $_GET['page'] ?? PDX_SLUG );
 		$map  = [
-			PDX_SLUG                => 'general',
-			PDX_SLUG . '-modules'   => 'modules',
-			PDX_SLUG . '-api'       => 'api',
-			PDX_SLUG . '-ui'        => 'ui',
-			PDX_SLUG . '-privacy'   => 'privacy',
-			PDX_SLUG . '-roles'     => 'roles',
-			PDX_SLUG . '-analytics' => 'analytics',
+			PDX_SLUG                 => 'general',
+			PDX_SLUG . '-modules'    => 'modules',
+			PDX_SLUG . '-pricing'    => 'pricing',
+			PDX_SLUG . '-payments'   => 'payments',
+			PDX_SLUG . '-orders'     => 'orders',
+			PDX_SLUG . '-api'        => 'api',
+			PDX_SLUG . '-ui'         => 'ui',
+			PDX_SLUG . '-privacy'    => 'privacy',
+			PDX_SLUG . '-roles'      => 'roles',
+			PDX_SLUG . '-analytics'  => 'analytics',
 		];
 		return $map[ $page ] ?? 'general';
 	}
@@ -105,6 +111,35 @@ class PDX_Admin {
 
 	private function sanitize_tab( string $tab, array $post ): array {
 		switch ( $tab ) {
+			case 'pricing':
+				$modules = $this->modules->all();
+				$tiers   = [];
+				$prices  = [];
+				foreach ( $modules as $id => $_ ) {
+					$tiers[ $id ]  = in_array( $post['module_tiers'][ $id ] ?? '', [ 'free', 'preview', 'paid', 'subscription' ], true )
+						? $post['module_tiers'][ $id ]
+						: 'free';
+					$prices[ $id ] = max( 0, (float) ( $post['module_prices'][ $id ] ?? 0 ) );
+				}
+				return [ 'module_tiers' => $tiers, 'module_prices' => $prices ];
+
+			case 'payments':
+				return [
+					'paypal' => [
+						'mode'              => in_array( $post['paypal']['mode'] ?? '', [ 'sandbox', 'live' ], true ) ? $post['paypal']['mode'] : 'sandbox',
+						'sandbox_client_id' => sanitize_text_field( $post['paypal']['sandbox_client_id'] ?? '' ),
+						'sandbox_secret'    => sanitize_text_field( $post['paypal']['sandbox_secret']    ?? '' ),
+						'live_client_id'    => sanitize_text_field( $post['paypal']['live_client_id']    ?? '' ),
+						'live_secret'       => sanitize_text_field( $post['paypal']['live_secret']       ?? '' ),
+						'currency'          => in_array( $post['paypal']['currency'] ?? 'USD', PDX_Commerce::supported_currencies(), true )
+							? $post['paypal']['currency']
+							: 'USD',
+					],
+				];
+
+			case 'orders':
+				return []; // read-only page
+
 			case 'general':
 				return [
 					'enabled'     => isset( $post['enabled'] ),

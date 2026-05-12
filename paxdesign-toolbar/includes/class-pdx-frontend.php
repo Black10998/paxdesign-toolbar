@@ -48,7 +48,7 @@ class PDX_Frontend {
 	}
 
 	private function js_config(): array {
-		$modules = $this->modules->all();
+		$modules = $this->modules->all_with_pricing( $this->settings );
 		$enabled = [];
 
 		foreach ( $modules as $id => $mod ) {
@@ -59,25 +59,28 @@ class PDX_Frontend {
 					'icon'     => $mod['icon'],
 					'type'     => $mod['panel_type'],
 					'category' => $mod['category'],
+					'tier'     => $mod['tier'],
+					'price'    => $mod['price'],
+					'currency' => $mod['currency'],
 				];
 			}
 		}
 
 		return [
-			'version'         => PDX_VERSION,
-			'contact'         => $this->settings->contact_url(),
-			'ctaPrimary'      => esc_html( $this->settings->get( 'cta_primary_label', 'Start a project' ) ),
-			'ctaSecondary'    => esc_html( $this->settings->get( 'cta_secondary_label', 'Learn more' ) ),
-			'position'        => esc_attr( $this->settings->get( 'dock_position', 'left' ) ),
-			'theme'           => esc_attr( $this->settings->get( 'dock_theme', 'dark' ) ),
-			'size'            => esc_attr( $this->settings->get( 'dock_size', 'default' ) ),
-			'accentColor'     => esc_attr( $this->settings->get( 'accent_color', '#3fb950' ) ),
-			'mobileEnabled'   => (bool) $this->settings->get( 'mobile_enabled', true ),
-			'mobileBreakpoint'=> (int)  $this->settings->get( 'mobile_breakpoint', 680 ),
-			'analytics'       => (bool) $this->settings->get( 'analytics_enabled', false ),
-			'modules'         => $enabled,
-			'restUrl'         => esc_url( rest_url( 'pdx/v1' ) ),
-			'nonce'           => wp_create_nonce( 'wp_rest' ),
+			'version'          => PDX_VERSION,
+			'contact'          => $this->settings->contact_url(),
+			'ctaPrimary'       => esc_html( $this->settings->get( 'cta_primary_label', 'Start a project' ) ),
+			'ctaSecondary'     => esc_html( $this->settings->get( 'cta_secondary_label', 'Learn more' ) ),
+			'position'         => esc_attr( $this->settings->get( 'dock_position', 'left' ) ),
+			'theme'            => esc_attr( $this->settings->get( 'dock_theme', 'dark' ) ),
+			'size'             => esc_attr( $this->settings->get( 'dock_size', 'default' ) ),
+			'accentColor'      => esc_attr( $this->settings->get( 'accent_color', '#3fb950' ) ),
+			'mobileEnabled'    => (bool) $this->settings->get( 'mobile_enabled', true ),
+			'mobileBreakpoint' => (int)  $this->settings->get( 'mobile_breakpoint', 680 ),
+			'analytics'        => (bool) $this->settings->get( 'analytics_enabled', false ),
+			'modules'          => $enabled,
+			'restUrl'          => esc_url( rest_url( 'pdx/v1' ) ),
+			'nonce'            => wp_create_nonce( 'wp_rest' ),
 		];
 	}
 

@@ -9,13 +9,16 @@
     <nav class="pdx-admin-nav">
       <?php
       $tabs = [
-        PDX_SLUG                => [ 'label' => 'General',    'icon' => 'M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z' ],
-        PDX_SLUG . '-modules'   => [ 'label' => 'Modules',    'icon' => 'M4 6h16M4 12h16M4 18h16' ],
-        PDX_SLUG . '-api'       => [ 'label' => 'API Keys',   'icon' => 'M15 7h3a5 5 0 0 1 0 10h-3m-6 0H6A5 5 0 0 1 6 7h3' ],
-        PDX_SLUG . '-ui'        => [ 'label' => 'UI & Style', 'icon' => 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' ],
-        PDX_SLUG . '-privacy'   => [ 'label' => 'Privacy',    'icon' => 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' ],
-        PDX_SLUG . '-roles'     => [ 'label' => 'Roles',      'icon' => 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 4v6m3-3h-6' ],
-        PDX_SLUG . '-analytics' => [ 'label' => 'Analytics',  'icon' => 'M18 20V10M12 20V4M6 20v-6' ],
+        PDX_SLUG                 => [ 'label' => 'General',    'icon' => 'M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z' ],
+        PDX_SLUG . '-modules'    => [ 'label' => 'Modules',    'icon' => 'M4 6h16M4 12h16M4 18h16' ],
+        PDX_SLUG . '-pricing'    => [ 'label' => 'Pricing',    'icon' => 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' ],
+        PDX_SLUG . '-payments'   => [ 'label' => 'PayPal',     'icon' => 'M7 11C7 11 6 17 10 17H15C18 17 20 15 20 12C20 9 18 7 15 7H9C6 7 5 9 5 12' ],
+        PDX_SLUG . '-orders'     => [ 'label' => 'Orders',     'icon' => 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2' ],
+        PDX_SLUG . '-api'        => [ 'label' => 'API Keys',   'icon' => 'M15 7h3a5 5 0 0 1 0 10h-3m-6 0H6A5 5 0 0 1 6 7h3' ],
+        PDX_SLUG . '-ui'         => [ 'label' => 'UI',         'icon' => 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5zM4 13a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6zM16 13a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-6z' ],
+        PDX_SLUG . '-privacy'    => [ 'label' => 'Privacy',    'icon' => 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' ],
+        PDX_SLUG . '-roles'      => [ 'label' => 'Roles',      'icon' => 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 4v6m3-3h-6' ],
+        PDX_SLUG . '-analytics'  => [ 'label' => 'Analytics',  'icon' => 'M18 20V10M12 20V4M6 20v-6' ],
       ];
       $current = sanitize_key( $_GET['page'] ?? PDX_SLUG );
       foreach ( $tabs as $slug => $tab ) : ?>

@@ -60,6 +60,20 @@ class PDX_Settings {
 			// Mobile
 			'mobile_enabled'       => true,
 			'mobile_breakpoint'    => 680,
+
+			// PayPal
+			'paypal'               => [
+				'mode'              => 'sandbox',
+				'sandbox_client_id' => '',
+				'sandbox_secret'    => '',
+				'live_client_id'    => '',
+				'live_secret'       => '',
+				'currency'          => 'USD',
+			],
+
+			// Per-module tiers and prices (keyed by module_id)
+			'module_tiers'         => [],
+			'module_prices'        => [],
 		];
 	}
 
