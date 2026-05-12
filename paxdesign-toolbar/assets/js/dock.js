@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v2.1.0
+ * PaxDesign Utility Dock — v2.1.1
  * Full interactive SaaS dock with PayPal payments, AI chat, OSINT, and real tool panels.
  */
 (function () {
@@ -39,11 +39,28 @@
     }
 
     /* ── State ── */
-    var current   = null;
-    var accessMap = {};   /* module_id -> {status, tier, label, price, currency} */
-    var chatHistory = {}; /* module_id -> [{role,content}] */
+    var current        = null;
+    var accessMap      = {};    /* module_id -> {status, tier, label, price, currency} */
+    var chatHistory    = {};    /* module_id -> [{role,content}] */
+    var accessReady    = false; /* true once fetchAccessStatus resolves */
+    var accessQueue    = [];    /* panel IDs queued while fetch is in-flight */
 
-    /* Load access status once */
+    /* Seed accessMap from C.modules so tier/price are always available,
+       even before the REST call returns. Status defaults to 'unknown'. */
+    if (C.modules) {
+      Object.keys(C.modules).forEach(function(id) {
+        var m = C.modules[id];
+        accessMap[id] = {
+          status:   m.tier === 'free' ? 'active' : 'unknown',
+          tier:     m.tier     || 'paid',
+          price:    m.price    || 0,
+          currency: m.currency || 'USD',
+          label:    m.tier === 'free' ? 'Free' : 'Checking\u2026'
+        };
+      });
+    }
+
+    /* Load real access status; flush any queued panel opens when done */
     fetchAccessStatus();
 
     /* ── Icons ── */
@@ -97,8 +114,28 @@
     function fetchAccessStatus() {
       fetch(C.restUrl + '/pay/status', { headers: { 'X-WP-Nonce': C.nonce } })
         .then(function(r){ return r.ok ? r.json() : {}; })
-        .then(function(d){ accessMap = d || {}; })
-        .catch(function(){});
+        .then(function(d){
+          /* Merge server response over the seeded defaults */
+          if (d && typeof d === 'object') {
+            Object.keys(d).forEach(function(id){ accessMap[id] = d[id]; });
+          }
+        })
+        .catch(function(){
+          /* On failure keep the seeded defaults; treat unknown as locked */
+          Object.keys(accessMap).forEach(function(id){
+            if (accessMap[id].status === 'unknown') {
+              accessMap[id].status = 'locked';
+              accessMap[id].label  = 'Locked';
+            }
+          });
+        })
+        .finally(function(){
+          accessReady = true;
+          /* Flush any panels that were opened before the fetch completed */
+          var q = accessQueue.slice();
+          accessQueue = [];
+          q.forEach(function(id){ renderPanel(id); });
+        });
     }
     function post(url, data) {
       return fetch(url, {
@@ -120,8 +157,13 @@
       panel.classList.add('is-open');
       document.body.classList.add('pdx-no-scroll');
       current = id;
-      renderPanel(id);
       track(id, 'open');
+      if (!accessReady) {
+        /* Access status fetch still in-flight — queue the render */
+        accessQueue.push(id);
+      } else {
+        renderPanel(id);
+      }
     }
     function closePanel() {
       panel.classList.remove('is-open');
@@ -151,8 +193,40 @@
       try { post(C.restUrl+'/event', {module:id, action:action}); } catch(e){}
     }
     /* ── Panel builders ── */
+
+    /* Returns true when the module should be blocked (paid/preview and not active) */
+    function isLocked(id) {
+      var acc = accessMap[id] || {};
+      var tier = acc.tier || (C.modules && C.modules[id] && C.modules[id].tier) || 'free';
+      if (tier === 'free') return false;
+      return acc.status !== 'active';
+    }
+
+    /* Returns the access record, merging C.modules as fallback for price/currency */
+    function getAcc(id) {
+      var acc  = accessMap[id] || {};
+      var mod  = (C.modules && C.modules[id]) || {};
+      return {
+        status:   acc.status   || 'locked',
+        tier:     acc.tier     || mod.tier     || 'paid',
+        price:    acc.price    != null ? acc.price    : (mod.price    || 0),
+        currency: acc.currency || mod.currency || 'USD',
+        label:    acc.label    || (acc.status === 'active' ? 'Unlocked' : 'Locked')
+      };
+    }
+
     function buildTrustPanel() {
+      var id  = 'trust';
+      var acc = getAcc(id);
+      if (isLocked(id)) {
+        return hdr('shield','Trust Check','Reputation \u00b7 SSL \u00b7 Domain age \u00b7 Risk score') +
+          buildPaywall(id, acc);
+      }
+      var previewNote = (acc.tier === 'preview' && acc.status !== 'active')
+        ? '<div class="pdx-preview-note">'+IC.lock+' Preview mode \u2014 limited scans. Full access: <strong>'+fmt(acc.price,acc.currency)+'</strong></div>'
+        : '';
       return hdr('shield','Trust Check','Reputation \u00b7 SSL \u00b7 Domain age \u00b7 Risk score') +
+        statusBadge(acc) + previewNote +
         '<div class="pdx-trust-row">' +
           '<input class="pdx-trust-input" id="pdx-trust-input" type="text"' +
                  ' placeholder="domain.com or https://\u2026" autocomplete="off" spellcheck="false"/>' +
@@ -161,11 +235,10 @@
     }
 
     function buildChatPanel(id) {
-      var acc = accessMap[id] || {};
-      var mod = (C.modules && C.modules[id]) || {};
-      var locked = acc.status === 'locked';
+      var acc    = getAcc(id);
+      var locked = isLocked(id);
       var previewNote = (acc.tier === 'preview' && acc.status !== 'active')
-        ? '<div class="pdx-preview-note">'+IC.lock+' Preview mode — '+x(acc.label||'3 free messages')+'. Full access: <strong>'+fmt(acc.price,acc.currency)+'</strong></div>'
+        ? '<div class="pdx-preview-note">'+IC.lock+' Preview mode \u2014 '+x(acc.label||'3 free messages')+'. Full access: <strong>'+fmt(acc.price,acc.currency)+'</strong></div>'
         : '';
       return hdr('user','AI Personas','Chat with a custom AI persona') +
         statusBadge(acc) +
@@ -189,9 +262,16 @@
 
     function buildOsintPanel() {
       var id  = 'osint';
-      var acc = accessMap[id] || {};
+      var acc = getAcc(id);
+      if (isLocked(id)) {
+        return hdr('search','OSINT / JailBreak Agents','Intelligence scan \u00b7 Domain \u00b7 IP \u00b7 Breaches') +
+          buildPaywall(id, acc);
+      }
+      var previewNote = (acc.tier === 'preview' && acc.status !== 'active')
+        ? '<div class="pdx-preview-note">'+IC.lock+' Preview: registration + SSL only. Full report: <strong>'+fmt(acc.price,acc.currency)+'</strong></div>'
+        : '';
       return hdr('search','OSINT / JailBreak Agents','Intelligence scan \u00b7 Domain \u00b7 IP \u00b7 Breaches') +
-        statusBadge(acc) +
+        statusBadge(acc) + previewNote +
         '<div class="pdx-trust-row" style="margin-top:14px">' +
           '<input class="pdx-trust-input" id="pdx-osint-input" type="text" placeholder="domain.com or IP address" autocomplete="off"/>' +
           '<button class="pdx-trust-scan" id="pdx-osint-scan" type="button">Scan</button>' +
@@ -237,8 +317,8 @@
 
     function buildAutomationPanel() {
       var id  = 'automation';
-      var acc = accessMap[id] || {};
-      if (acc.status === 'locked') {
+      var acc = getAcc(id);
+      if (isLocked(id)) {
         return hdr('grid','Browser Automation','Submit a URL + task, receive structured results') +
           buildPaywall(id, acc);
       }
@@ -258,8 +338,8 @@
 
     function buildConnectorsPanel() {
       var id  = 'connectors';
-      var acc = accessMap[id] || {};
-      if (acc.status === 'locked') {
+      var acc = getAcc(id);
+      if (isLocked(id)) {
         return hdr('link','Connectors','API integrations and data bridges') + buildPaywall(id, acc);
       }
       return hdr('link','Connectors','Test and configure API connections') +
@@ -285,9 +365,9 @@
     }
 
     function buildBuilderPanel() {
-      var id  = 'builder';
-      var acc = accessMap[id] || {};
-      var locked = acc.status === 'locked';
+      var id     = 'builder';
+      var acc    = getAcc(id);
+      var locked = isLocked(id);
       var previewNote = (acc.tier === 'preview' && !locked)
         ? '<div class="pdx-preview-note">'+IC.lock+' Preview: single-step flows only. Full access: <strong>'+fmt(acc.price,acc.currency)+'</strong></div>'
         : '';
@@ -313,8 +393,8 @@
 
     function buildPipelinePanel() {
       var id  = 'pipeline';
-      var acc = accessMap[id] || {};
-      if (acc.status === 'locked') {
+      var acc = getAcc(id);
+      if (isLocked(id)) {
         return hdr('pipeline','Agent Pipeline','Multi-agent orchestration') + buildPaywall(id, acc);
       }
       return hdr('pipeline','Agent Pipeline','Define and run a multi-agent task chain') +
@@ -740,7 +820,8 @@
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (d.ok) {
-            accessMap[moduleId] = { status: 'active', tier: 'paid', label: 'Unlocked' };
+            var prev = accessMap[moduleId] || {};
+            accessMap[moduleId] = { status: 'active', tier: prev.tier || 'paid', price: prev.price || 0, currency: prev.currency || 'USD', label: 'Unlocked' };
             statusEl.innerHTML = '<div class="pdx-success">' + IC.check +
               ' Payment confirmed! Reloading tool\u2026</div>';
             setTimeout(function() { renderPanel(moduleId); }, 1200);
@@ -765,7 +846,8 @@
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (d.ok) {
-            accessMap[moduleId] = { status: 'active', tier: 'paid', label: 'Unlocked' };
+            var prev = accessMap[moduleId] || {};
+            accessMap[moduleId] = { status: 'active', tier: prev.tier || 'paid', price: prev.price || 0, currency: prev.currency || 'USD', label: 'Unlocked' };
             /* Clean URL */
             var clean = window.location.pathname;
             window.history.replaceState({}, '', clean);
