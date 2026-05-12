@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v2.1.1
+ * PaxDesign Utility Dock — v2.1.2
  * Full interactive SaaS dock with PayPal payments, AI chat, OSINT, and real tool panels.
  */
 (function () {
@@ -219,19 +219,24 @@
       var id  = 'trust';
       var acc = getAcc(id);
       if (isLocked(id)) {
-        return hdr('shield','Trust Check','Reputation \u00b7 SSL \u00b7 Domain age \u00b7 Risk score') +
+        return hdr('shield','Trust Check','Infrastructure Intelligence \u00b7 SSL \u00b7 Domain \u00b7 Risk') +
           buildPaywall(id, acc);
       }
       var previewNote = (acc.tier === 'preview' && acc.status !== 'active')
         ? '<div class="pdx-preview-note">'+IC.lock+' Preview mode \u2014 limited scans. Full access: <strong>'+fmt(acc.price,acc.currency)+'</strong></div>'
         : '';
-      return hdr('shield','Trust Check','Reputation \u00b7 SSL \u00b7 Domain age \u00b7 Risk score') +
+      return hdr('shield','Trust Check','Infrastructure Intelligence \u00b7 SSL \u00b7 Domain \u00b7 Risk') +
         statusBadge(acc) + previewNote +
+        '<div class="pdx-intel-bar">' +
+          '<span class="pdx-intel-bar__label">SYSTEM READY</span>' +
+          '<span class="pdx-intel-bar__dot"></span>' +
+        '</div>' +
         '<div class="pdx-trust-row">' +
           '<input class="pdx-trust-input" id="pdx-trust-input" type="text"' +
-                 ' placeholder="domain.com or https://\u2026" autocomplete="off" spellcheck="false"/>' +
-          '<button class="pdx-trust-scan" id="pdx-trust-scan" type="button">Scan</button>' +
-        '</div><div id="pdx-trust-output"></div>';
+                 ' placeholder="target: domain.com or https://\u2026" autocomplete="off" spellcheck="false"/>' +
+          '<button class="pdx-trust-scan" id="pdx-trust-scan" type="button">SCAN</button>' +
+        '</div>' +
+        '<div id="pdx-trust-output"></div>';
     }
 
     function buildChatPanel(id) {
@@ -422,29 +427,88 @@
              '<input class="pdx-trust-input" id="'+id+'" type="'+type+'" placeholder="'+x(placeholder)+'"/></div>';
     }
     /* ── Trust tool ── */
+    var TRUST_PHASES = [
+      { id: 'dns',    label: 'DNS RESOLUTION',        detail: 'Resolving nameservers and authoritative records' },
+      { id: 'rdap',   label: 'WHOIS / RDAP LOOKUP',   detail: 'Querying registration authority databases' },
+      { id: 'ssl',    label: 'TLS CERTIFICATE AUDIT', detail: 'Analysing cipher suites and certificate chain' },
+      { id: 'risk',   label: 'RISK SCORING ENGINE',   detail: 'Correlating signals across threat intelligence feeds' },
+      { id: 'report', label: 'GENERATING REPORT',     detail: 'Compiling structured intelligence output' }
+    ];
+
     function runTrustScan() {
       var inp = document.getElementById('pdx-trust-input');
       var out = document.getElementById('pdx-trust-output');
       var btn = document.getElementById('pdx-trust-scan');
       if (!inp||!out||!btn) return;
       var raw = inp.value.trim();
-      if (!raw) { out.innerHTML = errBox('Enter a domain or URL.'); return; }
+      if (!raw) { out.innerHTML = errBox('TARGET REQUIRED \u2014 enter a domain or URL.'); return; }
       if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
       var host;
-      try { host = new URL(raw).hostname; } catch(e) { out.innerHTML = errBox('Invalid URL.'); return; }
-      btn.disabled = true; btn.textContent = 'Scanning\u2026';
-      out.innerHTML = spinner('Checking ' + host + '\u2026');
+      try { host = new URL(raw).hostname; } catch(e) { out.innerHTML = errBox('INVALID TARGET \u2014 check the URL format.'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'SCANNING\u2026';
+
+      /* Render phased scan UI immediately */
+      out.innerHTML = buildScanPhases(host);
+
+      /* Animate phases while fetch runs in parallel */
+      var phaseEls = out.querySelectorAll('.pdx-phase');
+      var phaseIdx = 0;
+      function advancePhase() {
+        if (phaseIdx > 0 && phaseEls[phaseIdx-1]) {
+          phaseEls[phaseIdx-1].setAttribute('data-state','done');
+        }
+        if (phaseIdx < phaseEls.length) {
+          phaseEls[phaseIdx].setAttribute('data-state','active');
+          phaseIdx++;
+          var delay = phaseIdx < 3 ? 900 : 1400;
+          setTimeout(advancePhase, delay);
+        }
+      }
+      advancePhase();
+
       fetch(C.restUrl + '/trust?domain=' + encodeURIComponent(host), { headers: {'X-WP-Nonce': C.nonce} })
         .then(function(r){ return r.ok ? r.json() : null; })
-        .then(function(d){ out.innerHTML = d ? buildTrustResult(host, raw, d.rdap, d.ssl) : errBox('Scan failed.'); })
-        .catch(function(){ out.innerHTML = errBox('Scan failed. Check your connection.'); })
-        .finally(function(){ btn.disabled=false; btn.textContent='Scan'; });
+        .then(function(d){
+          phaseEls.forEach(function(el){ el.setAttribute('data-state','done'); });
+          var resultEl = out.querySelector('#pdx-trust-result');
+          if (resultEl) resultEl.innerHTML = d ? buildTrustResult(host, raw, d.rdap, d.ssl) : errBox('SCAN FAILED \u2014 target may be unreachable.');
+        })
+        .catch(function(){
+          phaseEls.forEach(function(el){ el.setAttribute('data-state','err'); });
+          var resultEl = out.querySelector('#pdx-trust-result');
+          if (resultEl) resultEl.innerHTML = errBox('SCAN FAILED \u2014 check your connection.');
+        })
+        .finally(function(){ btn.disabled=false; btn.textContent='SCAN'; });
+    }
+
+    function buildScanPhases(host) {
+      var ts = new Date().toISOString().replace('T',' ').substring(0,19) + ' UTC';
+      var phases = TRUST_PHASES.map(function(p) {
+        return '<div class="pdx-phase" data-phase="'+p.id+'" data-state="idle">' +
+          '<div class="pdx-phase__left">' +
+            '<div class="pdx-phase__indicator"></div>' +
+            '<div class="pdx-phase__text">' +
+              '<div class="pdx-phase__label">'+p.label+'</div>' +
+              '<div class="pdx-phase__detail">'+p.detail+'</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="pdx-phase__status"></div>' +
+        '</div>';
+      }).join('');
+      return '<div class="pdx-scan-header">' +
+          '<div class="pdx-scan-header__row"><span class="pdx-scan-header__key">TARGET</span><span class="pdx-scan-header__val">'+x(host)+'</span></div>' +
+          '<div class="pdx-scan-header__row"><span class="pdx-scan-header__key">INITIATED</span><span class="pdx-scan-header__val">'+ts+'</span></div>' +
+        '</div>' +
+        '<div class="pdx-phases">'+phases+'</div>' +
+        '<div id="pdx-trust-result"></div>';
     }
 
     function buildTrustResult(domain, href, rdap, ssl) {
       var score=100, good=[], warn=[], bad=[];
       var isHttps = /^https:/i.test(href);
-      isHttps ? good.push('HTTPS') : (bad.push('No HTTPS'), score-=20);
+      isHttps ? good.push('HTTPS') : (bad.push('NO HTTPS'), score-=20);
       var regDate=null, registrar=null, age=null;
       if (rdap) {
         outer: for (var i=0;i<(rdap.entities||[]).length;i++) {
@@ -458,36 +522,70 @@
           }
         }
         if (age!==null) {
-          if (age<30){bad.push('Domain < 30 days');score-=30;}
-          else if (age<180){warn.push('Domain < 6 months');score-=12;}
-          else good.push('Domain '+(age<365?age+'d':Math.floor(age/365)+'y')+' old');
+          if (age<30){bad.push('DOMAIN AGE \u003c30D');score-=30;}
+          else if (age<180){warn.push('DOMAIN AGE \u003c6M');score-=12;}
+          else good.push('DOMAIN '+(age<365?age+'D':Math.floor(age/365)+'Y'));
         }
       }
       var grade=null;
       if (ssl&&ssl.endpoints&&ssl.endpoints[0]) {
         grade=ssl.endpoints[0].grade||null;
-        if (grade) { var g0=grade[0]; if(g0==='A')good.push('SSL '+grade); else if(g0==='B'){warn.push('SSL '+grade);score-=8;} else{bad.push('SSL '+grade);score-=20;} }
+        if (grade) {
+          var g0=grade[0];
+          if(g0==='A') good.push('TLS '+grade);
+          else if(g0==='B'){warn.push('TLS '+grade);score-=8;}
+          else{bad.push('TLS '+grade);score-=20;}
+        }
       }
       score=Math.max(0,Math.min(100,score));
-      var cls=score>=70?'safe':score>=40?'warn':'danger';
-      var label=score>=70?'Low Risk':score>=40?'Medium Risk':'High Risk';
-      var tags=good.map(function(t){return '<span class="pdx-tag pdx-tag--green">'+x(t)+'</span>';}).join('')+
-               warn.map(function(t){return '<span class="pdx-tag pdx-tag--yellow">'+x(t)+'</span>';}).join('')+
-               bad.map(function(t){return '<span class="pdx-tag pdx-tag--red">'+x(t)+'</span>';}).join('');
-      var rows=[
-        ['Domain',domain,''],['Protocol',isHttps?'HTTPS':'HTTP',isHttps?'ok':'bad'],
-        ['SSL Grade',grade||(isHttps?'Present':'None'),grade?(grade[0]==='A'?'ok':'mid'):(isHttps?'':'bad')],
-        ['Domain Age',age!==null?(age<365?age+' days':Math.floor(age/365)+' years'):'Unavailable',age!==null&&age<30?'bad':''],
-        ['Registrar',registrar?registrar.substring(0,32):'Unavailable',''],
-        ['Registered',regDate?regDate.toISOString().split('T')[0]:'Unavailable','']
-      ];
-      var rowsHTML=rows.map(function(r){return '<div class="pdx-result__row"><span class="pdx-result__row-key">'+x(r[0])+'</span><span class="pdx-result__row-val'+(r[2]?' pdx-result__row-val--'+r[2]:'')+'">' +x(r[1])+'</span></div>';}).join('');
-      return '<div class="pdx-result">'+
-        '<div class="pdx-result__score"><span class="pdx-result__num pdx-result__num--'+cls+'">'+score+'</span><span class="pdx-result__label">'+label+'</span></div>'+
-        '<div class="pdx-result__bar"><div class="pdx-result__fill pdx-result__fill--'+cls+'" style="width:'+score+'%"></div></div>'+
-        '<div class="pdx-result__tags">'+tags+'</div>'+
-        '<div class="pdx-result__rows">'+rowsHTML+'</div>'+
-        '<p class="pdx-result__source">Sources: RDAP \u00b7 SSL Labs</p></div>';
+      var cls   = score>=70?'safe':score>=40?'warn':'danger';
+      var label = score>=70?'LOW RISK':score>=40?'MEDIUM RISK':'HIGH RISK';
+      var conf  = score>=70?'HIGH CONFIDENCE':score>=40?'MODERATE CONFIDENCE':'ELEVATED THREAT';
+
+      var tags = good.map(function(t){return '<span class="pdx-itag pdx-itag--ok">'+x(t)+'</span>';}).join('')+
+                 warn.map(function(t){return '<span class="pdx-itag pdx-itag--warn">'+x(t)+'</span>';}).join('')+
+                 bad.map(function(t){return '<span class="pdx-itag pdx-itag--threat">'+x(t)+'</span>';}).join('');
+
+      var gauge = '<div class="pdx-gauge">' +
+        '<div class="pdx-gauge__meta">' +
+          '<span class="pdx-gauge__score pdx-gauge__score--'+cls+'">'+score+'<span class="pdx-gauge__denom">/100</span></span>' +
+          '<div class="pdx-gauge__labels"><span class="pdx-gauge__verdict">'+label+'</span><span class="pdx-gauge__conf">'+conf+'</span></div>' +
+        '</div>' +
+        '<div class="pdx-gauge__track"><div class="pdx-gauge__fill pdx-gauge__fill--'+cls+'" style="width:'+score+'%"></div></div>' +
+      '</div>';
+
+      function irow(k,v,s) {
+        return '<div class="pdx-irow"><span class="pdx-irow__key">'+x(k)+'</span>' +
+               '<span class="pdx-irow__val'+(s?' pdx-irow__val--'+s:'')+'">' +x(v)+'</span></div>';
+      }
+
+      var domainSection = '<div class="pdx-isection">' +
+        '<div class="pdx-isection__title">DOMAIN INTELLIGENCE</div>' +
+        '<div class="pdx-isection__rows">' +
+          irow('Target',      domain,                                                                    '') +
+          irow('Protocol',    isHttps?'HTTPS \u2014 Encrypted':'HTTP \u2014 Unencrypted',               isHttps?'ok':'threat') +
+          irow('Domain Age',  age!==null?(age<365?age+' days':Math.floor(age/365)+' years'):'Unavailable', age!==null&&age<30?'threat':age!==null&&age<180?'warn':'ok') +
+          irow('Registered',  regDate?regDate.toISOString().split('T')[0]:'Unavailable',                '') +
+          irow('Registrar',   registrar?registrar.substring(0,40):'Unavailable',                        '') +
+        '</div>' +
+      '</div>';
+
+      var tlsSection = '<div class="pdx-isection">' +
+        '<div class="pdx-isection__title">TLS / CERTIFICATE</div>' +
+        '<div class="pdx-isection__rows">' +
+          irow('Grade',       grade||(isHttps?'Present (ungraded)':'None'),                             grade?(grade[0]==='A'?'ok':grade[0]==='B'?'warn':'threat'):(isHttps?'':'threat')) +
+          irow('Status',      ssl&&ssl.status?ssl.status:'Unavailable',                                 '') +
+          irow('IP Address',  ssl&&ssl.endpoints&&ssl.endpoints[0]?ssl.endpoints[0].ipAddress||'N/A':'N/A', '') +
+        '</div>' +
+      '</div>';
+
+      var ts = new Date().toISOString().replace('T',' ').substring(0,19)+' UTC';
+      return '<div class="pdx-intel-result">' +
+        gauge +
+        '<div class="pdx-itags">'+tags+'</div>' +
+        domainSection + tlsSection +
+        '<div class="pdx-intel-footer"><span>SOURCES: RDAP \u00b7 SSL LABS</span><span>'+ts+'</span></div>' +
+      '</div>';
     }
     /* ── AI chat tool ── */
     function sendChat() {
@@ -775,42 +873,81 @@
       '</div>';
     }
     /* ── PayPal flow ── */
+
+    /* Returns true on mobile browsers where window.open() is blocked async */
+    function isMobile() {
+      return /Mobi|Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    }
+
     function startPayment(moduleId) {
       var statusEl = document.getElementById('pdx-pay-status-' + moduleId);
-      var btn = document.querySelector('[data-pay-module="' + moduleId + '"]');
+      var btn      = document.querySelector('[data-pay-module="' + moduleId + '"]');
       if (!statusEl || !btn) return;
       btn.disabled = true;
       btn.textContent = 'Creating order\u2026';
+
       post(C.restUrl + '/pay/create', { module_id: moduleId })
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (d.error) {
             statusEl.innerHTML = errBox(d.error);
-            btn.disabled = false; btn.innerHTML = IC.paypal + ' Pay with PayPal';
+            btn.disabled = false;
+            btn.innerHTML = IC.paypal + ' Pay with PayPal';
             return;
           }
-          /* Open PayPal in a popup window */
-          var w = 500, h = 650;
-          var left = Math.round((screen.width  - w) / 2);
-          var top  = Math.round((screen.height - h) / 2);
-          var popup = window.open(
-            d.approve_url,
-            'pdx_paypal',
-            'width='+w+',height='+h+',left='+left+',top='+top+',toolbar=0,menubar=0,location=0'
-          );
-          statusEl.innerHTML = '<div class="pdx-paywall__note" style="color:#d29922">'+IC.paypal+' PayPal window opened. Complete payment there.</div>';
 
-          /* Poll for popup close, then capture */
-          var poll = setInterval(function() {
-            if (!popup || popup.closed) {
-              clearInterval(poll);
-              capturePayment(moduleId, d.order_id, statusEl, btn);
+          /* Persist order so checkReturnCapture can retrieve it after redirect */
+          try {
+            sessionStorage.setItem('pdx_order_id',  d.order_id);
+            sessionStorage.setItem('pdx_module_id', moduleId);
+          } catch(e) {}
+
+          if (isMobile()) {
+            /* ── Mobile: full-page redirect ──────────────────────────
+               window.open() called inside a fetch .then() is treated as
+               a popup by mobile browsers and silently blocked.
+               Redirect the current tab instead; checkReturnCapture()
+               handles capture when PayPal sends the user back.        */
+            statusEl.innerHTML = '<div class="pdx-paywall__note" style="color:#d29922">' +
+              IC.paypal + ' Redirecting to PayPal\u2026</div>';
+            window.location.href = d.approve_url;
+          } else {
+            /* ── Desktop: popup window ───────────────────────────── */
+            var w    = 500, h = 650;
+            var left = Math.round((screen.width  - w) / 2);
+            var top  = Math.round((screen.height - h) / 2);
+            var popup = window.open(
+              d.approve_url,
+              'pdx_paypal',
+              'width='+w+',height='+h+',left='+left+',top='+top+
+              ',toolbar=0,menubar=0,location=0,scrollbars=1'
+            );
+
+            if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+              /* Popup was blocked even on desktop — fall back to redirect */
+              try { sessionStorage.setItem('pdx_order_id', d.order_id); } catch(e) {}
+              window.location.href = d.approve_url;
+              return;
             }
-          }, 800);
+
+            statusEl.innerHTML = '<div class="pdx-paywall__note" style="color:#d29922">' +
+              IC.paypal + ' PayPal window opened. Complete payment there.</div>';
+
+            /* Poll for popup close, then capture */
+            var poll = setInterval(function() {
+              try {
+                if (!popup || popup.closed) {
+                  clearInterval(poll);
+                  capturePayment(moduleId, d.order_id, statusEl, btn);
+                }
+              } catch(e) { clearInterval(poll); }
+            }, 800);
+          }
         })
         .catch(function() {
           statusEl.innerHTML = errBox('Failed to create payment order.');
-          btn.disabled = false; btn.innerHTML = IC.paypal + ' Pay with PayPal';
+          btn.disabled = false;
+          btn.innerHTML = IC.paypal + ' Pay with PayPal';
         });
     }
 
@@ -821,13 +958,21 @@
         .then(function(d) {
           if (d.ok) {
             var prev = accessMap[moduleId] || {};
-            accessMap[moduleId] = { status: 'active', tier: prev.tier || 'paid', price: prev.price || 0, currency: prev.currency || 'USD', label: 'Unlocked' };
+            accessMap[moduleId] = {
+              status:   'active',
+              tier:     prev.tier     || 'paid',
+              price:    prev.price    || 0,
+              currency: prev.currency || 'USD',
+              label:    'Unlocked'
+            };
+            /* Clear persisted order */
+            try { sessionStorage.removeItem('pdx_order_id'); sessionStorage.removeItem('pdx_module_id'); } catch(e) {}
             statusEl.innerHTML = '<div class="pdx-success">' + IC.check +
               ' Payment confirmed! Reloading tool\u2026</div>';
             setTimeout(function() { renderPanel(moduleId); }, 1200);
           } else {
             statusEl.innerHTML = errBox(d.error || 'Payment not confirmed. If you completed payment, please refresh.');
-            if (btn) { btn.disabled=false; btn.innerHTML = IC.paypal + ' Pay with PayPal'; }
+            if (btn) { btn.disabled = false; btn.innerHTML = IC.paypal + ' Pay with PayPal'; }
           }
         })
         .catch(function() {
@@ -835,22 +980,54 @@
         });
     }
 
-    /* Handle return from PayPal redirect (non-popup fallback) */
+    /* ── Handle return from PayPal redirect (mobile + desktop popup-blocked) ──
+       PayPal appends ?token=ORDER_ID&PayerID=... to the return URL.
+       We also store order_id in sessionStorage as a belt-and-braces fallback
+       in case the token param is missing (some PayPal sandbox configs).      */
     (function checkReturnCapture() {
-      var params = new URLSearchParams(window.location.search);
-      if (params.get('pdx_capture') !== '1') return;
-      var moduleId = params.get('pdx_module') || '';
-      var token    = params.get('token') || '';
-      if (!moduleId || !token) return;
-      post(C.restUrl + '/pay/capture', { module_id: moduleId, order_id: token })
+      var params   = new URLSearchParams(window.location.search);
+      var isCap    = params.get('pdx_capture') === '1';
+      var moduleId = params.get('pdx_module')  || '';
+      /* PayPal appends token= (the order ID) on approval */
+      var orderId  = params.get('token') || params.get('order_id') || '';
+
+      /* Fallback: read from sessionStorage (set before redirect) */
+      if (!orderId || !moduleId) {
+        try {
+          orderId  = orderId  || sessionStorage.getItem('pdx_order_id')  || '';
+          moduleId = moduleId || sessionStorage.getItem('pdx_module_id') || '';
+        } catch(e) {}
+      }
+
+      if (!isCap || !moduleId || !orderId) return;
+
+      /* PayerID present means PayPal approved; absence means user cancelled */
+      var payerId = params.get('PayerID') || '';
+      if (!payerId) {
+        /* User cancelled — clean up and do not capture */
+        try { sessionStorage.removeItem('pdx_order_id'); sessionStorage.removeItem('pdx_module_id'); } catch(e) {}
+        window.history.replaceState({}, '', window.location.pathname);
+        return;
+      }
+
+      /* Clean URL immediately so a refresh doesn't re-trigger capture */
+      window.history.replaceState({}, '', window.location.pathname);
+
+      post(C.restUrl + '/pay/capture', { module_id: moduleId, order_id: orderId })
         .then(function(r) { return r.json(); })
         .then(function(d) {
+          try { sessionStorage.removeItem('pdx_order_id'); sessionStorage.removeItem('pdx_module_id'); } catch(e) {}
           if (d.ok) {
             var prev = accessMap[moduleId] || {};
-            accessMap[moduleId] = { status: 'active', tier: prev.tier || 'paid', price: prev.price || 0, currency: prev.currency || 'USD', label: 'Unlocked' };
-            /* Clean URL */
-            var clean = window.location.pathname;
-            window.history.replaceState({}, '', clean);
+            accessMap[moduleId] = {
+              status:   'active',
+              tier:     prev.tier     || 'paid',
+              price:    prev.price    || 0,
+              currency: prev.currency || 'USD',
+              label:    'Unlocked'
+            };
+            /* If the panel for this module is open, re-render it unlocked */
+            if (current === moduleId) renderPanel(moduleId);
           }
         })
         .catch(function(){});
