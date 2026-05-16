@@ -1,4 +1,4 @@
-/* PaxDesign Utility Dock — v4.1.2
+/* PaxDesign Utility Dock — v4.1.3
    Enterprise AI/Cyber SaaS dock styles.
    #pdx-dock stays inside #pdx-root (scoped variables, fixed position).
    #pdx-backdrop, #pdx-panel, #pdx-notif are appended to <body> by JS. */
@@ -960,18 +960,10 @@ body.pdx-no-scroll { overflow: hidden !important; }
   }
 
   /* Grids: single column on mobile */
-  .pdx-tpl-grid    { grid-template-columns: 1fr; }
-  .pdx-conn-grid   { grid-template-columns: 1fr; }
-  .pdx-field-row   { grid-template-columns: 1fr; }
-  .pdx-metric-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
-
-  /* Input row: stack vertically, full-width button */
-  .pdx-input-row { flex-direction: column; gap: 8px; }
-  .pdx-input-row .pdx-btn-primary {
-    width: 100%;
-    padding: 12px 16px;
-    font-size: 15px;
-  }
+  .pdx-tpl-grid  { grid-template-columns: 1fr; }
+  .pdx-conn-grid { grid-template-columns: 1fr; }
+  .pdx-field-row { grid-template-columns: 1fr; }
+  .pdx-metric-grid { grid-template-columns: 1fr 1fr; }
 
   /* Prevent iOS zoom on focus — 16px minimum */
   .pdx-input,
@@ -985,21 +977,15 @@ body.pdx-no-scroll { overflow: hidden !important; }
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    padding-bottom: 2px;
-    margin-right: -16px;
-    padding-right: 16px;
+    margin-right: calc(-1 * var(--pdx-sp-4, 16px));
+    padding-right: var(--pdx-sp-4, 16px);
   }
   .pdx-module-caps::-webkit-scrollbar { display: none; }
   .pdx-cap-tag { flex-shrink: 0; }
 
   /* KV rows: stack key/value vertically */
-  .pdx-kv-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .pdx-kv-row { flex-direction: column; align-items: flex-start; }
   .pdx-kv-val { text-align: left; }
-
-  /* Risk header: tighter on small screens */
-  .pdx-risk-header { padding: 10px 12px; gap: 10px; }
-  .pdx-risk-num    { font-size: 22px; }
-  .pdx-risk-ring   { width: 60px; height: 60px; }
 
   /* Tabs: horizontal scroll, no wrap */
   .pdx-tabs {
@@ -1009,36 +995,16 @@ body.pdx-no-scroll { overflow: hidden !important; }
     flex-wrap: nowrap;
   }
   .pdx-tabs::-webkit-scrollbar { display: none; }
-  .pdx-tab { flex-shrink: 0; white-space: nowrap; }
 
   /* Chat: fill available height */
   .pdx-chat-messages { max-height: none; flex: 1; min-height: 140px; }
-  .pdx-chat-footer   { padding: 10px 14px; }
 
-  /* Pipeline: compact on mobile */
-  .pdx-dp-header        { padding: 8px 12px; }
-  .pdx-dp-stages        { padding: 8px 12px; }
-  .pdx-dp-log           { margin: 0 12px 8px; max-height: 56px; }
-  .pdx-dp-findings      { padding: 0 12px 8px; }
-  .pdx-dp-stage-detail  { display: none; }
+  /* Pipeline: hide verbose detail */
+  .pdx-dp-stage-detail { display: none; }
 
-  /* Graph: shorter canvas */
-  .pdx-graph-canvas { height: 180px !important; }
-
-  /* Misc component adjustments */
-  .pdx-paywall        { padding: 18px 14px; }
-  .pdx-hist-item      { flex-wrap: wrap; gap: 4px; }
-  .pdx-ws-item        { padding: 10px; }
+  /* Overflow guard */
   .pdx-result,
-  .pdx-section        { overflow-x: hidden; }
-  .pdx-code           { font-size: 10px; }
-  .pdx-agent-row,
-  .pdx-step-inner     { flex-wrap: wrap; }
-  .pdx-agent-row .pdx-select,
-  .pdx-step-inner .pdx-select { width: 100%; }
-  .pdx-evidence-section { margin-left: 0; margin-right: 0; }
-  .pdx-metric-card    { padding: 10px; }
-  .pdx-report-summary { padding: 12px; }
+  .pdx-section { overflow-x: hidden; }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1243,6 +1209,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
 }
 
 /* ─── Extra-small screens (≤ 380px) ─────────────────────── */
+/* Token overrides are in the unified system block above.
+   Only structural/dock changes here. */
 @media (max-width: 380px) {
   /* Tighter dock padding */
   #pdx-root[data-mobile-dock="under-header"] #pdx-dock {
@@ -1252,7 +1220,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     padding: 4px 5px !important;
   }
 
-  /* Slightly smaller buttons */
+  /* Slightly smaller dock buttons */
   .pdx-btn     { width: 36px; height: 36px; }
   .pdx-btn svg { width: 14px; height: 14px; }
 
@@ -1260,40 +1228,542 @@ body.pdx-no-scroll { overflow: hidden !important; }
   .pdx-metric-grid { grid-template-columns: 1fr; }
 
   /* Tighter panel header */
-  .pdx-ph-title { font-size: 13px; }
-  .pdx-ph-hd    { padding: 10px 12px 8px; }
-  .pdx-ph-body  { padding: 12px 12px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .pdx-ph-hd { padding: 10px 12px 8px; }
 
   /* Hide verbose pipeline log */
   .pdx-dp-log { display: none; }
+}
 
-  /* Tighter section spacing */
-  .pdx-section { gap: 4px; }
-  .pdx-result  { gap: 8px; }
+/* ═══════════════════════════════════════════════════════════
+   MOBILE UNIFIED CONTENT SYSTEM  (≤ 680px)
+   Single source of truth for every panel/tool/card on mobile.
+   All typography, spacing, and sizing is token-driven.
+   Tokens defined here; applied to every content class below.
+   ═══════════════════════════════════════════════════════════
+
+   Typography scale:
+     --pdx-t-xs   : 10px  — meta, timestamps, badges, caps labels
+     --pdx-t-sm   : 11px  — secondary text, hints, sub-labels
+     --pdx-t-base : 13px  — body text, list items, descriptions
+     --pdx-t-md   : 14px  — primary labels, card titles
+     --pdx-t-lg   : 16px  — panel headings, section titles
+     --pdx-t-xl   : 20px  — hero numbers (risk score, credits)
+
+   Line-height scale:
+     --pdx-lh-tight  : 1.3  — single-line labels, badges
+     --pdx-lh-base   : 1.5  — body text
+     --pdx-lh-loose  : 1.7  — descriptive paragraphs
+
+   Spacing scale (padding / gap / margin):
+     --pdx-sp-1 : 4px
+     --pdx-sp-2 : 8px
+     --pdx-sp-3 : 12px
+     --pdx-sp-4 : 16px
+     --pdx-sp-5 : 20px
+
+   Card / content block:
+     --pdx-card-pad  : 12px 14px
+     --pdx-card-r    : 10px
+     --pdx-card-gap  : 10px
+
+   Button (content area, not dock):
+     --pdx-cbtn-h    : 36px
+     --pdx-cbtn-fs   : 13px
+     --pdx-cbtn-pad  : 0 14px
+═══════════════════════════════════════════════════════════ */
+@media (max-width: 680px) {
+  #pdx-root {
+    /* Typography */
+    --pdx-t-xs:   10px;
+    --pdx-t-sm:   11px;
+    --pdx-t-base: 13px;
+    --pdx-t-md:   14px;
+    --pdx-t-lg:   16px;
+    --pdx-t-xl:   20px;
+    /* Line-height */
+    --pdx-lh-tight: 1.3;
+    --pdx-lh-base:  1.5;
+    --pdx-lh-loose: 1.7;
+    /* Spacing */
+    --pdx-sp-1: 4px;
+    --pdx-sp-2: 8px;
+    --pdx-sp-3: 12px;
+    --pdx-sp-4: 16px;
+    --pdx-sp-5: 20px;
+    /* Cards */
+    --pdx-card-pad: 12px 14px;
+    --pdx-card-r:   10px;
+    --pdx-card-gap: 10px;
+    /* Content buttons */
+    --pdx-cbtn-h:   36px;
+    --pdx-cbtn-fs:  13px;
+    --pdx-cbtn-pad: 0 14px;
+  }
+}
+
+/* ─── Unified mobile content layout ─────────────────────── */
+@media (max-width: 680px) {
+
+  /* ── Panel body ─────────────────────────────────────────── */
+  .pdx-ph-body {
+    padding: var(--pdx-sp-3) var(--pdx-sp-4);
+    padding-bottom: calc(var(--pdx-sp-5) + env(safe-area-inset-bottom, 0px));
+    gap: var(--pdx-card-gap);
+    font-size: var(--pdx-t-base);
+    line-height: var(--pdx-lh-base);
+  }
+
+  /* ── Sections & results ─────────────────────────────────── */
+  .pdx-section       { gap: var(--pdx-sp-2); }
+  .pdx-result        { gap: var(--pdx-card-gap); }
+  .pdx-tab-pane      { gap: var(--pdx-card-gap); padding-top: var(--pdx-sp-2); }
+
+  /* ── Section titles ─────────────────────────────────────── */
+  .pdx-section-title {
+    font-size: var(--pdx-t-xs);
+    line-height: var(--pdx-lh-tight);
+    letter-spacing: .06em;
+    margin-bottom: var(--pdx-sp-1);
+  }
+
+  /* ── Cards / result blocks ──────────────────────────────── */
+  .pdx-result-header,
+  .pdx-metric-card,
+  .pdx-report-summary,
+  .pdx-risk-header,
+  .pdx-ws-item,
+  .pdx-paywall,
+  .pdx-evidence-section,
+  .pdx-ai-summary,
+  .pdx-cluster-item,
+  .pdx-case-item,
+  .pdx-note-item,
+  .pdx-tl-item,
+  .pdx-activity-item,
+  .pdx-worker-item,
+  .pdx-member-item,
+  .pdx-hist-item,
+  .pdx-step,
+  .pdx-agent-row {
+    padding: var(--pdx-card-pad);
+    border-radius: var(--pdx-card-r);
+    gap: var(--pdx-sp-2);
+  }
+
+  /* ── Key-value rows ─────────────────────────────────────── */
+  .pdx-kv-grid { gap: var(--pdx-sp-2); }
+  .pdx-kv-row  { gap: var(--pdx-sp-1); }
+  .pdx-kv-key  {
+    font-size: var(--pdx-t-sm);
+    line-height: var(--pdx-lh-tight);
+  }
+  .pdx-kv-val  {
+    font-size: var(--pdx-t-base);
+    line-height: var(--pdx-lh-base);
+  }
+
+  /* ── Labels & meta text ─────────────────────────────────── */
+  .pdx-label,
+  .pdx-section-title,
+  .pdx-note-meta,
+  .pdx-tl-date,
+  .pdx-tl-source,
+  .pdx-activity-time,
+  .pdx-worker-status,
+  .pdx-worker-caps,
+  .pdx-member-email,
+  .pdx-risk-label,
+  .pdx-risk-scan-id,
+  .pdx-risk-time,
+  .pdx-ws-date,
+  .pdx-ws-pin,
+  .pdx-ai-label,
+  .pdx-cluster-meta,
+  .pdx-case-meta {
+    font-size: var(--pdx-t-xs);
+    line-height: var(--pdx-lh-tight);
+  }
+
+  /* ── Secondary / hint text ──────────────────────────────── */
+  .pdx-hint,
+  .pdx-field-hint,
+  .pdx-ai-text,
+  .pdx-note-body,
+  .pdx-tl-desc,
+  .pdx-activity-msg,
+  .pdx-cmd-desc,
+  .pdx-credits-label {
+    font-size: var(--pdx-t-sm);
+    line-height: var(--pdx-lh-base);
+  }
+
+  /* ── Primary body text ──────────────────────────────────── */
+  .pdx-desc,
+  .pdx-text,
+  .pdx-result p,
+  .pdx-section p,
+  .pdx-paywall p,
+  .pdx-report-summary p,
+  .pdx-evidence-body p {
+    font-size: var(--pdx-t-base);
+    line-height: var(--pdx-lh-loose);
+    max-width: 100%;
+  }
+
+  /* ── Card / item titles ─────────────────────────────────── */
+  .pdx-result-header h3,
+  .pdx-cluster-name,
+  .pdx-case-title,
+  .pdx-worker-label,
+  .pdx-cmd-label,
+  .pdx-ws-item h4,
+  .pdx-member-name {
+    font-size: var(--pdx-t-md);
+    line-height: var(--pdx-lh-tight);
+    font-weight: 600;
+  }
+
+  /* ── Panel / section headings ───────────────────────────── */
+  .pdx-ph-title,
+  .pdx-team-name,
+  .pdx-paywall h3,
+  .pdx-report-summary h3 {
+    font-size: var(--pdx-t-lg);
+    line-height: var(--pdx-lh-tight);
+    font-weight: 700;
+  }
+
+  /* ── Hero numbers ───────────────────────────────────────── */
+  .pdx-risk-num,
+  .pdx-credits-num {
+    font-size: var(--pdx-t-xl);
+    line-height: var(--pdx-lh-tight);
+    font-weight: 800;
+  }
+
+  /* ── Tabs ───────────────────────────────────────────────── */
+  .pdx-tab {
+    font-size: var(--pdx-t-sm);
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    line-height: var(--pdx-lh-tight);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ── Chat ───────────────────────────────────────────────── */
+  .pdx-chat-bubble {
+    font-size: var(--pdx-t-base);
+    line-height: var(--pdx-lh-base);
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    border-radius: var(--pdx-card-r);
+    max-width: 88%;
+  }
+  .pdx-chat-msg--system .pdx-chat-bubble {
+    font-size: var(--pdx-t-sm);
+  }
+  .pdx-chat-messages {
+    gap: var(--pdx-sp-2);
+    padding: var(--pdx-sp-3) var(--pdx-sp-4);
+  }
+  .pdx-chat-footer {
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+  }
+
+  /* ── Metric cards ───────────────────────────────────────── */
+  .pdx-metric-grid { gap: var(--pdx-sp-2); }
+  .pdx-metric-card {
+    padding: var(--pdx-sp-3);
+    border-radius: var(--pdx-card-r);
+  }
+  .pdx-metric-card .pdx-label {
+    font-size: var(--pdx-t-xs);
+    margin-bottom: var(--pdx-sp-1);
+  }
+  .pdx-metric-card .pdx-value {
+    font-size: var(--pdx-t-lg);
+    line-height: var(--pdx-lh-tight);
+    font-weight: 700;
+  }
+
+  /* ── Tags / badges ──────────────────────────────────────── */
+  .pdx-tag,
+  .pdx-cap-tag,
+  .pdx-badge,
+  .pdx-role-badge,
+  .pdx-member-role {
+    font-size: var(--pdx-t-xs);
+    line-height: var(--pdx-lh-tight);
+    padding: 2px var(--pdx-sp-2);
+    border-radius: 4px;
+  }
+
+  /* ── Content-area buttons (not dock buttons) ────────────── */
+  .pdx-btn-primary,
+  .pdx-btn-secondary,
+  .pdx-btn-danger {
+    height: var(--pdx-cbtn-h);
+    font-size: var(--pdx-cbtn-fs);
+    padding: var(--pdx-cbtn-pad);
+    border-radius: 8px;
+    line-height: var(--pdx-lh-tight);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  /* Full-width primary CTA inside panels */
+  .pdx-ph-body .pdx-btn-primary,
+  .pdx-paywall .pdx-btn-primary {
+    width: 100%;
+    height: 40px;
+    font-size: var(--pdx-t-md);
+  }
+
+  /* ── Input rows ─────────────────────────────────────────── */
+  .pdx-input-row {
+    flex-direction: column;
+    gap: var(--pdx-sp-2);
+  }
+  .pdx-input-row .pdx-btn-primary {
+    width: 100%;
+    height: 40px;
+    font-size: var(--pdx-t-md);
+  }
+
+  /* ── Code blocks ────────────────────────────────────────── */
+  .pdx-code,
+  .pdx-mono,
+  code {
+    font-size: var(--pdx-t-xs);
+    line-height: var(--pdx-lh-base);
+    word-break: break-all;
+    overflow-x: hidden;
+  }
+
+  /* ── Paywall ────────────────────────────────────────────── */
+  .pdx-paywall {
+    padding: var(--pdx-sp-5) var(--pdx-sp-4);
+    text-align: center;
+    gap: var(--pdx-sp-3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .pdx-paywall h3 {
+    margin: 0;
+  }
+  .pdx-paywall p {
+    margin: 0;
+    max-width: 280px;
+  }
+
+  /* ── Risk ring ──────────────────────────────────────────── */
+  .pdx-risk-ring  { width: 56px; height: 56px; }
+  .pdx-risk-header {
+    padding: var(--pdx-sp-3);
+    gap: var(--pdx-sp-3);
+    align-items: center;
+  }
+
+  /* ── History items ──────────────────────────────────────── */
+  .pdx-history-list { gap: var(--pdx-sp-2); }
+  .pdx-hist-item {
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    gap: var(--pdx-sp-2);
+    flex-wrap: wrap;
+    border-radius: var(--pdx-card-r);
+  }
+
+  /* ── Workspace items ────────────────────────────────────── */
+  .pdx-ws-list { gap: var(--pdx-sp-2); }
+  .pdx-ws-item {
+    padding: var(--pdx-sp-3);
+    border-radius: var(--pdx-card-r);
+  }
+  .pdx-ws-item-hd { gap: var(--pdx-sp-2); margin-bottom: var(--pdx-sp-2); }
+  .pdx-ws-meta    { gap: var(--pdx-sp-2); }
+  .pdx-ws-tags    { gap: var(--pdx-sp-1); margin-top: var(--pdx-sp-1); }
+
+  /* ── Timeline ───────────────────────────────────────────── */
+  .pdx-tl-item {
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    gap: var(--pdx-sp-1);
+    border-radius: var(--pdx-card-r);
+  }
+
+  /* ── Activity feed ──────────────────────────────────────── */
+  .pdx-activity-item {
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    gap: var(--pdx-sp-2);
+    border-radius: var(--pdx-card-r);
+    font-size: var(--pdx-t-sm);
+    line-height: var(--pdx-lh-base);
+  }
+
+  /* ── Team / members ─────────────────────────────────────── */
+  .pdx-member-item {
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    gap: var(--pdx-sp-2);
+    border-radius: var(--pdx-card-r);
+  }
+  .pdx-team-name { margin-bottom: var(--pdx-sp-2); }
+
+  /* ── Workers ────────────────────────────────────────────── */
+  .pdx-worker-item {
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    gap: var(--pdx-sp-2);
+    border-radius: var(--pdx-card-r);
+  }
+
+  /* ── Investigation / cluster / case / note ──────────────── */
+  .pdx-cluster-item,
+  .pdx-case-item,
+  .pdx-note-item {
+    padding: var(--pdx-sp-3);
+    gap: var(--pdx-sp-2);
+    border-radius: var(--pdx-card-r);
+  }
+
+  /* ── Command palette ────────────────────────────────────── */
+  .pdx-cmd-item {
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    gap: var(--pdx-sp-2);
+  }
+  .pdx-cmd-label { font-size: var(--pdx-t-base); }
+  .pdx-cmd-desc  { font-size: var(--pdx-t-sm); }
+  .pdx-cmd-type  { font-size: var(--pdx-t-xs); }
+  .pdx-cmd-empty {
+    padding: var(--pdx-sp-5) var(--pdx-sp-4);
+    font-size: var(--pdx-t-base);
+    text-align: center;
+  }
+
+  /* ── AI summary ─────────────────────────────────────────── */
+  .pdx-ai-summary {
+    padding: var(--pdx-sp-3);
+    border-radius: var(--pdx-card-r);
+    gap: var(--pdx-sp-2);
+  }
+  .pdx-ai-label { margin-bottom: var(--pdx-sp-1); }
+
+  /* ── Graph / canvas panels ──────────────────────────────── */
+  .pdx-graph-canvas { height: 180px !important; }
+  .pdx-ph--graph .pdx-ph-body,
+  .pdx-ph--investigation .pdx-ph-body {
+    padding: 0;
+  }
+
+  /* ── Pipeline ───────────────────────────────────────────── */
+  .pdx-dp-header   { padding: var(--pdx-sp-2) var(--pdx-sp-3); }
+  .pdx-dp-stages   { padding: var(--pdx-sp-2) var(--pdx-sp-3); gap: var(--pdx-sp-2); }
+  .pdx-dp-findings { padding: 0 var(--pdx-sp-3) var(--pdx-sp-2); }
+  .pdx-dp-log      { margin: 0 var(--pdx-sp-3) var(--pdx-sp-2); max-height: 56px; }
+
+  /* ── Billing / credits ──────────────────────────────────── */
+  .pdx-credits-num   { font-size: var(--pdx-t-xl); }
+  .pdx-credits-label { font-size: var(--pdx-t-sm); }
+
+  /* ── Report summary ─────────────────────────────────────── */
+  .pdx-report-summary {
+    padding: var(--pdx-sp-3);
+    border-radius: var(--pdx-card-r);
+    gap: var(--pdx-sp-2);
+  }
+
+  /* ── Evidence sections ──────────────────────────────────── */
+  .pdx-evidence-section {
+    margin: 0;
+    border-radius: var(--pdx-card-r);
+  }
+  .pdx-evidence-body {
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+  }
+
+  /* ── Step / agent rows ──────────────────────────────────── */
+  .pdx-step        { margin-bottom: var(--pdx-sp-2); }
+  .pdx-step-inner  { gap: var(--pdx-sp-2); flex-wrap: wrap; }
+  .pdx-agent-row   { gap: var(--pdx-sp-2); flex-wrap: wrap; margin-bottom: var(--pdx-sp-2); }
+  .pdx-step-inner .pdx-select,
+  .pdx-agent-row  .pdx-select { width: 100%; font-size: var(--pdx-t-base); }
+
+  /* ── Notification toasts ────────────────────────────────── */
+  .pdx-notif-item {
+    font-size: var(--pdx-t-sm);
+    line-height: var(--pdx-lh-base);
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    border-radius: var(--pdx-card-r);
+  }
+
+  /* ── Module capability tags ─────────────────────────────── */
+  .pdx-module-caps {
+    gap: var(--pdx-sp-1);
+    padding-bottom: var(--pdx-sp-1);
+  }
+
+  /* ── Prevent any text overflow ──────────────────────────── */
+  .pdx-ph-body * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .pdx-ph-body p,
+  .pdx-ph-body span,
+  .pdx-ph-body li {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+}
+
+/* ─── XS overrides for unified system (≤ 380px) ─────────── */
+@media (max-width: 380px) {
+  #pdx-root {
+    --pdx-t-xs:   9px;
+    --pdx-t-sm:   10px;
+    --pdx-t-base: 12px;
+    --pdx-t-md:   13px;
+    --pdx-t-lg:   15px;
+    --pdx-t-xl:   18px;
+    --pdx-sp-3:   10px;
+    --pdx-sp-4:   12px;
+    --pdx-card-pad: 10px 12px;
+    --pdx-card-gap: 8px;
+    --pdx-cbtn-h:   34px;
+    --pdx-cbtn-fs:  12px;
+  }
 }
 
 /* ─── Mobile spacing modes ───────────────────────────────── */
 @media (max-width: 680px) {
-  /* Compact spacing */
+  /* Compact: tighten the token scale */
+  #pdx-root[data-mobile-spacing="compact"] {
+    --pdx-sp-3: 8px;
+    --pdx-sp-4: 10px;
+    --pdx-card-pad: 8px 10px;
+    --pdx-card-gap: 6px;
+  }
   #pdx-root[data-mobile-spacing="compact"] .pdx-ph-body {
-    padding: 10px 12px;
-    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-    gap: 8px;
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    padding-bottom: calc(var(--pdx-sp-4) + env(safe-area-inset-bottom, 0px));
+    gap: var(--pdx-card-gap);
   }
   #pdx-root[data-mobile-spacing="compact"] .pdx-ph-hd {
-    padding: 9px 12px 8px;
+    padding: var(--pdx-sp-2) var(--pdx-sp-3);
   }
-  #pdx-root[data-mobile-spacing="compact"] .pdx-section { gap: 4px; }
-  #pdx-root[data-mobile-spacing="compact"] .pdx-result  { gap: 8px; }
 
-  /* Relaxed spacing */
+  /* Relaxed: loosen the token scale */
+  #pdx-root[data-mobile-spacing="relaxed"] {
+    --pdx-sp-3: 16px;
+    --pdx-sp-4: 20px;
+    --pdx-card-pad: 16px 18px;
+    --pdx-card-gap: 14px;
+  }
   #pdx-root[data-mobile-spacing="relaxed"] .pdx-ph-body {
-    padding: 18px 20px;
-    padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
-    gap: 14px;
+    padding: var(--pdx-sp-4) var(--pdx-sp-5);
+    padding-bottom: calc(var(--pdx-sp-5) + env(safe-area-inset-bottom, 0px));
+    gap: var(--pdx-card-gap);
   }
   #pdx-root[data-mobile-spacing="relaxed"] .pdx-ph-hd {
-    padding: 16px 20px 14px;
+    padding: var(--pdx-sp-4) var(--pdx-sp-5) var(--pdx-sp-3);
   }
 
   /* Compact mode: smaller buttons and icons */
