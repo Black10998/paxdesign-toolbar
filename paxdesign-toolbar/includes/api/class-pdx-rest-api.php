@@ -152,6 +152,10 @@ class PDX_REST_API {
 
 		// Platform stats (admin dashboard)
 		register_rest_route( $ns, '/platform/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_stats' ], 'permission_callback' => $adm ] );
+
+		// Threat Intel — CVE lookup + attack surface mapping
+		register_rest_route( $ns, '/threat/cve',     [ 'methods' => 'GET', 'callback' => [ $this, 'threat_cve'     ], 'permission_callback' => $pub, 'args' => [ 'q' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
+		register_rest_route( $ns, '/threat/surface', [ 'methods' => 'GET', 'callback' => [ $this, 'threat_surface' ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
 	}
 
 	/* ── Trust check ─────────────────────────────────────── */
@@ -1071,5 +1075,57 @@ class PDX_REST_API {
 			'cache'       => PDX_Cache::stats(),
 			'rate_limits' => PDX_RateLimit::stats(),
 		], 200 );
+	}
+
+	/* ── Threat Intel: CVE Lookup ────────────────────────── */
+
+	public function threat_cve( WP_REST_Request $req ): WP_REST_Response {
+		$rl = $this->rate_limit_check( 'threat_cve' );
+		if ( $rl ) return $rl;
+
+		$query = sanitize_text_field( $req->get_param( 'q' ) ?? '' );
+		if ( ! $query ) {
+			return new WP_REST_Response( [ 'error' => 'Query parameter "q" is required.' ], 400 );
+		}
+
+		// Cache for 1 hour — CVE data doesn't change frequently.
+		$cache_key = 'pdx_cve_' . md5( strtolower( $query ) );
+		$cached    = PDX_Cache::get( $cache_key );
+		if ( $cached !== false ) {
+			return new WP_REST_Response( array_merge( $cached, [ 'cached' => true ] ), 200 );
+		}
+
+		$result = $this->intel->fetch_cve( $query );
+
+		PDX_Cache::set( $cache_key, $result, HOUR_IN_SECONDS );
+		PDX_Audit::log( 'threat', 'cve_lookup', [ 'query' => $query, 'total' => $result['total'] ?? 0 ] );
+
+		return new WP_REST_Response( $result, 200 );
+	}
+
+	/* ── Threat Intel: Attack Surface ────────────────────── */
+
+	public function threat_surface( WP_REST_Request $req ): WP_REST_Response {
+		$rl = $this->rate_limit_check( 'threat_surface' );
+		if ( $rl ) return $rl;
+
+		$target = sanitize_text_field( $req->get_param( 'domain' ) ?? '' );
+		if ( ! $target ) {
+			return new WP_REST_Response( [ 'error' => 'Parameter "domain" is required.' ], 400 );
+		}
+
+		// Cache for 30 minutes — surface data can change but is expensive to fetch.
+		$cache_key = 'pdx_surface_' . md5( strtolower( $target ) );
+		$cached    = PDX_Cache::get( $cache_key );
+		if ( $cached !== false ) {
+			return new WP_REST_Response( array_merge( $cached, [ 'cached' => true ] ), 200 );
+		}
+
+		$result = $this->intel->fetch_attack_surface( $target );
+
+		PDX_Cache::set( $cache_key, $result, 30 * MINUTE_IN_SECONDS );
+		PDX_Audit::log( 'threat', 'surface_scan', [ 'target' => $target, 'score' => $result['score'] ?? 0 ] );
+
+		return new WP_REST_Response( $result, 200 );
 	}
 }

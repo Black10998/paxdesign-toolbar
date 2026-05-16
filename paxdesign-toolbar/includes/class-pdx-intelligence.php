@@ -457,4 +457,278 @@ class PDX_Intelligence {
 
 		return $signals;
 	}
+
+	/* ── CVE Lookup ─────────────────────────────────────── */
+
+	/**
+	 * Look up CVEs by ID or keyword.
+	 * Primary: NVD API v2.0. Fallback: CIRCL CVE API (no key required).
+	 *
+	 * @param string $query CVE ID (e.g. "CVE-2021-44228") or keyword.
+	 * @return array { cves: array, source: string, total: int, error?: string }
+	 */
+	public function fetch_cve( string $query ): array {
+		$query = trim( $query );
+		if ( ! $query ) {
+			return [ 'cves' => [], 'total' => 0, 'source' => 'none', 'error' => 'No query provided.' ];
+		}
+
+		$is_cve_id = (bool) preg_match( '/^CVE-\d{4}-\d{4,}$/i', $query );
+
+		// ── NVD API v2.0 ──────────────────────────────────
+		$nvd_key = $this->settings->get( 'api_keys.nvd', '' );
+		$nvd_headers = [ 'Accept' => 'application/json' ];
+		if ( $nvd_key ) {
+			$nvd_headers['apiKey'] = $nvd_key;
+		}
+
+		if ( $is_cve_id ) {
+			$nvd_url = 'https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=' . rawurlencode( strtoupper( $query ) );
+		} else {
+			$nvd_url = 'https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=' . rawurlencode( $query ) . '&resultsPerPage=10';
+		}
+
+		$nvd_resp = wp_remote_get( $nvd_url, [
+			'timeout' => 15,
+			'headers' => $nvd_headers,
+		] );
+
+		if ( ! is_wp_error( $nvd_resp ) && wp_remote_retrieve_response_code( $nvd_resp ) === 200 ) {
+			$body = json_decode( wp_remote_retrieve_body( $nvd_resp ), true );
+			$items = $body['vulnerabilities'] ?? [];
+			if ( ! empty( $items ) ) {
+				return [
+					'cves'   => array_map( [ $this, 'parse_nvd_cve' ], $items ),
+					'total'  => (int) ( $body['totalResults'] ?? count( $items ) ),
+					'source' => 'NVD',
+				];
+			}
+		}
+
+		// ── CIRCL CVE API fallback (no key required) ──────
+		if ( $is_cve_id ) {
+			$circl_url = 'https://cve.circl.lu/api/cve/' . rawurlencode( strtoupper( $query ) );
+			$circl_resp = wp_remote_get( $circl_url, [ 'timeout' => 10 ] );
+			if ( ! is_wp_error( $circl_resp ) && wp_remote_retrieve_response_code( $circl_resp ) === 200 ) {
+				$cve = json_decode( wp_remote_retrieve_body( $circl_resp ), true );
+				if ( ! empty( $cve ) && isset( $cve['id'] ) ) {
+					return [
+						'cves'   => [ $this->parse_circl_cve( $cve ) ],
+						'total'  => 1,
+						'source' => 'CIRCL',
+					];
+				}
+			}
+		} else {
+			$circl_url = 'https://cve.circl.lu/api/search/' . rawurlencode( $query );
+			$circl_resp = wp_remote_get( $circl_url, [ 'timeout' => 10 ] );
+			if ( ! is_wp_error( $circl_resp ) && wp_remote_retrieve_response_code( $circl_resp ) === 200 ) {
+				$data = json_decode( wp_remote_retrieve_body( $circl_resp ), true );
+				$items = $data['results'] ?? ( is_array( $data ) ? $data : [] );
+				if ( ! empty( $items ) ) {
+					return [
+						'cves'   => array_map( [ $this, 'parse_circl_cve' ], array_slice( $items, 0, 10 ) ),
+						'total'  => count( $items ),
+						'source' => 'CIRCL',
+					];
+				}
+			}
+		}
+
+		return [
+			'cves'   => [],
+			'total'  => 0,
+			'source' => 'none',
+			'error'  => 'No CVE data found for "' . esc_html( $query ) . '". NVD may be rate-limiting; try again in 30 seconds or add an NVD API key in settings.',
+		];
+	}
+
+	/** Normalise a single NVD v2.0 vulnerability entry. */
+	private function parse_nvd_cve( array $item ): array {
+		$cve  = $item['cve'] ?? $item;
+		$id   = $cve['id'] ?? ( $cve['CVE_data_meta']['ID'] ?? 'Unknown' );
+		$desc = '';
+		foreach ( $cve['descriptions'] ?? [] as $d ) {
+			if ( ( $d['lang'] ?? '' ) === 'en' ) { $desc = $d['value']; break; }
+		}
+
+		// CVSS v3.1 preferred, fall back to v3.0 then v2.
+		$cvss_score    = null;
+		$cvss_severity = null;
+		$cvss_vector   = null;
+		$metrics = $cve['metrics'] ?? [];
+		foreach ( [ 'cvssMetricV31', 'cvssMetricV30', 'cvssMetricV2' ] as $key ) {
+			if ( ! empty( $metrics[ $key ][0] ) ) {
+				$m             = $metrics[ $key ][0]['cvssData'] ?? $metrics[ $key ][0];
+				$cvss_score    = $m['baseScore']    ?? null;
+				$cvss_severity = $m['baseSeverity'] ?? ( $m['severity'] ?? null );
+				$cvss_vector   = $m['vectorString'] ?? null;
+				break;
+			}
+		}
+
+		$refs = [];
+		foreach ( $cve['references'] ?? [] as $r ) {
+			$refs[] = $r['url'] ?? '';
+		}
+
+		$published = $cve['published']        ?? null;
+		$modified  = $cve['lastModified']     ?? null;
+		$status    = $cve['vulnStatus']       ?? null;
+		$cwes      = [];
+		foreach ( $cve['weaknesses'] ?? [] as $w ) {
+			foreach ( $w['description'] ?? [] as $wd ) {
+				if ( ! empty( $wd['value'] ) && $wd['value'] !== 'NVD-CWE-Other' ) {
+					$cwes[] = $wd['value'];
+				}
+			}
+		}
+
+		return [
+			'id'          => $id,
+			'description' => $desc,
+			'cvss_score'  => $cvss_score,
+			'severity'    => $cvss_severity ? strtoupper( $cvss_severity ) : null,
+			'vector'      => $cvss_vector,
+			'cwes'        => array_unique( $cwes ),
+			'published'   => $published,
+			'modified'    => $modified,
+			'status'      => $status,
+			'references'  => array_slice( $refs, 0, 5 ),
+		];
+	}
+
+	/** Normalise a CIRCL CVE API entry. */
+	private function parse_circl_cve( array $cve ): array {
+		$score = null;
+		if ( isset( $cve['cvss3'] ) ) {
+			$score = (float) $cve['cvss3'];
+		} elseif ( isset( $cve['cvss'] ) ) {
+			$score = (float) $cve['cvss'];
+		}
+
+		$severity = null;
+		if ( $score !== null ) {
+			if ( $score >= 9.0 )      $severity = 'CRITICAL';
+			elseif ( $score >= 7.0 )  $severity = 'HIGH';
+			elseif ( $score >= 4.0 )  $severity = 'MEDIUM';
+			else                      $severity = 'LOW';
+		}
+
+		$refs = [];
+		foreach ( $cve['references'] ?? [] as $r ) {
+			$refs[] = is_array( $r ) ? ( $r['url'] ?? '' ) : $r;
+		}
+
+		return [
+			'id'          => $cve['id'] ?? ( $cve['cveMetadata']['cveId'] ?? 'Unknown' ),
+			'description' => $cve['summary'] ?? ( $cve['description'] ?? '' ),
+			'cvss_score'  => $score,
+			'severity'    => $severity,
+			'vector'      => $cve['cvss-vector'] ?? null,
+			'cwes'        => (array) ( $cve['cwe'] ?? [] ),
+			'published'   => $cve['Published'] ?? ( $cve['published'] ?? null ),
+			'modified'    => $cve['Modified']  ?? ( $cve['modified']  ?? null ),
+			'status'      => null,
+			'references'  => array_slice( $refs, 0, 5 ),
+		];
+	}
+
+	/* ── Attack Surface ─────────────────────────────────── */
+
+	/**
+	 * Build an attack surface report for a domain or IP.
+	 * Aggregates open ports, services, DNS records, and known CVEs from Shodan.
+	 *
+	 * @param string $target Domain or IP address.
+	 * @return array
+	 */
+	public function fetch_attack_surface( string $target ): array {
+		$target = trim( $target );
+		$result = [
+			'target'   => $target,
+			'ports'    => [],
+			'services' => [],
+			'vulns'    => [],
+			'dns'      => [],
+			'os'       => null,
+			'org'      => null,
+			'country'  => null,
+			'score'    => 0,
+			'summary'  => '',
+			'source'   => [],
+		];
+
+		// ── Shodan host data ──────────────────────────────
+		$shodan = $this->fetch_shodan( $target );
+		if ( $shodan ) {
+			$result['ports']   = $shodan['ports']     ?? [];
+			$result['vulns']   = $shodan['vulns']     ?? [];
+			$result['os']      = $shodan['os']        ?? null;
+			$result['org']     = $shodan['org']       ?? null;
+			$result['country'] = $shodan['country']   ?? null;
+			$result['source'][] = 'Shodan';
+
+			// Parse service banners from raw Shodan data if available.
+			// (fetch_shodan returns a summary; services listed as port-based labels.)
+			foreach ( $result['ports'] as $port ) {
+				$result['services'][] = [ 'port' => $port, 'service' => $this->port_label( $port ) ];
+			}
+		}
+
+		// ── DNS records via Google DoH ────────────────────
+		$dns_types = [ 'A', 'MX', 'TXT', 'NS', 'AAAA' ];
+		$dns_records = [];
+		foreach ( $dns_types as $type ) {
+			$dns_resp = wp_remote_get(
+				'https://dns.google/resolve?name=' . rawurlencode( $target ) . '&type=' . $type,
+				[ 'timeout' => 6, 'headers' => [ 'Accept' => 'application/dns-json' ] ]
+			);
+			if ( ! is_wp_error( $dns_resp ) && wp_remote_retrieve_response_code( $dns_resp ) === 200 ) {
+				$dns_data = json_decode( wp_remote_retrieve_body( $dns_resp ), true );
+				foreach ( $dns_data['Answer'] ?? [] as $rec ) {
+					$dns_records[] = [ 'type' => $type, 'value' => $rec['data'] ?? '' ];
+				}
+				$result['source'][] = 'DNS';
+			}
+		}
+		$result['dns']    = $dns_records;
+		$result['source'] = array_unique( $result['source'] );
+
+		// ── Risk score ────────────────────────────────────
+		$score = 0;
+		$port_count = count( $result['ports'] );
+		$vuln_count = count( $result['vulns'] );
+		if ( $port_count > 20 ) $score += 30;
+		elseif ( $port_count > 10 ) $score += 20;
+		elseif ( $port_count > 5 )  $score += 10;
+		$score += min( 50, $vuln_count * 10 );
+		// Risky ports
+		$risky = array_intersect( $result['ports'], [ 21, 23, 445, 3389, 5900, 6379, 27017 ] );
+		$score += count( $risky ) * 5;
+		$result['score'] = min( 100, $score );
+
+		// ── Plain-language summary ────────────────────────
+		$parts = [];
+		if ( $port_count )  $parts[] = "{$port_count} open port" . ( $port_count !== 1 ? 's' : '' );
+		if ( $vuln_count )  $parts[] = "{$vuln_count} known CVE" . ( $vuln_count !== 1 ? 's' : '' );
+		if ( $result['os'] ) $parts[] = "OS: {$result['os']}";
+		$result['summary'] = $parts
+			? 'Attack surface analysis complete. Found: ' . implode( ', ', $parts ) . '.'
+			: 'No significant attack surface data found for this target.';
+
+		return $result;
+	}
+
+	/** Map common port numbers to service names. */
+	private function port_label( int $port ): string {
+		$map = [
+			21 => 'FTP', 22 => 'SSH', 23 => 'Telnet', 25 => 'SMTP',
+			53 => 'DNS', 80 => 'HTTP', 110 => 'POP3', 143 => 'IMAP',
+			443 => 'HTTPS', 445 => 'SMB', 3306 => 'MySQL', 3389 => 'RDP',
+			5432 => 'PostgreSQL', 5900 => 'VNC', 6379 => 'Redis',
+			8080 => 'HTTP-Alt', 8443 => 'HTTPS-Alt', 27017 => 'MongoDB',
+		];
+		return $map[ $port ] ?? "Port {$port}";
+	}
 }
