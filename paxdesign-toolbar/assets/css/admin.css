@@ -508,3 +508,314 @@ table.widefat td {
 .pdx-admin-main > .pdx-page-header ~ .wrap > h1 {
   display: none;
 }
+
+/* ─── WP admin: single nav (no flyout duplicate) ─────────── */
+body.pdx-admin-app #adminmenu li.toplevel_page_paxdesign-toolbar .wp-submenu {
+  display: none !important;
+}
+
+body.pdx-admin-app #adminmenu li.toplevel_page_paxdesign-toolbar.wp-has-current-submenu .wp-submenu,
+body.pdx-admin-app #adminmenu li.toplevel_page_paxdesign-toolbar.wp-menu-open .wp-submenu {
+  display: none !important;
+}
+
+/* ─── SVG / media scaling (global guard) ─────────────────── */
+.pdx-admin-wrap img,
+.pdx-admin-wrap video {
+  max-width: 100%;
+  height: auto;
+}
+
+.pdx-admin-wrap svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.pdx-admin-wrap svg:not([width]):not([height]) {
+  width: 1.25em;
+  height: 1.25em;
+  max-width: 24px;
+  max-height: 24px;
+}
+
+.pdx-admin-wrap svg[width],
+.pdx-admin-wrap svg[height] {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.pdx-card,
+.pdx-admin-main,
+.pdx-sidebar {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.pdx-card__body {
+  overflow-x: auto;
+}
+
+/* ─── Module cards ───────────────────────────────────────── */
+.pdx-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.pdx-module-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius);
+  background: var(--pdx-bg-elev);
+  transition: border-color var(--pdx-ease), background var(--pdx-ease);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.pdx-module-card.is-enabled {
+  border-color: var(--pdx-accent-border);
+  background: var(--pdx-accent-dim);
+}
+
+.pdx-module-card__icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--pdx-radius);
+  background: var(--pdx-bg-muted);
+  color: var(--pdx-text-muted);
+}
+
+.pdx-module-card__icon svg {
+  width: 20px !important;
+  height: 20px !important;
+  max-width: 20px;
+  max-height: 20px;
+}
+
+.pdx-module-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pdx-module-card__info strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--pdx-text);
+}
+
+.pdx-module-card__info span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--pdx-text-muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* ─── Radio cards ────────────────────────────────────────── */
+.pdx-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pdx-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius);
+  background: var(--pdx-bg-elev);
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--pdx-text-muted);
+  transition: border-color var(--pdx-ease), background var(--pdx-ease), color var(--pdx-ease);
+  max-width: 100%;
+}
+
+.pdx-radio input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pdx-radio svg {
+  width: 18px !important;
+  height: 18px !important;
+  max-width: 18px;
+  max-height: 18px;
+  flex-shrink: 0;
+}
+
+.pdx-radio.is-selected {
+  border-color: var(--pdx-accent-border);
+  background: var(--pdx-accent-dim);
+  color: var(--pdx-accent);
+}
+
+/* ─── Role cards ─────────────────────────────────────────── */
+.pdx-role-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.pdx-role-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius);
+  background: var(--pdx-bg-elev);
+  cursor: pointer;
+  transition: border-color var(--pdx-ease), background var(--pdx-ease);
+}
+
+.pdx-role-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pdx-role-card.is-selected {
+  border-color: var(--pdx-accent-border);
+  background: var(--pdx-accent-dim);
+}
+
+.pdx-role-card__name {
+  font-weight: 600;
+  color: var(--pdx-text);
+}
+
+.pdx-role-card__desc {
+  font-size: 12px;
+  color: var(--pdx-text-muted);
+}
+
+/* ─── Bar chart ──────────────────────────────────────────── */
+.pdx-bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.pdx-bar-chart__row {
+  display: grid;
+  grid-template-columns: minmax(80px, 140px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pdx-bar-chart__label {
+  font-size: 12px;
+  color: var(--pdx-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdx-bar-chart__bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--pdx-bg-muted);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.pdx-bar-chart__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--pdx-accent);
+  max-width: 100%;
+}
+
+.pdx-bar-chart__count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--pdx-text-muted);
+  white-space: nowrap;
+}
+
+/* ─── Hourly chart ───────────────────────────────────────── */
+.pdx-admin-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 120px;
+  padding: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.pdx-admin-chart-bar {
+  flex: 1 1 0;
+  min-width: 12px;
+  max-width: 28px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.pdx-admin-chart-fill {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: var(--pdx-accent);
+  max-height: 100%;
+}
+
+.pdx-admin-chart-label {
+  font-size: 9px;
+  color: var(--pdx-text-subtle);
+  white-space: nowrap;
+}
+
+/* ─── Mobile sidebar backdrop ────────────────────────────── */
+.pdx-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 32px 0 0 0;
+  z-index: 90;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: rgba(1, 4, 9, 0.55);
+  cursor: pointer;
+}
+
+.pdx-admin-wrap.is-sidebar-open .pdx-sidebar-backdrop {
+  display: block;
+}
+
+body.pdx-admin-sidebar-open {
+  overflow: hidden;
+}
+
+@media (max-width: 960px) {
+  .pdx-sidebar {
+    z-index: 100;
+  }
+
+  .pdx-sidebar-backdrop {
+    display: none;
+  }
+
+  .pdx-admin-wrap.is-sidebar-open .pdx-sidebar-backdrop {
+    display: block;
+  }
+}

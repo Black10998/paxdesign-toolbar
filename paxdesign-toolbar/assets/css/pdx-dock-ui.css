@@ -1,7 +1,53 @@
 /**
- * PaxDesign Dock UI v6 — GitHub-inspired surface layer
+ * PaxDesign Dock UI v6.0.1 — GitHub-inspired surface layer
  * Loaded after dock.css; maps legacy tokens and polishes all dock surfaces.
  */
+
+/* ─── Interaction layer (no ghost overlays) ───────────────── */
+#pdx-root {
+  position: relative;
+  z-index: 99990;
+  pointer-events: none;
+}
+
+#pdx-dock,
+#pdx-dock * {
+  pointer-events: auto;
+}
+
+#pdx-backdrop:not(.is-open) {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden;
+}
+
+#pdx-backdrop.is-open {
+  pointer-events: auto;
+}
+
+#pdx-panel:not(.is-open) {
+  pointer-events: none !important;
+  visibility: hidden;
+}
+
+#pdx-panel.is-open {
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.pdx-cmd-overlay:not(.is-open) {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden;
+}
+
+#pdx-notif {
+  pointer-events: none;
+}
+
+#pdx-notif .pdx-notif-item {
+  pointer-events: auto;
+}
 
 #pdx-root {
   --pdx-hi: var(--pdx-text, #e6edf3);

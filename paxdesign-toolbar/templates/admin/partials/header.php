@@ -64,6 +64,7 @@ foreach ( $nav as $items ) {
       <?php endforeach; ?>
     </nav>
   </aside>
+  <button type="button" class="pdx-sidebar-backdrop" id="pdx-sidebar-backdrop" hidden aria-label="Close navigation"></button>
   <div class="pdx-shell">
     <header class="pdx-topbar">
       <button type="button" class="pdx-topbar__menu" id="pdx-sidebar-toggle" aria-label="Toggle navigation" aria-expanded="false">

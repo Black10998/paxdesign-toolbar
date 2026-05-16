@@ -1,5 +1,21 @@
 # Changelog
 
+## 6.0.1 — 2026-05-16
+
+**UI/UX fixes** — overlay cleanup, admin scaling, single navigation layer.
+
+### Admin
+- Restore module/radio/role/chart component styles (SVG sizing, overflow guards)
+- Hide duplicate WordPress flyout submenu; in-app sidebar is the only nav
+- Mobile sidebar backdrop + Escape to close; body scroll lock while open
+- Global SVG max dimensions; module icons constrained to 20px
+
+### Frontend dock
+- Closed panel/backdrop/command overlay no longer capture clicks (`pointer-events` + `visibility`)
+- `#pdx-root` scoped so only the dock rail receives pointer events
+
+**Install:** `releases/paxdesign-toolbar-6.0.1.zip`
+
 ## 6.0.0 — 2026-05-17
 
 **Major UI/UX redesign** — GitHub-inspired design system, yellow brand accent (`#c2ff00`).

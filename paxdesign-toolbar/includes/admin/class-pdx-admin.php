@@ -14,6 +14,7 @@ class PDX_Admin {
 		private PDX_Module_Registry $modules
 	) {
 		add_action( 'admin_menu',              [ $this, 'register_menu' ] );
+		add_filter( 'admin_body_class',        [ $this, 'admin_body_class' ] );
 		add_action( 'admin_enqueue_scripts',   [ $this, 'enqueue' ] );
 		add_action( 'admin_post_pdx_save',     [ $this, 'handle_save' ] );
 		add_action( 'admin_post_pdx_clear_log',[ $this, 'handle_clear_log' ] );
@@ -32,25 +33,25 @@ class PDX_Admin {
 			58
 		);
 
-		add_submenu_page( PDX_SLUG, __( 'General',    'paxdesign-toolbar' ), __( 'General',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG,                    [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Modules',    'paxdesign-toolbar' ), __( 'Modules',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-modules',       [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Pricing',    'paxdesign-toolbar' ), __( 'Pricing',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-pricing',       [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'PayPal',     'paxdesign-toolbar' ), __( 'PayPal',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-payments',      [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Orders',     'paxdesign-toolbar' ), __( 'Orders',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-orders',        [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'API Keys',   'paxdesign-toolbar' ), __( 'API Keys',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-api',           [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'UI & Style', 'paxdesign-toolbar' ), __( 'UI & Style', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-ui',            [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Webhooks',   'paxdesign-toolbar' ), __( 'Webhooks',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-webhooks',      [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Audit Log',  'paxdesign-toolbar' ), __( 'Audit Log',  'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-audit',         [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Privacy',    'paxdesign-toolbar' ), __( 'Privacy',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-privacy',       [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Roles',      'paxdesign-toolbar' ), __( 'Roles',      'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-roles',         [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Analytics',  'paxdesign-toolbar' ), __( 'Analytics',  'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-analytics',     [ $this, 'render_page' ] );
-		// v4 pages
-		add_submenu_page( PDX_SLUG, __( 'Billing',    'paxdesign-toolbar' ), __( 'Billing',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-billing',       [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Teams',      'paxdesign-toolbar' ), __( 'Teams',      'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-teams',         [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Workers',    'paxdesign-toolbar' ), __( 'Workers',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-workers',       [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Dev Tokens', 'paxdesign-toolbar' ), __( 'Dev Tokens', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-dev-tokens',    [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Platform',   'paxdesign-toolbar' ), __( 'Platform',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-platform',      [ $this, 'render_page' ] );
-		add_submenu_page( PDX_SLUG, __( 'Cache',      'paxdesign-toolbar' ), __( '⚡ Cache',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-cache',         [ $this, 'render_page' ] );
+		/* Hidden from WP flyout — in-app sidebar is the only nav (avoids stacked menus). */
+		$hidden = null;
+		add_submenu_page( $hidden, __( 'Modules',    'paxdesign-toolbar' ), __( 'Modules',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-modules',       [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Pricing',    'paxdesign-toolbar' ), __( 'Pricing',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-pricing',       [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'PayPal',     'paxdesign-toolbar' ), __( 'PayPal',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-payments',      [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Orders',     'paxdesign-toolbar' ), __( 'Orders',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-orders',        [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'API Keys',   'paxdesign-toolbar' ), __( 'API Keys',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-api',           [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'UI & Style', 'paxdesign-toolbar' ), __( 'UI & Style', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-ui',            [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Webhooks',   'paxdesign-toolbar' ), __( 'Webhooks',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-webhooks',      [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Audit Log',  'paxdesign-toolbar' ), __( 'Audit Log',  'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-audit',         [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Privacy',    'paxdesign-toolbar' ), __( 'Privacy',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-privacy',       [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Roles',      'paxdesign-toolbar' ), __( 'Roles',      'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-roles',         [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Analytics',  'paxdesign-toolbar' ), __( 'Analytics',  'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-analytics',     [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Billing',    'paxdesign-toolbar' ), __( 'Billing',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-billing',       [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Teams',      'paxdesign-toolbar' ), __( 'Teams',      'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-teams',         [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Workers',    'paxdesign-toolbar' ), __( 'Workers',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-workers',       [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Dev Tokens', 'paxdesign-toolbar' ), __( 'Dev Tokens', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-dev-tokens',    [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Platform',   'paxdesign-toolbar' ), __( 'Platform',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-platform',      [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Cache',      'paxdesign-toolbar' ), __( 'Cache',      'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-cache',         [ $this, 'render_page' ] );
 
 		// Cache + Cloudflare handlers
 		add_action( 'admin_post_pdx_save_cloudflare', [ $this, 'handle_save_cloudflare' ] );
@@ -58,6 +59,14 @@ class PDX_Admin {
 		// Webhook form handlers
 		add_action( 'admin_post_pdx_webhook_create', [ $this, 'handle_webhook_create' ] );
 		add_action( 'admin_post_pdx_webhook_delete', [ $this, 'handle_webhook_delete' ] );
+	}
+
+	public function admin_body_class( string $classes ): string {
+		$page = sanitize_key( $_GET['page'] ?? '' );
+		if ( $page === PDX_SLUG || str_starts_with( $page, PDX_SLUG . '-' ) ) {
+			$classes .= ' pdx-admin-app';
+		}
+		return $classes;
 	}
 
 	public function enqueue( string $hook ): void {
@@ -307,7 +316,7 @@ class PDX_Admin {
 			'pipeline' => 'M5 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M7 12h4l4-5M7 12l4 1 4 4',
 		];
 		$d = $icons[ $name ] ?? 'M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0-16 0';
-		return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="' . esc_attr( $d ) . '"/></svg>';
+		return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' . esc_attr( $d ) . '"/></svg>';
 	}
 
 	private function menu_icon(): string {
