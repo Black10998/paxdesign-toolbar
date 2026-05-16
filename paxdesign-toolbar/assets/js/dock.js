@@ -7,13 +7,7 @@
 (function () {
   'use strict';
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-
-  /* ── State ──────────────────────────────────────────────── */
+  /* ── State — must be declared before init() is called ───── */
   var state = {
     activeModule: null,
     accessStatus: {},
@@ -41,6 +35,12 @@
     queueStats: {},
     memoryItems: [],
   };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 
   function init() {
     if (typeof PDX_CONFIG === 'undefined') return;
