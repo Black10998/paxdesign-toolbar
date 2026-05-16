@@ -763,107 +763,6 @@ class PDX_REST_API {
 		return new WP_REST_Response( [ 'ok' => $ok ], $ok ? 200 : 404 );
 	}
 
-	/* ── PayPal: create order ────────────────────────────── */
-
-	public function pay_create( WP_REST_Request $req ): WP_REST_Response {
-		$module_id = $req->get_param( 'module_id' );
-		if ( ! $this->commerce->is_configured() ) return new WP_REST_Response( [ 'error' => 'Payment system not configured.' ], 503 );
-		$mod = $this->modules->get_with_pricing( $module_id, $this->settings );
-		if ( ! $mod ) return new WP_REST_Response( [ 'error' => 'Unknown module.' ], 400 );
-		if ( (float) $mod['price'] <= 0 ) return new WP_REST_Response( [ 'error' => 'This module is free.' ], 400 );
-		$order = $this->commerce->create_order( $module_id, (float) $mod['price'], $mod['currency'], 'PaxDesign — ' . $mod['label'], add_query_arg( [ 'pdx_capture' => '1', 'pdx_module' => $module_id ], home_url( '/' ) ), home_url( '/' ) );
-		if ( is_wp_error( $order ) ) return new WP_REST_Response( [ 'error' => $order->get_error_message() ], 502 );
-		PDX_Access::create_pending( $module_id, $order['id'], (float) $mod['price'], $mod['currency'] );
-		PDX_Audit::log( 'commerce', 'order_created', [ 'module_id' => $module_id, 'order_id' => $order['id'], 'amount' => $mod['price'] ] );
-		$approve_url = '';
-		foreach ( $order['links'] ?? [] as $link ) {
-			if ( $link['rel'] === 'approve' ) { $approve_url = $link['href']; break; }
-		}
-		return new WP_REST_Response( [ 'order_id' => $order['id'], 'approve_url' => $approve_url, 'amount' => $mod['price'], 'currency' => $mod['currency'] ], 200 );
-	}
-
-	/* ── PayPal: capture order ───────────────────────────── */
-
-	public function pay_capture( WP_REST_Request $req ): WP_REST_Response {
-		$order_id  = $req->get_param( 'order_id' );
-		$module_id = $req->get_param( 'module_id' );
-		if ( ! $this->commerce->is_configured() ) return new WP_REST_Response( [ 'error' => 'Payment system not configured.' ], 503 );
-		$capture = $this->commerce->capture_order( $order_id );
-		if ( is_wp_error( $capture ) ) return new WP_REST_Response( [ 'error' => $capture->get_error_message() ], 502 );
-		if ( ( $capture['status'] ?? '' ) !== 'COMPLETED' ) return new WP_REST_Response( [ 'error' => 'Payment not completed.', 'status' => $capture['status'] ?? '' ], 402 );
-		$payer_email = $capture['payer']['email_address'] ?? '';
-		PDX_Access::activate( $order_id, $payer_email ?: null );
-		if ( ! is_user_logged_in() ) {
-			$token = PDX_Access::guest_token();
-			if ( ! $token ) {
-				$token = wp_generate_password( 32, false );
-				setcookie( 'pdx_guest', $token, time() + YEAR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
-			}
-			PDX_Access::grant_guest_access( $token, $module_id );
-		}
-		PDX_Audit::log( 'commerce', 'payment_captured', [ 'module_id' => $module_id, 'order_id' => $order_id, 'email' => $payer_email ], 'info' );
-		PDX_Webhook::dispatch( 'payment.captured', [ 'module_id' => $module_id, 'order_id' => $order_id ] );
-		return new WP_REST_Response( [ 'ok' => true, 'status' => 'active', 'module_id' => $module_id, 'message' => 'Payment confirmed. Access unlocked.' ], 200 );
-	}
-
-	/* ── Access status ───────────────────────────────────── */
-
-	public function pay_status(): WP_REST_Response {
-		$modules = $this->modules->all_with_pricing( $this->settings );
-		$result  = [];
-		foreach ( $modules as $id => $mod ) {
-			if ( $mod['tier'] === 'free' ) {
-				$result[ $id ] = [ 'status' => 'active', 'tier' => 'free', 'label' => 'Free' ];
-			} else {
-				$has = PDX_Access::has_access( $id );
-				$result[ $id ] = [ 'status' => $has ? 'active' : 'locked', 'tier' => $mod['tier'], 'label' => $has ? 'Unlocked' : ( $mod['tier'] === 'preview' ? 'Preview Available' : 'Locked' ), 'price' => $mod['price'], 'currency' => $mod['currency'] ];
-			}
-		}
-		return new WP_REST_Response( $result, 200 );
-	}
-
-	/* ── Project brief ───────────────────────────────────── */
-
-	public function brief_submit( WP_REST_Request $req ): WP_REST_Response {
-		$name    = sanitize_text_field( $req->get_param( 'name' ) ?? '' );
-		$email   = sanitize_email( $req->get_param( 'email' ) ?? '' );
-		$type    = sanitize_text_field( $req->get_param( 'type' ) ?? '' );
-		$budget  = sanitize_text_field( $req->get_param( 'budget' ) ?? '' );
-		$details = sanitize_textarea_field( $req->get_param( 'details' ) ?? '' );
-		if ( ! $name || ! $email || ! $details ) return new WP_REST_Response( [ 'error' => 'Name, email, and details are required.' ], 400 );
-		if ( ! is_email( $email ) ) return new WP_REST_Response( [ 'error' => 'Invalid email address.' ], 400 );
-		wp_mail( get_option( 'admin_email' ), '[PaxDesign] New Project Brief from ' . $name, "Name: {$name}\nEmail: {$email}\nType: {$type}\nBudget: {$budget}\n\nDetails:\n{$details}", [ 'Content-Type: text/plain; charset=UTF-8', 'Reply-To: ' . $email ] );
-		$log   = get_option( 'pdx_briefs', [] );
-		$log[] = [ 'ts' => time(), 'name' => $name, 'email' => $email, 'type' => $type, 'budget' => $budget, 'details' => substr( $details, 0, 500 ) ];
-		update_option( 'pdx_briefs', array_slice( $log, -200 ) );
-		PDX_Audit::log( 'create', 'brief_submitted', [ 'name' => $name, 'email' => $email, 'type' => $type ] );
-		return new WP_REST_Response( [ 'ok' => true, 'message' => "Brief received. We'll be in touch within 24 hours." ], 200 );
-	}
-
-	/* ── Analytics ───────────────────────────────────────── */
-
-	public function log_event( WP_REST_Request $req ): WP_REST_Response {
-		if ( ! $this->settings->get( 'analytics_enabled' ) ) return new WP_REST_Response( [ 'ok' => false ], 200 );
-		$log   = get_option( 'pdx_event_log', [] );
-		$log[] = [ 'ts' => time(), 'module' => $req->get_param( 'module' ), 'action' => $req->get_param( 'action' ), 'meta' => (array) $req->get_param( 'meta' ), 'ip' => $this->settings->get( 'gdpr_mode' ) ? null : sanitize_text_field( $_SERVER['REMOTE_ADDR'] ?? '' ) ];
-		$days  = (int) $this->settings->get( 'data_retention_days', 30 );
-		$log   = array_values( array_filter( $log, static fn( $e ) => $e['ts'] >= time() - $days * DAY_IN_SECONDS ) );
-		update_option( 'pdx_event_log', $log );
-		return new WP_REST_Response( [ 'ok' => true ], 200 );
-	}
-
-	public function get_settings(): WP_REST_Response {
-		return new WP_REST_Response( $this->settings->all(), 200 );
-	}
-
-	public function update_settings( WP_REST_Request $req ): WP_REST_Response {
-		$body = $req->get_json_params();
-		if ( ! is_array( $body ) ) return new WP_REST_Response( [ 'error' => 'Invalid payload' ], 400 );
-		$this->settings->save( $body );
-		return new WP_REST_Response( [ 'ok' => true, 'settings' => $this->settings->all() ], 200 );
-
-	/* ── Queue stats endpoint ────────────────────────────── */
-
 	public function queue_stats_endpoint(): WP_REST_Response {
 		return new WP_REST_Response( PDX_Queue::queue_stats(), 200 );
 	}
@@ -1172,16 +1071,5 @@ class PDX_REST_API {
 			'cache'       => PDX_Cache::stats(),
 			'rate_limits' => PDX_RateLimit::stats(),
 		], 200 );
-	}
-
-	public function get_settings(): WP_REST_Response {
-		return new WP_REST_Response( $this->settings->all(), 200 );
-	}
-
-	public function update_settings( WP_REST_Request $req ): WP_REST_Response {
-		$body = $req->get_json_params();
-		if ( ! is_array( $body ) ) return new WP_REST_Response( [ 'error' => 'Invalid payload' ], 400 );
-		$this->settings->save( $body );
-		return new WP_REST_Response( [ 'ok' => true, 'settings' => $this->settings->all() ], 200 );
 	}
 }
