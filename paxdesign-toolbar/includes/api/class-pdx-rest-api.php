@@ -83,6 +83,9 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/workspace/search',                   [ 'methods' => 'GET',   'callback' => [ $this, 'workspace_search'  ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/workspace/(?P<ws_id>[a-z0-9\-]+)',  [ [ 'methods' => 'GET',   'callback' => [ $this, 'workspace_get'    ], 'permission_callback' => $pub ], [ 'methods' => 'PATCH', 'callback' => [ $this, 'workspace_update' ], 'permission_callback' => $pub ] ] );
 
+		// Cache purge (admin only)
+		register_rest_route( $ns, '/cache/purge', [ 'methods' => 'POST', 'callback' => [ $this, 'cache_purge' ], 'permission_callback' => $adm ] );
+
 		// Audit (admin only)
 		register_rest_route( $ns, '/audit', [ 'methods' => 'GET', 'callback' => [ $this, 'audit_log' ], 'permission_callback' => $adm ] );
 
@@ -721,6 +724,15 @@ class PDX_REST_API {
 	}
 
 	/* ── Audit log ───────────────────────────────────────── */
+
+	public function cache_purge( WP_REST_Request $req ): WP_REST_Response {
+		$results = PDX_CachePurge::purge_all();
+		return new WP_REST_Response( [
+			'success' => true,
+			'version' => PDX_VERSION,
+			'results' => $results,
+		], 200 );
+	}
 
 	public function audit_log( WP_REST_Request $req ): WP_REST_Response {
 		$module   = sanitize_key( $req->get_param( 'module' ) ?? '' );

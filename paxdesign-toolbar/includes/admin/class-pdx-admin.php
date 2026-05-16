@@ -50,6 +50,10 @@ class PDX_Admin {
 		add_submenu_page( PDX_SLUG, __( 'Workers',    'paxdesign-toolbar' ), __( 'Workers',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-workers',       [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Dev Tokens', 'paxdesign-toolbar' ), __( 'Dev Tokens', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-dev-tokens',    [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Platform',   'paxdesign-toolbar' ), __( 'Platform',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-platform',      [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Cache',      'paxdesign-toolbar' ), __( '⚡ Cache',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-cache',         [ $this, 'render_page' ] );
+
+		// Cache + Cloudflare handlers
+		add_action( 'admin_post_pdx_save_cloudflare', [ $this, 'handle_save_cloudflare' ] );
 
 		// Webhook form handlers
 		add_action( 'admin_post_pdx_webhook_create', [ $this, 'handle_webhook_create' ] );
@@ -109,6 +113,7 @@ class PDX_Admin {
 			PDX_SLUG . '-workers'    => 'workers',
 			PDX_SLUG . '-dev-tokens' => 'dev-tokens',
 			PDX_SLUG . '-platform'   => 'platform',
+			PDX_SLUG . '-cache'      => 'cache',
 		];
 		return $map[ $page ] ?? 'general';
 	}
@@ -121,6 +126,9 @@ class PDX_Admin {
 		$data = $this->sanitize_tab( $tab, $_POST );
 
 		$this->settings->save( $data );
+
+		// Fire action so PDX_CachePurge (and any other listeners) can flush.
+		do_action( 'pdx_settings_saved', $tab, $data );
 
 		wp_safe_redirect( add_query_arg( [
 			'page'    => PDX_SLUG . ( $tab !== 'general' ? '-' . $tab : '' ),
@@ -278,6 +286,22 @@ class PDX_Admin {
 	private function menu_icon(): string {
 		$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
 		return 'data:image/svg+xml;base64,' . base64_encode( $svg );
+	}
+
+	public function handle_save_cloudflare(): void {
+		if ( ! current_user_can( PDX_CAP ) ) wp_die( 'Unauthorized', 403 );
+		check_admin_referer( 'pdx_save_cloudflare', 'pdx_nonce' );
+
+		PDX_CachePurge::save_cloudflare( [
+			'zone_id'   => $_POST['cf_zone_id']   ?? '',
+			'api_token' => $_POST['cf_api_token'] ?? '',
+		] );
+
+		wp_safe_redirect( add_query_arg(
+			[ 'page' => PDX_SLUG . '-cache', 'updated' => '1' ],
+			admin_url( 'admin.php' )
+		) );
+		exit;
 	}
 
 	public function handle_webhook_create(): void {
