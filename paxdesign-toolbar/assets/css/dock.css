@@ -921,7 +921,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 /* ─── Notifications ──────────────────────────────────────── */
 #pdx-notif {
   position: fixed; bottom: 20px; right: 20px;
-  z-index: 99998; display: flex; flex-direction: column; gap: 8px;
+  z-index: 100000; display: flex; flex-direction: column; gap: 8px;
   pointer-events: none;
 }
 .pdx-notif-item {
@@ -1963,11 +1963,12 @@ body.pdx-no-scroll { overflow: hidden !important; }
   justify-content: center;
   pointer-events: none;
 }
-.pdx-dock-queue-badge:not(:empty) { display: inline-flex; }
+.pdx-dock-queue-badge:not(:empty):not([hidden]) { display: inline-flex; }
+.pdx-dock-queue-badge[hidden] { display: none !important; }
 
 /* ─── Command palette ────────────────────────────────────── */
 .pdx-cmd-overlay {
-  position: fixed; inset: 0; z-index: 99999;
+  position: fixed; inset: 0; z-index: 100001;
   background: rgba(0,0,0,.6);
   display: flex; align-items: flex-start; justify-content: center;
   padding-top: 12vh;
@@ -2237,16 +2238,6 @@ body.pdx-no-scroll { overflow: hidden !important; }
 .pdx-cve-id   { font-size: 12px; font-weight: 700; color: var(--pdx-red); font-family: var(--pdx-mono); margin-bottom: 4px; }
 .pdx-cve-desc { font-size: 11px; color: var(--pdx-hi); line-height: 1.5; margin-bottom: 4px; }
 .pdx-cve-meta { font-size: 10px; color: var(--pdx-lo); }
-
-/* ─── Queue badge on dock ────────────────────────────────── */
-#pdx-queue-badge {
-  position: absolute; top: -4px; right: -4px;
-  min-width: 16px; height: 16px; border-radius: 8px;
-  background: var(--pdx-indigo); color: #fff;
-  font-size: 9px; font-weight: 700;
-  display: none; align-items: center; justify-content: center;
-  padding: 0 3px; pointer-events: none;
-}
 
 /* ─── Badge variants for severity ───────────────────────── */
 .pdx-badge--critical { background: var(--pdx-red-dim);    color: var(--pdx-red);    border: 1px solid rgba(248,81,73,.3); }

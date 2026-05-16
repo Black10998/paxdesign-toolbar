@@ -144,6 +144,7 @@
     }
 
     function openPanel(moduleId) {
+      if (state.commandPaletteOpen) closeCommandPalette();
       state.activeModule = moduleId;
       _panelFocusReturn = document.activeElement;
       backdrop.classList.add('is-open');
@@ -183,6 +184,10 @@
     }
 
     function closePanel() {
+      if (state._paypalPoll) {
+        clearInterval(state._paypalPoll);
+        state._paypalPoll = null;
+      }
       state.activeModule = null;
       backdrop.classList.remove('is-open');
       panel.classList.remove('is-open');
@@ -259,7 +264,18 @@
 
     /* ── v4: Load worker nodes ────────────────────────────── */
     apiFetch('GET', '/workers').then(function(data) {
-      if (data && data.workers) state.workers = data.workers;
+      if (data && data.workers) {
+        state.workers = data.workers;
+        var workerEl = document.getElementById('pdx-worker-status');
+        if (workerEl) renderWorkerStatus(workerEl);
+      }
+    });
+
+    apiFetch('GET', '/queue/stats').then(function(data) {
+      if (data) {
+        state.queueStats = data;
+        updateQueueBadge(data);
+      }
     });
 
     /* ── v4: Load teams ───────────────────────────────────── */
@@ -270,30 +286,53 @@
       }
     });
 
-    /* ── v4: SSE activity feed ────────────────────────────── */
-    if (C.sseEnabled !== false) {
-      startSSE('activity', function(evt) {
-        try {
-          var d = JSON.parse(evt.data);
-          if (!d || typeof d !== 'object') return;
-          if (!Array.isArray(state.liveActivity)) state.liveActivity = [];
-          state.liveActivity.unshift(d);
-          if (state.liveActivity.length > 100) state.liveActivity.length = 100;
-          if (d.severity === 'critical' || d.severity === 'high') {
-            showNotif('[' + (d.module || 'system') + '] ' + (d.action || ''), 'warn');
-          }
-          if (state.activeModule === 'workspace') refreshActivityFeed();
-        } catch(e) {}
+    /* ── v4: SSE activity + queue (pause when tab hidden) ─── */
+    function ingestActivityEvents(payload) {
+      if (!payload || typeof payload !== 'object') return;
+      var events = Array.isArray(payload.events)
+        ? payload.events
+        : (payload.module || payload.action ? [payload] : []);
+      if (!events.length) return;
+      if (!Array.isArray(state.liveActivity)) state.liveActivity = [];
+      events.forEach(function(d) {
+        if (!d || typeof d !== 'object') return;
+        state.liveActivity.unshift(d);
+        if (d.severity === 'critical' || d.severity === 'high') {
+          showNotif('[' + (d.module || 'system') + '] ' + (d.action || ''), 'warn');
+        }
       });
-      startSSE('queue', function(evt) {
-        try {
-          var d = JSON.parse(evt.data);
-          if (!d || typeof d !== 'object') return;
-          state.queueStats = d;
-          updateQueueBadge(d);
-        } catch(e) {}
-      });
+      if (state.liveActivity.length > 100) state.liveActivity.length = 100;
+      if (state.activeModule === 'workspace') refreshActivityFeed();
     }
+
+    function onActivitySSE(evt) {
+      try { ingestActivityEvents(JSON.parse(evt.data)); } catch (e) {}
+    }
+
+    function onQueueSSE(evt) {
+      try {
+        var d = JSON.parse(evt.data);
+        if (!d || typeof d !== 'object') return;
+        state.queueStats = d;
+        updateQueueBadge(d);
+      } catch (e) {}
+    }
+
+    function startSSEChannels() {
+      if (C.sseEnabled === false || !window.EventSource || !C.restUrl) return;
+      startSSE('activity', onActivitySSE);
+      startSSE('queue', onQueueSSE);
+    }
+
+    startSSEChannels();
+
+    document.addEventListener('visibilitychange', function() {
+      if (document.hidden) {
+        Object.keys(state.sseConnections || {}).forEach(function(ch) { stopSSE(ch); });
+      } else {
+        startSSEChannels();
+      }
+    });
 
     /* ── v4: Command palette DOM ──────────────────────────── */
     buildCommandPalette();
@@ -3795,6 +3834,15 @@
     /* ══════════════════════════════════════════════════════
        v4: WORKSPACE — upgraded with live activity feed
     ══════════════════════════════════════════════════════ */
+    function formatActivityTime(evt) {
+      var ts = evt && evt.ts;
+      var d;
+      if (typeof ts === 'number') d = new Date(ts < 1e12 ? ts * 1000 : ts);
+      else if (ts) d = new Date(ts);
+      else d = new Date();
+      return isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
+    }
+
     function refreshActivityFeed() {
       var feed = document.getElementById('pdx-activity-feed');
       if (!feed) return;
@@ -3804,7 +3852,7 @@
         html += '<div class="pdx-activity-item ' + cls + '">' +
           '<span class="pdx-activity-module">' + escHtml(evt.module || 'system') + '</span>' +
           '<span class="pdx-activity-action">' + escHtml(evt.action || '') + '</span>' +
-          '<span class="pdx-activity-time">' + new Date((evt.ts || Date.now() / 1000) * 1000).toLocaleTimeString() + '</span>' +
+          '<span class="pdx-activity-time">' + formatActivityTime(evt) + '</span>' +
         '</div>';
       });
       feed.innerHTML = html || '<div class="pdx-empty">No activity yet.</div>';
