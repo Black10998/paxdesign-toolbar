@@ -29,13 +29,15 @@ class PDX_Settings {
 			// Modules enabled
 			'modules'              => [
 				'trust'       => true,
-				'create'      => true,
-				'personas'    => true,
-				'automation'  => true,
 				'osint'       => true,
-				'connectors'  => true,
+				'threat'      => true,
+				'personas'    => true,
 				'builder'     => true,
 				'pipeline'    => true,
+				'automation'  => true,
+				'connectors'  => true,
+				'create'      => true,
+				'workspace'   => true,
 			],
 
 			// API keys
@@ -45,6 +47,13 @@ class PDX_Settings {
 				'shodan'      => '',
 				'hunter'      => '',
 			],
+
+			// Enterprise
+			'webhooks_enabled'     => true,
+			'audit_enabled'        => true,
+			'workspace_enabled'    => true,
+			'queue_enabled'        => true,
+			'ai_memory_enabled'    => true,
 
 			// Privacy
 			'analytics_enabled'    => false,

@@ -39,9 +39,15 @@ class PDX_Admin {
 		add_submenu_page( PDX_SLUG, __( 'Orders',     'paxdesign-toolbar' ), __( 'Orders',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-orders',        [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'API Keys',   'paxdesign-toolbar' ), __( 'API Keys',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-api',           [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'UI & Style', 'paxdesign-toolbar' ), __( 'UI & Style', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-ui',            [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Webhooks',   'paxdesign-toolbar' ), __( 'Webhooks',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-webhooks',      [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Audit Log',  'paxdesign-toolbar' ), __( 'Audit Log',  'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-audit',         [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Privacy',    'paxdesign-toolbar' ), __( 'Privacy',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-privacy',       [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Roles',      'paxdesign-toolbar' ), __( 'Roles',      'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-roles',         [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Analytics',  'paxdesign-toolbar' ), __( 'Analytics',  'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-analytics',     [ $this, 'render_page' ] );
+
+		// Webhook form handlers
+		add_action( 'admin_post_pdx_webhook_create', [ $this, 'handle_webhook_create' ] );
+		add_action( 'admin_post_pdx_webhook_delete', [ $this, 'handle_webhook_delete' ] );
 	}
 
 	public function enqueue( string $hook ): void {
@@ -86,6 +92,8 @@ class PDX_Admin {
 			PDX_SLUG . '-orders'     => 'orders',
 			PDX_SLUG . '-api'        => 'api',
 			PDX_SLUG . '-ui'         => 'ui',
+			PDX_SLUG . '-webhooks'   => 'webhooks',
+			PDX_SLUG . '-audit'      => 'audit',
 			PDX_SLUG . '-privacy'    => 'privacy',
 			PDX_SLUG . '-roles'      => 'roles',
 			PDX_SLUG . '-analytics'  => 'analytics',
@@ -243,8 +251,36 @@ class PDX_Admin {
 	}
 
 	private function menu_icon(): string {
-		// Inline SVG as base64 data URI
 		$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
 		return 'data:image/svg+xml;base64,' . base64_encode( $svg );
+	}
+
+	public function handle_webhook_create(): void {
+		if ( ! current_user_can( PDX_CAP ) ) wp_die( 'Unauthorized', 403 );
+		check_admin_referer( 'pdx_webhook_create' );
+
+		$events = array_map( 'sanitize_key', (array) ( $_POST['wh_events'] ?? [] ) );
+		PDX_Webhook::create( [
+			'name'   => sanitize_text_field( $_POST['wh_name']   ?? '' ),
+			'url'    => esc_url_raw( $_POST['wh_url']            ?? '' ),
+			'secret' => sanitize_text_field( $_POST['wh_secret'] ?? '' ),
+			'events' => $events,
+			'active' => true,
+		] );
+		PDX_Audit::log( 'webhooks', 'webhook_created', [ 'name' => $_POST['wh_name'] ?? '' ] );
+
+		wp_safe_redirect( add_query_arg( [ 'page' => PDX_SLUG . '-webhooks', 'updated' => '1' ], admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	public function handle_webhook_delete(): void {
+		if ( ! current_user_can( PDX_CAP ) ) wp_die( 'Unauthorized', 403 );
+		$id = sanitize_text_field( $_POST['wh_id'] ?? '' );
+		check_admin_referer( 'pdx_webhook_delete_' . $id );
+		PDX_Webhook::delete( $id );
+		PDX_Audit::log( 'webhooks', 'webhook_deleted', [ 'id' => $id ] );
+
+		wp_safe_redirect( add_query_arg( [ 'page' => PDX_SLUG . '-webhooks', 'updated' => '1' ], admin_url( 'admin.php' ) ) );
+		exit;
 	}
 }
