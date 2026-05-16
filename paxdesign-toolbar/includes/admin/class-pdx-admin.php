@@ -183,6 +183,7 @@ class PDX_Admin {
 						'virustotal' => sanitize_text_field( $post['api_keys']['virustotal'] ?? '' ),
 						'shodan'     => sanitize_text_field( $post['api_keys']['shodan']     ?? '' ),
 						'hunter'     => sanitize_text_field( $post['api_keys']['hunter']     ?? '' ),
+						'nvd'        => sanitize_text_field( $post['api_keys']['nvd']        ?? '' ),
 					],
 				];
 

@@ -46,6 +46,7 @@ class PDX_Settings {
 				'virustotal'  => '',
 				'shodan'      => '',
 				'hunter'      => '',
+				'nvd'         => '',
 			],
 
 			// Enterprise

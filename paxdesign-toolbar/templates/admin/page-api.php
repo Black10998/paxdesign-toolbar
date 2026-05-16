@@ -74,6 +74,23 @@ include __DIR__ . '/partials/header.php';
         </div>
         <p class="pdx-field-hint">Email discovery for OSINT module.</p>
       </div>
+      <div class="pdx-field">
+        <label for="api_nvd">NVD API Key</label>
+        <div class="pdx-input-group">
+          <input type="password" id="api_nvd" name="api_keys[nvd]"
+                 value="<?php echo esc_attr( $keys['nvd'] ?? '' ); ?>"
+                 placeholder="NVD API key" autocomplete="off">
+          <button type="button" class="pdx-input-reveal" data-target="api_nvd" aria-label="Toggle visibility">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <p class="pdx-field-hint">
+          Used by Threat Intel → CVE Lookup for CVE searches, CVSS data, and keyword queries.
+          <strong>Without a key, NVD enforces a strict rate limit of 5 requests per 30 seconds.</strong>
+          A free key removes this limit. Register at
+          <a href="https://nvd.nist.gov/developers/request-an-api-key" target="_blank" rel="noopener">nvd.nist.gov</a>.
+        </p>
+      </div>
     </div>
   </div>
 
