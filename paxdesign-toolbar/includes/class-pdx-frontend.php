@@ -77,7 +77,7 @@ class PDX_Frontend {
 			'accentColor'      => esc_attr( $this->settings->get( 'accent_color', '#3fb950' ) ),
 			'mobileEnabled'      => (bool)   $this->settings->get( 'mobile_enabled',       true ),
 			'mobileBreakpoint'   => (int)    $this->settings->get( 'mobile_breakpoint',    680 ),
-			'mobileDockPosition' => (string) $this->settings->get( 'mobile_dock_position', 'bottom-center' ),
+			'mobileDockPosition' => (string) $this->settings->get( 'mobile_dock_position', 'under-header' ),
 			'mobilePanelHeight'  => (int)    $this->settings->get( 'mobile_panel_height',  90 ),
 			'mobileSwipeClose'   => (bool)   $this->settings->get( 'mobile_swipe_close',   true ),
 			'mobileHideDock'     => (bool)   $this->settings->get( 'mobile_hide_dock',     true ),
@@ -93,14 +93,16 @@ class PDX_Frontend {
 	public function render(): void {
 		if ( ! $this->settings->should_render() ) return;
 
-		$position = esc_attr( $this->settings->get( 'dock_position', 'left' ) );
-		$theme    = esc_attr( $this->settings->get( 'dock_theme', 'dark' ) );
-		$size     = esc_attr( $this->settings->get( 'dock_size', 'default' ) );
+		$position      = esc_attr( $this->settings->get( 'dock_position',      'left' ) );
+		$theme         = esc_attr( $this->settings->get( 'dock_theme',          'dark' ) );
+		$size          = esc_attr( $this->settings->get( 'dock_size',           'default' ) );
+		$mobile_dock   = esc_attr( $this->settings->get( 'mobile_dock_position','under-header' ) );
 		?>
 		<div id="pdx-root"
 			 data-position="<?php echo $position; ?>"
 			 data-theme="<?php echo $theme; ?>"
 			 data-size="<?php echo $size; ?>"
+			 data-mobile-dock="<?php echo $mobile_dock; ?>"
 			 aria-label="PaxDesign Utility Dock"
 			 role="complementary">
 			<nav id="pdx-dock" aria-label="Utility dock tools">

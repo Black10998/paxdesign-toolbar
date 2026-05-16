@@ -102,15 +102,15 @@ include __DIR__ . '/partials/header.php';
       <div class="pdx-field">
         <label>Mobile Dock Position</label>
         <div class="pdx-radio-group">
-          <?php foreach ( [ 'bottom-center' => 'Bottom Centre', 'bottom-left' => 'Bottom Left', 'bottom-right' => 'Bottom Right' ] as $val => $lbl ) : ?>
-          <label class="pdx-radio <?php echo ( $s['mobile_dock_position'] ?? 'bottom-center' ) === $val ? 'is-selected' : ''; ?>">
+          <?php foreach ( [ 'under-header' => 'Top — Under Header', 'bottom-center' => 'Bottom Centre', 'bottom-left' => 'Bottom Left', 'bottom-right' => 'Bottom Right' ] as $val => $lbl ) : ?>
+          <label class="pdx-radio <?php echo ( $s['mobile_dock_position'] ?? 'under-header' ) === $val ? 'is-selected' : ''; ?>">
             <input type="radio" name="mobile_dock_position" value="<?php echo esc_attr( $val ); ?>"
-                   <?php checked( $s['mobile_dock_position'] ?? 'bottom-center', $val ); ?>>
+                   <?php checked( $s['mobile_dock_position'] ?? 'under-header', $val ); ?>>
             <?php echo esc_html( $lbl ); ?>
           </label>
           <?php endforeach; ?>
         </div>
-        <p class="pdx-field-hint">Where the horizontal pill dock appears on phones.</p>
+        <p class="pdx-field-hint"><strong>Top — Under Header</strong> pins a full-width glass bar directly below the browser chrome. The panel slides down from it. Recommended for phones. Bottom options show a floating pill above the safe area with a bottom-sheet panel.</p>
       </div>
 
       <!-- Panel height -->
