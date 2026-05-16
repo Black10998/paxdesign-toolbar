@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v4.4.0
+ * PaxDesign Utility Dock — v5.0.0
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.
@@ -133,24 +133,22 @@
         b.classList.toggle('is-active', b.dataset.module === moduleId);
         b.setAttribute('aria-expanded', b.dataset.module === moduleId ? 'true' : 'false');
       });
-      // Render immediately with cached state — zero delay, panel shows content at once.
-      renderPanel(moduleId);
-      injectCloseBtnGlobal();
-      var _body = panel.querySelector('.pdx-ph-body');
-      if (_body) _body.scrollTop = 0;
-
-      // Background refresh: silently update access state after render.
-      // If it changed (admin toggled a module), re-render to reflect new state.
+        // Always fetch fresh access status before rendering — this is the
+      // single source of truth for tier/price/locked state. No stale
+      // PDX_CONFIG.modules values are used for access decisions.
       apiFetch('GET', '/pay/status').then(function(s) {
-        if (!s) return;
-        var prev = JSON.stringify(state.accessStatus);
-        state.accessStatus = s;
-        if (JSON.stringify(s) !== prev &&
-            state.activeModule === moduleId &&
-            panel.classList.contains('is-open')) {
-          renderPanel(moduleId);
-          injectCloseBtnGlobal();
-        }
+        if (s) state.accessStatus = s;
+        // Only render if this panel is still the active one.
+        if (state.activeModule !== moduleId || !panel.classList.contains('is-open')) return;
+        renderPanel(moduleId);
+        injectCloseBtnGlobal();
+        var _body = panel.querySelector('.pdx-ph-body');
+        if (_body) _body.scrollTop = 0;
+      }).catch(function() {
+        // Fallback: render with whatever state we have.
+        if (state.activeModule !== moduleId || !panel.classList.contains('is-open')) return;
+        renderPanel(moduleId);
+        injectCloseBtnGlobal();
       });
       if (C.analytics) logEvent(moduleId, 'panel_open');
     }
@@ -282,28 +280,26 @@
     var _closeSvg = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>';
 
     function injectCloseBtnGlobal() {
-      // Guard: never run while already injecting (prevents re-entrancy).
-      if (injectCloseBtnGlobal._running) return;
-      injectCloseBtnGlobal._running = true;
-      try {
-        // Remove stale button — panel content was replaced.
-        var existing = inner.querySelector('.pdx-mobile-close');
-        if (existing) existing.remove();
-        // Only inject when a panel module is rendered (.pdx-ph exists).
-        if (!inner.querySelector('.pdx-ph')) return;
-        var btn = document.createElement('button');
-        btn.className = 'pdx-mobile-close';
-        btn.type = 'button';
-        btn.setAttribute('aria-label', 'Close panel');
-        btn.innerHTML = _closeSvg;
-        btn.addEventListener('click', closePanel);
-        // Append to inner (not .pdx-ph-hd) — avoids overflow:hidden clipping.
-        inner.appendChild(btn);
-      } finally {
-        injectCloseBtnGlobal._running = false;
-      }
+      // Always remove any existing close button first — renderPanel replaces
+      // inner.innerHTML so any previously appended button is already gone,
+      // but guard against double-injection on rapid calls.
+      var existing = inner.querySelector('.pdx-mobile-close');
+      if (existing) existing.remove();
+
+      // Only inject when a panel module is rendered (.pdx-ph exists).
+      if (!inner.querySelector('.pdx-ph')) return;
+
+      var btn = document.createElement('button');
+      btn.className = 'pdx-mobile-close';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'Close panel');
+      btn.innerHTML = _closeSvg;
+      btn.addEventListener('click', closePanel);
+      // Append to inner (not .pdx-ph-hd) — avoids overflow:hidden clipping.
+      // position:absolute on the button + position:relative on #pdx-panel-inner
+      // keeps it pinned top-right above all content at all times.
+      inner.appendChild(btn);
     }
-    injectCloseBtnGlobal._running = false;
 
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
@@ -313,8 +309,20 @@
       if (!moduleId) return;
       var mod = (C.modules && C.modules[moduleId]) || null;
       if (!mod) { inner.innerHTML = '<div class="pdx-empty">Module not found.</div>'; return; }
+
+      // access comes from /pay/status — always live, never stale.
+      // Merge live tier/price into mod so all render functions see current values.
       var access = (state.accessStatus && state.accessStatus[moduleId]) || {};
       var locked = access.status === 'locked';
+
+      // Sync mod tier/price/description from live access status so paywall shows correct values.
+      // access.price can be 0 (free), so check != null not just truthiness.
+      var liveOverrides = {};
+      if (access.tier)              liveOverrides.tier        = access.tier;
+      if (access.price != null)     liveOverrides.price       = access.price;
+      if (access.currency)          liveOverrides.currency    = access.currency;
+      if (access.description)       liveOverrides.description = access.description;
+      if (Object.keys(liveOverrides).length) mod = Object.assign({}, mod, liveOverrides);
 
       switch (moduleId) {
         case 'trust':          renderTrust(mod, access); break;
@@ -922,12 +930,23 @@
 
       /* ── Paywall ── */
       if (paywall) {
+        var pwPrice    = (paywall.price    != null) ? parseFloat(paywall.price).toFixed(2) : '0.00';
+        var pwCurrency = paywall.currency  || 'USD';
         html += '<div class="pdx-paywall">' +
           '<div class="pdx-paywall-icon">' + svgIcon('shield') + '</div>' +
           '<div class="pdx-paywall-title">Full Intelligence Report</div>' +
           '<div class="pdx-paywall-desc">' + escHtml(safeStr(paywall.message)) + '</div>' +
           '<div class="pdx-paywall-locked"><strong>Locked sources:</strong> ' + escHtml((paywall.locked_sources || []).join(', ')) + '</div>' +
-          '<button class="pdx-btn-primary pdx-unlock-btn" data-module="osint" data-price="' + (paywall.price||0) + '" data-currency="' + escHtml(paywall.currency||'USD') + '">Unlock for ' + escHtml(paywall.currency||'USD') + ' ' + (paywall.price||0) + '</button>' +
+          '<div class="pdx-paywall-price">' +
+            '<span class="pdx-paywall-currency">' + escHtml(pwCurrency) + '</span>' +
+            '<span class="pdx-paywall-amount">' + pwPrice + '</span>' +
+          '</div>' +
+          '<button class="pdx-btn-primary pdx-btn-full pdx-unlock-btn"' +
+            ' data-module="osint"' +
+            ' data-price="' + escHtml(String(paywall.price || 0)) + '"' +
+            ' data-currency="' + escHtml(pwCurrency) + '">' +
+            'Unlock Full Report' +
+          '</button>' +
         '</div>';
       }
 
@@ -1047,8 +1066,8 @@
        AI PERSONAS
     ══════════════════════════════════════════════════════ */
     function renderPersonas(mod, access, locked) {
-      var previewUsed = 0;
-      var previewMax  = mod.preview_lines || 3;
+      // If fully locked (paid tier, no access), show paywall immediately.
+      if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
 
       inner.innerHTML =
         '<div class="pdx-ph pdx-ph--chat">' +
@@ -1066,16 +1085,14 @@
           '</div>' +
           '<div id="pdx-chat-messages" class="pdx-chat-messages"></div>' +
           '<div class="pdx-chat-footer">' +
-            (locked && previewUsed >= previewMax ? renderPaywallInline(mod, access) :
-              '<div class="pdx-chat-input-row">' +
-                '<textarea id="pdx-chat-input" class="pdx-chat-input" placeholder="Ask anything..." rows="2"></textarea>' +
-                '<div class="pdx-chat-actions">' +
-                  '<button id="pdx-chat-send" class="pdx-btn-primary">Send</button>' +
-                  '<button id="pdx-chat-clear" class="pdx-btn-ghost" title="Clear">Clear</button>' +
-                  '<button id="pdx-chat-export" class="pdx-btn-ghost" title="Export">Export</button>' +
-                '</div>' +
-              '</div>'
-            ) +
+            '<div class="pdx-chat-input-row">' +
+              '<textarea id="pdx-chat-input" class="pdx-chat-input" placeholder="Ask anything..." rows="2"></textarea>' +
+              '<div class="pdx-chat-actions">' +
+                '<button id="pdx-chat-send" class="pdx-btn-primary">Send</button>' +
+                '<button id="pdx-chat-clear" class="pdx-btn-ghost" title="Clear">Clear</button>' +
+                '<button id="pdx-chat-export" class="pdx-btn-ghost" title="Export">Export</button>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
         '</div>';
 
@@ -1129,10 +1146,19 @@
           thinking.remove();
           if (!data) { appendChatMsg(msgContainer, 'error', 'Request failed.'); return; }
           if (data.error === 'payment_required') {
-            appendChatMsg(msgContainer, 'system', 'Preview limit reached. Unlock full access to continue.');
-            var pw = document.createElement('div');
-            pw.innerHTML = renderPaywallInline(mod, { price: data.price, currency: data.currency });
-            msgContainer.appendChild(pw);
+            appendChatMsg(msgContainer, 'system', 'Preview limit reached.');
+            // Replace chat footer with paywall inline.
+            var footer = inner.querySelector('.pdx-chat-footer');
+            if (footer) {
+              footer.innerHTML = renderPaywallInline(mod, { price: data.price, currency: data.currency });
+              var unlockBtn = footer.querySelector('.pdx-unlock-btn');
+              if (unlockBtn) {
+                unlockBtn.addEventListener('click', function(e) {
+                  var b = e.currentTarget;
+                  initiatePayment(b.dataset.module, parseFloat(b.dataset.price), b.dataset.currency);
+                });
+              }
+            }
             return;
           }
           if (data.error) { appendChatMsg(msgContainer, 'error', data.error); return; }
@@ -1175,7 +1201,7 @@
        AI BUILDER
     ══════════════════════════════════════════════════════ */
     function renderBuilder(mod, access, locked) {
-      if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
+      if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
@@ -1373,7 +1399,7 @@
        AGENT PIPELINE
     ══════════════════════════════════════════════════════ */
     function renderPipeline(mod, access, locked) {
-      if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
+      if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
@@ -1595,7 +1621,7 @@
        BROWSER AUTOMATION
     ══════════════════════════════════════════════════════ */
     function renderAutomation(mod, access, locked) {
-      if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
+      if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
@@ -1761,7 +1787,7 @@
        CONNECTORS
     ══════════════════════════════════════════════════════ */
     function renderConnectors(mod, access, locked) {
-      if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
+      if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
@@ -2162,46 +2188,78 @@
     }
 
     function renderPaywall(mod, access) {
-      var price    = (access && access.price) || mod.price || mod.default_price || 0;
-      var currency = (access && access.currency) || 'USD';
+      // Use live access data (from /pay/status) for price/currency/description — never stale config.
+      var price    = (access && access.price  != null) ? access.price  : (mod.price || mod.default_price || 0);
+      var currency = (access && access.currency)       ? access.currency : (mod.currency || 'USD');
+      var desc     = (access && access.description)    ? access.description : (mod.description || '');
       var priceFormatted = parseFloat(price).toFixed(2);
+      var modId    = mod.id || '';
+
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('shield') + '<span>' + escHtml(mod.label || 'Module') + '</span></div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>' + escHtml(mod.label || 'Module') + '</span></div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-paywall">' +
               '<div class="pdx-paywall-icon">' + svgIcon('shield') + '</div>' +
-              '<div class="pdx-paywall-title">Premium Module</div>' +
-              '<div class="pdx-paywall-desc">' + escHtml(mod.description || '') + '</div>' +
-              '<div class="pdx-paywall-price">' + escHtml(currency) + ' ' + priceFormatted + '</div>' +
-              '<button class="pdx-btn-primary pdx-btn-full pdx-unlock-btn" data-module="' + escHtml(mod.id || '') + '" data-price="' + price + '" data-currency="' + escHtml(currency) + '">Unlock Access</button>' +
-              paywallFeaturesHtml(mod.id || '') +
+              '<div class="pdx-paywall-title">Premium Access</div>' +
+              '<div class="pdx-paywall-desc">' + escHtml(desc) + '</div>' +
+              '<div class="pdx-paywall-price">' +
+                '<span class="pdx-paywall-currency">' + escHtml(currency) + '</span>' +
+                '<span class="pdx-paywall-amount">' + priceFormatted + '</span>' +
+                '<span class="pdx-paywall-period">one-time</span>' +
+              '</div>' +
+              '<button class="pdx-btn-primary pdx-btn-full pdx-unlock-btn"' +
+                ' data-module="' + escHtml(modId) + '"' +
+                ' data-price="' + escHtml(String(price)) + '"' +
+                ' data-currency="' + escHtml(currency) + '">' +
+                'Unlock Access' +
+              '</button>' +
+              paywallFeaturesHtml(modId) +
             '</div>' +
           '</div>' +
         '</div>';
-      inner.querySelector('.pdx-unlock-btn').addEventListener('click', function(e) {
-        var btn = e.currentTarget;
-        initiatePayment(btn.dataset.module, parseFloat(btn.dataset.price), btn.dataset.currency);
-      });
+
+      var unlockBtn = inner.querySelector('.pdx-unlock-btn');
+      if (unlockBtn) {
+        unlockBtn.addEventListener('click', function(e) {
+          var b = e.currentTarget;
+          initiatePayment(b.dataset.module, parseFloat(b.dataset.price), b.dataset.currency);
+        });
+      }
     }
 
     function renderPaywallInline(mod, access) {
-      var price    = (access && access.price) || mod.price || 0;
-      var currency = (access && access.currency) || 'USD';
+      var price    = (access && access.price  != null) ? access.price  : (mod.price || 0);
+      var currency = (access && access.currency)       ? access.currency : (mod.currency || 'USD');
+      var priceFormatted = parseFloat(price).toFixed(2);
       return '<div class="pdx-paywall-inline">' +
         '<div class="pdx-paywall-inline-title">Preview limit reached</div>' +
-        '<button class="pdx-btn-primary pdx-unlock-btn" data-module="' + escHtml(mod.id || '') + '" data-price="' + price + '" data-currency="' + currency + '">Unlock for ' + currency + ' ' + price + '</button>' +
+        '<div class="pdx-paywall-inline-desc">Unlock full access to continue.</div>' +
+        '<button class="pdx-btn-primary pdx-unlock-btn"' +
+          ' data-module="' + escHtml(mod.id || '') + '"' +
+          ' data-price="' + escHtml(String(price)) + '"' +
+          ' data-currency="' + escHtml(currency) + '">' +
+          'Unlock — ' + escHtml(currency) + ' ' + priceFormatted +
+        '</button>' +
       '</div>';
     }
 
     function initiatePayment(moduleId, price, currency) {
-      var btn = inner.querySelector('.pdx-unlock-btn');
-      if (btn) { btn.disabled = true; btn.textContent = 'Creating order...'; }
+      // Disable all unlock buttons in the panel to prevent double-clicks.
+      inner.querySelectorAll('.pdx-unlock-btn').forEach(function(b) {
+        b.disabled = true;
+        b.textContent = 'Creating order…';
+      });
 
       apiFetch('POST', '/pay/create', { module_id: moduleId }).then(function(data) {
         if (!data || data.error) {
           showNotif(data && data.error ? data.error : 'Payment unavailable', 'error');
-          if (btn) { btn.disabled = false; btn.textContent = 'Unlock Access'; }
+          inner.querySelectorAll('.pdx-unlock-btn').forEach(function(b) {
+            b.disabled = false;
+            b.textContent = 'Unlock Access';
+          });
           return;
         }
         if (data.approve_url) {
@@ -2219,8 +2277,13 @@
                     apiFetch('POST', '/pay/capture', { order_id: data.order_id, module_id: moduleId }).then(function(cap) {
                       if (cap && cap.ok) {
                         showNotif('Access unlocked!', 'success');
-                        apiFetch('GET', '/pay/status').then(function(s) { if (s) state.accessStatus = s; });
-                        openPanel(moduleId);
+                        // Refresh access state then re-open so panel reflects new tier.
+                        apiFetch('GET', '/pay/status').then(function(s) {
+                          if (s) state.accessStatus = s;
+                          openPanel(moduleId);
+                        });
+                      } else {
+                        showNotif('Payment capture failed. Please contact support.', 'error');
                       }
                     });
                   }
@@ -2297,6 +2360,7 @@
 
       var startTime = Date.now();
       var timerInterval = setInterval(function() {
+        if (!document.body.contains(container)) { clearInterval(timerInterval); return; }
         if (timerEl) timerEl.textContent = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
       }, 100);
 
@@ -2342,7 +2406,18 @@
           return s.duration || (600 + Math.random() * 700);
         });
 
+        // Guard: abort pipeline if container is no longer in the DOM.
+        // This prevents orphaned timers when the panel closes mid-scan.
+        function isAlive() {
+          return document.body.contains(container);
+        }
+
         function nextStage() {
+          if (!isAlive()) {
+            clearInterval(timerInterval);
+            resolve();
+            return;
+          }
           if (i >= stageEls.length) {
             clearInterval(timerInterval);
             if (timerEl) timerEl.classList.add('pdx-dp-timer--done');
@@ -2354,18 +2429,19 @@
           var stageEl = stageEls[i];
           stageEl.classList.add('is-active');
 
-          // Log line for this stage
           if (logLines[i]) appendLog(logLines[i]);
 
-          // Show incremental finding if provided
           if (opts.findings && opts.findings[i]) {
-            setTimeout(function() { showFinding(opts.findings[i]); }, stageDurations[i] * 0.6);
+            var findingIdx = i;
+            setTimeout(function() {
+              if (isAlive()) showFinding(opts.findings[findingIdx]);
+            }, stageDurations[i] * 0.6);
           }
 
-          // Stage timing indicator
           var timingEl = stageEl.querySelector('.pdx-dp-stage-timing');
           var stageStart = Date.now();
           var stageTimer = setInterval(function() {
+            if (!isAlive()) { clearInterval(stageTimer); return; }
             if (timingEl) timingEl.textContent = ((Date.now() - stageStart) / 1000).toFixed(1) + 's';
           }, 100);
 
@@ -2373,6 +2449,7 @@
 
           setTimeout(function() {
             clearInterval(stageTimer);
+            if (!isAlive()) { resolve(); return; }
             stageEl.classList.remove('is-active');
             stageEl.classList.add('is-done');
             if (timingEl) timingEl.textContent = ((Date.now() - stageStart) / 1000).toFixed(1) + 's';
@@ -2387,17 +2464,13 @@
     }
 
     /* Legacy wrappers — kept for backward compat */
-    function scanStages(stages) {
-      return '<div class="pdx-stages">' + stages.map(function(s, i) {
-        return '<div class="pdx-stage" data-idx="' + i + '"><span class="pdx-stage-dot"></span><span class="pdx-stage-label">' + escHtml(s) + '</span></div>';
-      }).join('') + '</div>';
-    }
-
     function animateScanStages(container, interval) {
       if (!container) return;
       var stages = container.querySelectorAll('.pdx-stage');
       var i = 0;
       var timer = setInterval(function() {
+        // Abort if container is no longer in the DOM.
+        if (!document.body.contains(container)) { clearInterval(timer); return; }
         if (i > 0 && stages[i-1]) stages[i-1].classList.add('is-done');
         if (i < stages.length) { stages[i].classList.add('is-active'); i++; }
         else clearInterval(timer);
@@ -3955,20 +4028,6 @@
     /* ══════════════════════════════════════════════════════
        v4: EXTENDED svgIcon + utility additions
     ══════════════════════════════════════════════════════ */
-    function svgIconV4(name) {
-      var extra = {
-        cpu:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>',
-        clock:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
-        check:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
-        x:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
-        zap:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
-        globe:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
-        server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>',
-        key:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3"/></svg>',
-      };
-      return extra[name] || '';
-    }
-
     /* ══════════════════════════════════════════════════════
        v4: WORKER STATUS PANEL (embedded in workspace tab)
     ══════════════════════════════════════════════════════ */
@@ -3995,41 +4054,6 @@
         html += '</div>';
         container.innerHTML = html;
       });
-    }
-
-    /* ══════════════════════════════════════════════════════
-       v4: QUEUE STATS PANEL
-    ══════════════════════════════════════════════════════ */
-    function renderQueueStats(container) {
-      if (!container) return;
-      apiFetch('GET', '/queue/stats').then(function(data) {
-        if (!data) return;
-        var html = '<div class="pdx-section"><div class="pdx-section-title">Job Queue</div><div class="pdx-kv-grid">';
-        html += kvRow('Queued',    data.queued    || 0);
-        html += kvRow('Running',   data.running   || 0);
-        html += kvRow('Completed', data.completed || 0);
-        html += kvRow('Failed',    data.failed    || 0);
-        html += '</div></div>';
-        container.innerHTML = html;
-      });
-    }
-
-    /* ══════════════════════════════════════════════════════
-       v4: HEATMAP RENDERER (activity by hour)
-    ══════════════════════════════════════════════════════ */
-    function renderHeatmap(container, hourlyData) {
-      if (!container || !hourlyData) return;
-      var max = Math.max.apply(null, hourlyData.map(function(d) { return d.count || 0; })) || 1;
-      var html = '<div class="pdx-heatmap">';
-      for (var h = 0; h < 24; h++) {
-        var entry = hourlyData.find(function(d) { return d.hour === h; }) || { count: 0 };
-        var intensity = Math.round((entry.count / max) * 100);
-        html += '<div class="pdx-heatmap-cell" style="--intensity:' + intensity + '%" title="' + h + ':00 — ' + entry.count + ' events"></div>';
-      }
-      html += '</div><div class="pdx-heatmap-labels">';
-      [0,6,12,18,23].forEach(function(h) { html += '<span>' + h + ':00</span>'; });
-      html += '</div>';
-      container.innerHTML = html;
     }
 
     /* ══════════════════════════════════════════════════════

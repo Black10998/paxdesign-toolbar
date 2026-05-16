@@ -389,23 +389,32 @@ class PDX_REST_API {
 		$modules = $this->modules->all_with_pricing( $this->settings );
 		$result  = [];
 		foreach ( $modules as $id => $mod ) {
-			if ( $mod['tier'] === 'free' ) {
-				$result[ $id ] = [ 'status' => 'active', 'tier' => 'free', 'label' => 'Free' ];
+			if ( $mod['tier'] === 'free' || ( isset( $mod['price'] ) && (float) $mod['price'] <= 0 ) ) {
+				$result[ $id ] = [
+					'status'      => 'active',
+					'tier'        => 'free',
+					'label'       => 'Free',
+					'price'       => 0,
+					'currency'    => $mod['currency'] ?? 'USD',
+					'description' => $mod['description'] ?? '',
+				];
 			} else {
 				$has = PDX_Access::has_access( $id );
 				$result[ $id ] = [
-					'status'   => $has ? 'active' : 'locked',
-					'tier'     => $mod['tier'],
-					'label'    => $has ? 'Unlocked' : ( $mod['tier'] === 'preview' ? 'Preview Available' : 'Locked' ),
-					'price'    => $mod['price'],
-					'currency' => $mod['currency'],
+					'status'      => $has ? 'active' : 'locked',
+					'tier'        => $mod['tier'],
+					'label'       => $has ? 'Unlocked' : ( $mod['tier'] === 'preview' ? 'Preview Available' : 'Locked' ),
+					'price'       => (float) $mod['price'],
+					'currency'    => $mod['currency'] ?? 'USD',
+					'description' => $mod['description'] ?? '',
 				];
 			}
 		}
 		$response = new WP_REST_Response( $result, 200 );
-		// Prevent browser and CDN caching — access state must always be live.
+		// Prevent all caching — access state must always reflect current admin settings.
 		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
 		$response->header( 'Pragma', 'no-cache' );
+		$response->header( 'Expires', '0' );
 		return $response;
 	}
 

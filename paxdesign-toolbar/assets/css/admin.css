@@ -1,4 +1,4 @@
-/* PaxDesign Admin Panel — v2.0.0 */
+/* PaxDesign Admin Panel — v5.0.0 */
 
 /* ─── Variables ──────────────────────────────────────────── */
 :root {
@@ -10,8 +10,8 @@
   --pa-text-hi:     #e6edf3;
   --pa-text-mid:    #8b949e;
   --pa-text-lo:     #6e7681;
-  --pa-accent:      #3fb950;
-  --pa-accent-dim:  rgba(63, 185, 80, 0.15);
+  --pa-accent:      #c2ff00;
+  --pa-accent-dim:  rgba(194, 255, 0, 0.12);
   --pa-red:         #f85149;
   --pa-yellow:      #d29922;
   --pa-blue:        #388bfd;
@@ -29,11 +29,13 @@
 .pdx-admin-wrap {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: calc(100vh - 32px); /* subtract WP admin bar */
   background: var(--pa-bg);
   color: var(--pa-text-hi);
   font-family: var(--pa-font);
+  /* Extend to fill WP admin content area edges */
   margin-left: -20px;
+  margin-right: -20px;
   margin-top: -10px;
 }
 
@@ -42,13 +44,15 @@
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 0 28px;
+  padding: 0 20px;
   background: var(--pa-bg-card);
   border-bottom: 1px solid var(--pa-border);
   height: 52px;
   position: sticky;
-  top: 32px;
+  top: 32px; /* WP admin bar height — overridden on mobile via JS */
   z-index: 100;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .pdx-admin-header__brand {
@@ -57,7 +61,7 @@
   gap: 8px;
   font: 600 14px/1 var(--pa-font);
   color: var(--pa-text-hi);
-  margin-right: 32px;
+  margin-right: 20px;
   flex-shrink: 0;
 }
 
@@ -84,23 +88,30 @@
 .pdx-admin-nav {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   height: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  min-width: 0;
 }
+.pdx-admin-nav::-webkit-scrollbar { display: none; }
 
 .pdx-admin-nav__item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 12px;
+  gap: 5px;
+  padding: 0 10px;
   height: 100%;
-  font: 13px/1 var(--pa-font);
+  font: 12px/1 var(--pa-font);
   color: var(--pa-text-lo);
   text-decoration: none;
   border-bottom: 2px solid transparent;
   transition: color var(--pa-transition), border-color var(--pa-transition);
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .pdx-admin-nav__item svg {
@@ -128,7 +139,6 @@
 .pdx-admin-main {
   flex: 1;
   padding: 32px 28px;
-  max-width: 900px;
 }
 
 /* ─── Page Header ────────────────────────────────────────── */
@@ -369,13 +379,19 @@
 }
 
 .pdx-toggle input:checked + .pdx-toggle__track {
-  background: var(--pa-accent-dim);
+  background: rgba(194, 255, 0, 0.15);
   border-color: var(--pa-accent);
 }
 
 .pdx-toggle input:checked + .pdx-toggle__track::after {
   transform: translateX(16px);
   background: var(--pa-accent);
+}
+
+/* Lime on dark background — thumb needs dark color for contrast */
+.pdx-toggle input:checked + .pdx-toggle__track::after {
+  background: #0d1117;
+  box-shadow: 0 0 0 2px var(--pa-accent);
 }
 
 .pdx-toggle--sm .pdx-toggle__track { width: 28px; height: 16px; }
@@ -425,7 +441,7 @@
 .pdx-radio.is-selected {
   border-color: var(--pa-accent);
   color: var(--pa-text-hi);
-  background: var(--pa-accent-dim);
+  background: rgba(194, 255, 0, 0.08);
 }
 
 /* ─── Color Picker ───────────────────────────────────────── */
@@ -482,7 +498,7 @@
 }
 
 .pdx-module-card.is-enabled {
-  border-color: rgba(63, 185, 80, 0.2);
+  border-color: rgba(194, 255, 0, 0.2);
 }
 
 .pdx-module-card__icon {
@@ -550,7 +566,7 @@
 .pdx-role-card:hover,
 .pdx-role-card.is-selected {
   border-color: var(--pa-accent);
-  background: var(--pa-accent-dim);
+  background: rgba(194, 255, 0, 0.06);
 }
 
 .pdx-role-card__name {
@@ -629,7 +645,7 @@
   height: 100%;
   background: var(--pa-accent);
   border-radius: 6px;
-  transition: width 0.5s ease;
+  transition: width 0.4s ease;
 }
 
 .pdx-bar-chart__count {
@@ -683,18 +699,18 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #238636;
-  border: 1px solid rgba(46, 160, 67, 0.4);
-  color: #fff;
-  font: 500 13px/1 var(--pa-font);
+  background: var(--pa-accent);
+  border: 1px solid transparent;
+  color: #0d1117;
+  font: 600 13px/1 var(--pa-font);
   padding: 9px 18px;
   border-radius: var(--pa-radius-sm);
   cursor: pointer;
-  transition: background var(--pa-transition);
+  transition: opacity var(--pa-transition);
   text-decoration: none;
 }
 
-.pdx-btn-primary:hover { background: #2ea043; color: #fff; }
+.pdx-btn-primary:hover { opacity: .88; color: #0d1117; }
 
 .pdx-btn-ghost {
   display: inline-flex;
@@ -871,7 +887,7 @@
   color: var(--pa-text-mid);
   border: 1px solid var(--pa-border);
 }
-.pdx-admin-badge--green  { background: var(--pa-accent-dim); color: var(--pa-accent); border-color: rgba(63,185,80,.3); }
+.pdx-admin-badge--green  { background: var(--pa-accent-dim); color: var(--pa-accent); border-color: rgba(194,255,0,.25); }
 .pdx-admin-badge--red    { background: rgba(248,81,73,.12);  color: var(--pa-red);    border-color: rgba(248,81,73,.3); }
 .pdx-admin-badge--yellow { background: var(--pa-yellow-dim); color: var(--pa-yellow); border-color: rgba(210,153,34,.3); }
 .pdx-admin-badge--blue   { background: var(--pa-blue-dim);   color: var(--pa-blue);   border-color: rgba(56,139,253,.3); }
@@ -986,4 +1002,148 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+/* ─── Pricing table ──────────────────────────────────────── */
+.pdx-pricing-table { min-width: 560px; }
+
+.pdx-pricing-tool {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pdx-pricing-tool__icon {
+  width: 26px;
+  height: 26px;
+  background: var(--pa-bg);
+  border: 1px solid var(--pa-border);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pa-text-lo);
+  flex-shrink: 0;
+}
+
+.pdx-pricing-tool__icon svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pdx-pricing-tool__name {
+  font: 600 12px/1 var(--pa-font);
+  color: var(--pa-text-hi);
+}
+
+.pdx-pricing-select {
+  background: var(--pa-bg);
+  border: 1px solid var(--pa-border);
+  border-radius: var(--pa-radius-sm);
+  color: var(--pa-text-hi);
+  font: 12px/1 var(--pa-font);
+  padding: 5px 8px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--pa-transition);
+}
+
+.pdx-pricing-select:focus {
+  border-color: var(--pa-border-mid);
+}
+
+.pdx-pricing-price-input {
+  width: 80px;
+  background: var(--pa-bg);
+  border: 1px solid var(--pa-border);
+  border-radius: var(--pa-radius-sm);
+  color: var(--pa-text-hi);
+  font: 12px/1 var(--pa-font);
+  padding: 5px 8px;
+  outline: none;
+  transition: border-color var(--pa-transition);
+}
+
+.pdx-pricing-price-input:focus {
+  border-color: var(--pa-border-mid);
+}
+
+.pdx-pricing-preview {
+  color: var(--pa-text-lo);
+  font-size: 12px;
+}
+
+/* ─── Admin main: max-width keeps content readable ──────── */
+.pdx-admin-main {
+  max-width: 1040px;
+  width: 100%;
+}
+
+/* ─── Responsive ─────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .pdx-admin-main {
+    padding: 24px 16px;
+  }
+  .pdx-admin-header {
+    padding: 0 16px;
+  }
+  .pdx-admin-header__brand {
+    margin-right: 16px;
+  }
+  .pdx-grid-2,
+  .pdx-grid-3 {
+    grid-template-columns: 1fr;
+  }
+  .pdx-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .pdx-admin-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .pdx-admin-header {
+    height: auto;
+    min-height: 52px;
+    flex-wrap: wrap;
+    padding: 8px 12px;
+    position: static; /* avoid sticky issues on small screens */
+  }
+  .pdx-admin-header__brand {
+    margin-right: auto;
+  }
+  .pdx-admin-nav {
+    width: 100%;
+    height: 40px;
+    border-top: 1px solid var(--pa-border);
+    margin-top: 4px;
+  }
+  .pdx-admin-nav__item {
+    padding: 0 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .pdx-admin-nav__item svg {
+    width: 12px;
+    height: 12px;
+  }
+  .pdx-admin-main {
+    padding: 16px 12px;
+  }
+  .pdx-stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pdx-card__body {
+    padding: 14px;
+  }
+  .pdx-table th,
+  .pdx-table td {
+    padding: 8px 10px;
+  }
 }

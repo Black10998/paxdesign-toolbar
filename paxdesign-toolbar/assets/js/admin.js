@@ -1,5 +1,5 @@
 /**
- * PaxDesign Admin Panel — v2.0.0
+ * PaxDesign Admin Panel — v5.0.0
  */
 (function () {
   'use strict';
