@@ -103,9 +103,7 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/event',        [ 'methods' => 'POST', 'callback' => [ $this, 'log_event'    ], 'permission_callback' => $pub, 'args' => [ 'module' => [ 'required' => true, 'sanitize_callback' => 'sanitize_key' ], 'action' => [ 'required' => true, 'sanitize_callback' => 'sanitize_key' ], 'meta' => [ 'required' => false, 'default' => [] ] ] ] );
 		register_rest_route( $ns, '/settings',     [ [ 'methods' => 'GET', 'callback' => [ $this, 'get_settings' ], 'permission_callback' => $adm ], [ 'methods' => 'POST', 'callback' => [ $this, 'update_settings' ], 'permission_callback' => $adm ] ] );
 
-		// Live config — returns current enabled modules + settings version.
-		// Called by JS to detect admin changes without a page reload.
-		register_rest_route( $ns, '/config', [ 'methods' => 'GET', 'callback' => [ $this, 'live_config' ], 'permission_callback' => $pub ] );
+		// (live_config / polling endpoint removed — /pay/status is the live source of truth)
 
 		// Billing
 		register_rest_route( $ns, '/billing/plans',    [ 'methods' => 'GET',  'callback' => [ $this, 'billing_plans'    ], 'permission_callback' => $pub ] );

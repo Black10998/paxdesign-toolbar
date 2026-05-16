@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v4.3.1
+ * PaxDesign Utility Dock — v4.4.0
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.
@@ -133,14 +133,24 @@
         b.classList.toggle('is-active', b.dataset.module === moduleId);
         b.setAttribute('aria-expanded', b.dataset.module === moduleId ? 'true' : 'false');
       });
-      // Refresh access status then render. apiFetch never rejects (returns null
-      // on error), so renderPanel always runs regardless of network state.
+      // Render immediately with cached state — zero delay, panel shows content at once.
+      renderPanel(moduleId);
+      injectCloseBtnGlobal();
+      var _body = panel.querySelector('.pdx-ph-body');
+      if (_body) _body.scrollTop = 0;
+
+      // Background refresh: silently update access state after render.
+      // If it changed (admin toggled a module), re-render to reflect new state.
       apiFetch('GET', '/pay/status').then(function(s) {
-        if (s) state.accessStatus = s;
-        renderPanel(moduleId);
-        injectCloseBtnGlobal();
-        var _body = panel.querySelector('.pdx-ph-body');
-        if (_body) _body.scrollTop = 0;
+        if (!s) return;
+        var prev = JSON.stringify(state.accessStatus);
+        state.accessStatus = s;
+        if (JSON.stringify(s) !== prev &&
+            state.activeModule === moduleId &&
+            panel.classList.contains('is-open')) {
+          renderPanel(moduleId);
+          injectCloseBtnGlobal();
+        }
       });
       if (C.analytics) logEvent(moduleId, 'panel_open');
     }
@@ -197,33 +207,12 @@
     });
 
     /* ── Load access status ───────────────────────────────── */
+    // Fetched once at init so the first openPanel() has state immediately.
+    // openPanel() also re-fetches on every open, so state is always current.
+    // No polling — /pay/status has Cache-Control: no-store so it is always live.
     apiFetch('GET', '/pay/status').then(function(data) {
       if (data) state.accessStatus = data;
     });
-
-    /* ── Live config sync ─────────────────────────────────────
-       Poll /config every 15 s. When the server-side version token
-       changes (admin saved settings), refresh accessStatus and the
-       active panel so module enable/disable is reflected immediately.
-    ─────────────────────────────────────────────────────────── */
-    var _configVersion = (C.configVersion || 0);
-    setInterval(function() {
-      apiFetch('GET', '/config').then(function(data) {
-        if (!data || typeof data.v === 'undefined') return;
-        if (data.v !== _configVersion) {
-          _configVersion = data.v;
-          // Refresh access status with fresh data.
-          apiFetch('GET', '/pay/status').then(function(s) {
-            if (s) state.accessStatus = s;
-            // Re-render the active panel so lock/unlock state updates live.
-            if (state.activeModule && panel.classList.contains('is-open')) {
-              renderPanel(state.activeModule);
-              injectCloseBtnGlobal();
-            }
-          });
-        }
-      });
-    }, 15000);
 
     /* ── Load AI memory ───────────────────────────────────── */
     if (C.aiMemory) {
@@ -315,10 +304,6 @@
       }
     }
     injectCloseBtnGlobal._running = false;
-
-    // Called explicitly after every renderPanel() — no MutationObserver needed.
-    // MutationObserver caused an infinite loop: renderPanel mutates inner →
-    // observer fires injectCloseBtnGlobal → appendChild mutates inner → repeat.
 
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
@@ -2817,9 +2802,7 @@
         ].forEach(removeProp);
       }
 
-      // Close button is handled by the global MutationObserver on #pdx-panel-inner.
-      // No separate injection needed here.
-      function injectCloseBtn() { /* no-op — handled globally */ }
+      // Close button injected globally via injectCloseBtnGlobal() after each renderPanel().
 
       // ── Enter / exit mobile mode ─────────────────────────
       function enterMobile() {

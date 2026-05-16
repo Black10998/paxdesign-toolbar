@@ -1,4 +1,4 @@
-/* PaxDesign Utility Dock — v4.3.1
+/* PaxDesign Utility Dock — v4.4.0
    Enterprise AI/Cyber SaaS dock styles.
    #pdx-dock stays inside #pdx-root (scoped variables, fixed position).
    #pdx-backdrop, #pdx-panel, #pdx-notif are appended to <body> by JS. */
@@ -84,9 +84,6 @@ body.pdx-no-scroll { overflow: hidden !important; }
   align-items: center;
   background: var(--pdx-bg);
   border: 1px solid var(--pdx-border);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  box-shadow: var(--pdx-shadow);
 
   /* Mobile layout — horizontal bar */
   top: var(--pdx-dock-top, 0px);
@@ -228,11 +225,9 @@ body.pdx-no-scroll { overflow: hidden !important; }
    ═══════════════════════════════════════════════════════════ */
 #pdx-backdrop {
   display: none; position: fixed; inset: 0; z-index: 99994;
-  background: rgba(0,0,0,.65); backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0,0,0,.55);
 }
-#pdx-backdrop.is-open { display: block; animation: pdx-fade .2s ease forwards; }
-@keyframes pdx-fade { from { opacity: 0; } to { opacity: 1; } }
+#pdx-backdrop.is-open { display: block; }
 
 /* ═══════════════════════════════════════════════════════════
    PANEL
@@ -667,7 +662,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
   padding: 4px 10px; background: transparent;
   border: 1px solid rgba(255,255,255,.1); border-radius: 20px;
   color: #6e7681; font: 11px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  cursor: pointer; transition: all .15s;
+  cursor: pointer; transition: border-color .15s, color .15s, background .15s;
 }
 .pdx-persona-btn:hover    { border-color: rgba(255,255,255,.2); color: #e6edf3; }
 .pdx-persona-btn.is-active { background: rgba(194,255,0,.15); border-color: rgba(194,255,0,.4); color: #c2ff00; }
@@ -1080,25 +1075,12 @@ body.pdx-no-scroll { overflow: hidden !important; }
   /* Overflow guard */
   .pdx-result,
   .pdx-section { overflow-x: hidden; }
-}
 
-/* ═══════════════════════════════════════════════════════════
-   MODE A — under-header  [data-mobile-dock="under-header"]
-   This is the DEFAULT mobile mode. The base #pdx-dock and
-   #pdx-panel rules already handle the geometry. This block
-   only adds: hide-on-open animation, backdrop offset,
-   notification placement, and light-mode appearance.
-   ═══════════════════════════════════════════════════════════ */
-@media (max-width: 680px) {
-
-  /* Dock: enhanced appearance for under-header mode */
-  #pdx-root[data-mobile-dock="under-header"] #pdx-dock,
+  /* ── Dock appearance ────────────────────────────────────── */
   #pdx-dock {
-    background: rgba(13,17,23,.94);
-    backdrop-filter: blur(24px) saturate(1.5);
-    -webkit-backdrop-filter: blur(24px) saturate(1.5);
-    box-shadow: 0 1px 0 rgba(255,255,255,.04), 0 2px 16px rgba(0,0,0,.35);
-    transition: transform .22s cubic-bezier(.4,0,.2,1), opacity .18s ease;
+    background: var(--pdx-bg, #0d1117);
+    border-bottom: 1px solid var(--pdx-border, rgba(255,255,255,.08));
+    transition: transform .2s ease, opacity .15s ease;
   }
 
   /* Hide dock when panel is open */
@@ -1108,10 +1090,9 @@ body.pdx-no-scroll { overflow: hidden !important; }
     pointer-events: none;
   }
 
-  /* Panel: enhanced appearance */
+  /* Panel border */
   #pdx-panel {
     border-top: 1px solid var(--pdx-border, rgba(255,255,255,.08));
-    box-shadow: 0 4px 24px rgba(0,0,0,.45);
   }
 
   /* Backdrop: starts below dock */
@@ -1129,24 +1110,21 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
   /* Command palette: below dock */
   .pdx-cmd-box {
-    top: calc(var(--pdx-panel-top, 48px) + 8px);
     width: 96vw;
     max-height: 70vh;
   }
 
-  /* Light mode */
+  /* Light mode dock */
   #pdx-root[data-theme="light"] #pdx-dock,
   #pdx-root[data-theme="auto"]  #pdx-dock {
-    background: rgba(255,255,255,.96);
+    background: #ffffff;
     border-bottom-color: rgba(0,0,0,.08);
-    box-shadow: 0 1px 0 rgba(0,0,0,.05), 0 2px 12px rgba(0,0,0,.08);
   }
 }
 @media (max-width: 680px) and (prefers-color-scheme: light) {
   #pdx-root[data-theme="auto"] #pdx-dock {
-    background: rgba(255,255,255,.96);
+    background: #ffffff;
     border-bottom-color: rgba(0,0,0,.08);
-    box-shadow: 0 1px 0 rgba(0,0,0,.05), 0 2px 12px rgba(0,0,0,.08);
   }
 }
 
@@ -1168,11 +1146,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
     padding: 5px 6px;
     border-radius: 40px;
     border: 1px solid rgba(255,255,255,.1);
-    background: rgba(13,17,23,.90);
-    backdrop-filter: blur(28px) saturate(1.5);
-    -webkit-backdrop-filter: blur(28px) saturate(1.5);
-    box-shadow: 0 4px 24px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.06) inset;
-    transition: transform .22s cubic-bezier(.4,0,.2,1), opacity .18s ease;
+    background: var(--pdx-bg, #0d1117);
+    transition: transform .2s ease, opacity .15s ease;
     overflow: visible;
   }
 
@@ -1375,10 +1350,6 @@ body.pdx-no-scroll { overflow: hidden !important; }
     --pdx-cbtn-fs:  13px;
     --pdx-cbtn-pad: 0 14px;
   }
-}
-
-/* ─── Unified mobile content layout ─────────────────────── */
-@media (max-width: 680px) {
 
   /* ── Panel body ─────────────────────────────────────────── */
   .pdx-ph-body {
@@ -1793,28 +1764,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
     overflow-wrap: break-word;
     word-break: break-word;
   }
-}
 
-/* ─── XS overrides for unified system (≤ 380px) ─────────── */
-@media (max-width: 380px) {
-  #pdx-root {
-    --pdx-t-xs:   9px;
-    --pdx-t-sm:   10px;
-    --pdx-t-base: 12px;
-    --pdx-t-md:   13px;
-    --pdx-t-lg:   15px;
-    --pdx-t-xl:   18px;
-    --pdx-sp-3:   10px;
-    --pdx-sp-4:   12px;
-    --pdx-card-pad: 10px 12px;
-    --pdx-card-gap: 8px;
-    --pdx-cbtn-h:   34px;
-    --pdx-cbtn-fs:  12px;
-  }
-}
-
-/* ─── Mobile spacing modes ───────────────────────────────── */
-@media (max-width: 680px) {
+  /* ── Mobile spacing modes ──────────────────────────────── */
   /* Compact: tighten the token scale */
   #pdx-root[data-mobile-spacing="compact"] {
     --pdx-sp-3: 8px;
@@ -1869,6 +1820,26 @@ body.pdx-no-scroll { overflow: hidden !important; }
   }
 }
 
+/* ─── XS overrides (≤ 380px) ────────────────────────────── */
+@media (max-width: 380px) {
+  #pdx-root {
+    --pdx-t-xs:   9px;
+    --pdx-t-sm:   10px;
+    --pdx-t-base: 12px;
+    --pdx-t-md:   13px;
+    --pdx-t-lg:   15px;
+    --pdx-t-xl:   18px;
+    --pdx-sp-3:   10px;
+    --pdx-sp-4:   12px;
+    --pdx-card-pad: 10px 12px;
+    --pdx-card-gap: 8px;
+    --pdx-cbtn-h:   34px;
+    --pdx-cbtn-fs:  12px;
+  }
+}
+
+
+
 /* ═══════════════════════════════════════════════════════════
    v4.0.0 — Cyber Ops Aesthetic Extensions
    Command palette, graph canvas, heatmap, investigation board,
@@ -1905,7 +1876,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 /* ─── Command palette ────────────────────────────────────── */
 .pdx-cmd-overlay {
   position: fixed; inset: 0; z-index: 99999;
-  background: rgba(0,0,0,.65); backdrop-filter: blur(6px);
+  background: rgba(0,0,0,.6);
   display: flex; align-items: flex-start; justify-content: center;
   padding-top: 12vh;
   opacity: 0; pointer-events: none;
@@ -1918,12 +1889,10 @@ body.pdx-no-scroll { overflow: hidden !important; }
   background: var(--pdx-bg-el);
   border: 1px solid var(--pdx-border-mid);
   border-radius: var(--pdx-r-lg);
-  box-shadow: 0 24px 64px rgba(0,0,0,.6);
+  box-shadow: 0 8px 32px rgba(0,0,0,.4);
   overflow: hidden;
-  transform: translateY(-12px) scale(.97);
-  transition: transform var(--pdx-ease);
 }
-.pdx-cmd-overlay.is-open .pdx-cmd-box { transform: translateY(0) scale(1); }
+/* No scale/translate animation on cmd box — reduces reflow on open */
 
 .pdx-cmd-search-row {
   display: flex; align-items: center; gap: 10px;

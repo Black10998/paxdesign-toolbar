@@ -18,6 +18,17 @@ class PDX_Frontend {
 	public function enqueue(): void {
 		if ( ! $this->settings->should_render() ) return;
 
+		// Tell page-caching plugins not to cache pages that include the dock.
+		// PDX_CONFIG contains module state that must be fresh for every visitor.
+		// This header is respected by WP Super Cache, W3TC, LiteSpeed Cache, etc.
+		if ( ! headers_sent() ) {
+			header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+			header( 'Pragma: no-cache' );
+		}
+		// WP Super Cache / W3TC hook-based bypass.
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
+		if ( ! defined( 'DONOTCACHEDB' )   ) define( 'DONOTCACHEDB',   true );
+
 		wp_enqueue_style(
 			'pdx-dock',
 			PDX_URL . 'assets/css/dock.css',
@@ -94,9 +105,6 @@ class PDX_Frontend {
 			'modules'          => $enabled,
 			'restUrl'          => esc_url( rest_url( 'pdx/v1' ) ),
 			'nonce'            => wp_create_nonce( 'wp_rest' ),
-			// Monotonic version token — JS compares against /config endpoint
-			// to detect admin changes and refresh state without a page reload.
-			'configVersion'    => (int) get_option( 'pdx_config_version', 0 ),
 		];
 	}
 
