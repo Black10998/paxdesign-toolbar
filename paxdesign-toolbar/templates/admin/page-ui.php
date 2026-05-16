@@ -79,6 +79,8 @@ include __DIR__ . '/partials/header.php';
   <div class="pdx-card">
     <div class="pdx-card__header"><h2>Mobile</h2></div>
     <div class="pdx-card__body pdx-grid-2">
+
+      <!-- Enable / breakpoint -->
       <div class="pdx-field">
         <label class="pdx-toggle">
           <input type="checkbox" name="mobile_enabled" value="1" <?php checked( $s['mobile_enabled'] ); ?>>
@@ -87,13 +89,58 @@ include __DIR__ . '/partials/header.php';
         </label>
         <p class="pdx-field-hint">When disabled, the dock is hidden below the breakpoint.</p>
       </div>
+
       <div class="pdx-field">
         <label for="mobile_breakpoint">Mobile Breakpoint (px)</label>
         <input type="number" id="mobile_breakpoint" name="mobile_breakpoint"
                value="<?php echo esc_attr( $s['mobile_breakpoint'] ); ?>"
                min="320" max="1280" step="10">
-        <p class="pdx-field-hint">Viewport width below which mobile layout activates.</p>
+        <p class="pdx-field-hint">Viewport width at which the mobile layout activates. Default: 680.</p>
       </div>
+
+      <!-- Dock position on mobile -->
+      <div class="pdx-field">
+        <label>Mobile Dock Position</label>
+        <div class="pdx-radio-group">
+          <?php foreach ( [ 'bottom-center' => 'Bottom Centre', 'bottom-left' => 'Bottom Left', 'bottom-right' => 'Bottom Right' ] as $val => $lbl ) : ?>
+          <label class="pdx-radio <?php echo ( $s['mobile_dock_position'] ?? 'bottom-center' ) === $val ? 'is-selected' : ''; ?>">
+            <input type="radio" name="mobile_dock_position" value="<?php echo esc_attr( $val ); ?>"
+                   <?php checked( $s['mobile_dock_position'] ?? 'bottom-center', $val ); ?>>
+            <?php echo esc_html( $lbl ); ?>
+          </label>
+          <?php endforeach; ?>
+        </div>
+        <p class="pdx-field-hint">Where the horizontal pill dock appears on phones.</p>
+      </div>
+
+      <!-- Panel height -->
+      <div class="pdx-field">
+        <label for="mobile_panel_height">Panel Height (% of screen)</label>
+        <input type="number" id="mobile_panel_height" name="mobile_panel_height"
+               value="<?php echo esc_attr( $s['mobile_panel_height'] ?? 90 ); ?>"
+               min="50" max="96" step="1">
+        <p class="pdx-field-hint">How tall the bottom-sheet panel opens. 90 is recommended (leaves room for the dock).</p>
+      </div>
+
+      <!-- Behaviour toggles -->
+      <div class="pdx-field">
+        <label class="pdx-toggle">
+          <input type="checkbox" name="mobile_swipe_close" value="1" <?php checked( $s['mobile_swipe_close'] ?? true ); ?>>
+          <span class="pdx-toggle__track"></span>
+          <span class="pdx-toggle__label">Swipe down to close panel</span>
+        </label>
+        <p class="pdx-field-hint">Lets users dismiss the panel with a downward swipe gesture.</p>
+      </div>
+
+      <div class="pdx-field">
+        <label class="pdx-toggle">
+          <input type="checkbox" name="mobile_hide_dock" value="1" <?php checked( $s['mobile_hide_dock'] ?? true ); ?>>
+          <span class="pdx-toggle__track"></span>
+          <span class="pdx-toggle__label">Hide dock when panel is open</span>
+        </label>
+        <p class="pdx-field-hint">Slides the dock out of view while a module panel is open, preventing overlap.</p>
+      </div>
+
     </div>
   </div>
 

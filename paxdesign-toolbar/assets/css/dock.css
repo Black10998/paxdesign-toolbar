@@ -682,16 +682,23 @@ body.pdx-no-scroll { overflow: hidden !important; }
    All grids, tables, and cards stack adaptively.
 ═══════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════
+   RESPONSIVE — tablet → mobile → very small
+   Strategy:
+   • ≤ 860px  tablet: wider panel, larger touch targets
+   • ≤ 680px  mobile: bottom-sheet panel, horizontal pill dock
+   • ≤ 380px  very small: tighten further
+   ═══════════════════════════════════════════════════════════ */
+
 /* ─── Tablet (≤ 860px) ───────────────────────────────────── */
 @media (max-width: 860px) {
   #pdx-panel { width: min(420px, 100vw); }
 
-  .pdx-tpl-grid  { grid-template-columns: 1fr; }
-  .pdx-conn-grid { grid-template-columns: 1fr; }
-  .pdx-field-row { grid-template-columns: 1fr; }
+  .pdx-tpl-grid    { grid-template-columns: 1fr; }
+  .pdx-conn-grid   { grid-template-columns: 1fr; }
+  .pdx-field-row   { grid-template-columns: 1fr; }
   .pdx-metric-grid { grid-template-columns: 1fr 1fr; }
 
-  /* Slightly larger touch targets */
   .pdx-btn { width: 36px; height: 36px; }
   .pdx-tab { padding: 7px 10px; }
 }
@@ -699,130 +706,195 @@ body.pdx-no-scroll { overflow: hidden !important; }
 /* ─── Mobile (≤ 680px) ───────────────────────────────────── */
 @media (max-width: 680px) {
 
-  /* ── Panel: bottom sheet ─────────────────────────────── */
+  /* ── Body scroll lock: only lock position, not overflow ─
+     Locking overflow on body also locks the panel on iOS.
+     Instead we use position:fixed + top offset trick.      */
+  body.pdx-no-scroll {
+    overflow: hidden !important;
+    /* Preserve scroll position when locking */
+    position: fixed;
+    width: 100%;
+  }
+
+  /* ── Panel: full-width bottom sheet ─────────────────── */
   #pdx-panel {
-    width: 100vw !important;
-    top: auto !important;
-    bottom: 0 !important;
+    /* Geometry */
+    position: fixed !important;
     left: 0 !important;
     right: 0 !important;
-    height: 88svh;
-    height: calc(var(--pdx-vh, 1vh) * 88);
-    max-height: 94svh;
-    max-height: calc(var(--pdx-vh, 1vh) * 94);
-    border-radius: 20px 20px 0 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+
+    /* Height: use svh with --pdx-vh JS fallback for iOS */
+    height: 90svh;
+    height: calc(var(--pdx-vh, 1svh) * 90);
+    max-height: 96svh;
+    max-height: calc(var(--pdx-vh, 1svh) * 96);
+
+    /* Shape */
+    border-radius: 18px 18px 0 0 !important;
     border-left: none !important;
     border-right: none !important;
     border-bottom: none !important;
-    border-top: 1px solid rgba(255,255,255,.1) !important;
-    box-shadow: 0 -8px 40px rgba(0,0,0,.6);
-    overflow-y: auto;
+    border-top: 1px solid rgba(255,255,255,.12) !important;
+    box-shadow: 0 -12px 48px rgba(0,0,0,.65), 0 -1px 0 rgba(255,255,255,.06);
+
+    /* Scroll: panel itself scrolls, not the body */
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
+    overscroll-behavior-y: contain;
+
+    /* Slide in from bottom */
+    transition: transform .28s cubic-bezier(.32,0,.67,0) !important;
   }
-  /* Drag handle */
+  #pdx-panel:not(.is-open) { transform: translateY(102%) !important; }
+  #pdx-panel.is-open       { transform: translateY(0)    !important; }
+
+  /* Drag handle pill */
   #pdx-panel::before {
     content: '';
     display: block;
-    width: 40px; height: 4px;
-    background: rgba(255,255,255,.18);
+    width: 36px; height: 4px;
+    background: rgba(255,255,255,.2);
     border-radius: 2px;
-    margin: 10px auto 4px;
-    flex-shrink: 0;
+    margin: 10px auto 0;
+    /* Sticky so it stays visible while scrolling */
     position: sticky;
     top: 0;
     z-index: 20;
+    pointer-events: none;
   }
-  #pdx-panel:not(.is-open) { transform: translateY(110%) !important; }
-  #pdx-panel.is-open       { transform: translateY(0) !important; }
 
-  /* ── Dock: horizontal pill at bottom ────────────────── */
-  #pdx-dock {
-    top: auto !important;
-    bottom: 16px !important;
-    left: 50% !important;
-    right: auto !important;
-    transform: translateX(-50%);
-    flex-direction: row;
-    border-radius: 40px;
-    padding: 6px 10px;
-    gap: 2px;
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    box-shadow: 0 4px 24px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.08);
+  /* ── Panel inner: flex column, fills panel height ────── */
+  #pdx-panel-inner {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
   }
-  .pdx-sep {
-    width: 1px; height: 20px;
-    margin: 0 4px;
-  }
-  /* Active indicator: top dot instead of left bar */
-  .pdx-btn.is-active::before {
-    left: 50%; top: -6px;
-    transform: translateX(-50%);
-    width: 18px; height: 3px;
-    border-radius: 2px;
-  }
-  /* Larger touch targets */
-  .pdx-btn { width: 40px; height: 40px; }
-  .pdx-btn svg { width: 16px; height: 16px; }
-  /* Hide tooltips on touch */
-  .pdx-btn::after { display: none !important; }
 
-  /* ── Panel header: sticky, compact ──────────────────── */
+  /* ── Panel header: sticky at top of panel ────────────── */
+  .pdx-ph {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0; /* allow flex child to shrink */
+  }
   .pdx-ph-hd {
-    padding: 14px 16px 12px;
+    padding: 12px 16px 10px;
     position: sticky;
     top: 0;
     z-index: 10;
+    background: #161b22; /* must be opaque — sticky over scrolling content */
+    flex-shrink: 0;
   }
   .pdx-ph-title { font-size: 14px; }
-  .pdx-ph-body  { padding: 14px 16px; gap: 10px; }
 
-  /* ── Module caps: scroll horizontally ───────────────── */
+  /* ── Panel body: scrollable content area ─────────────── */
+  .pdx-ph-body {
+    padding: 14px 16px 24px; /* extra bottom padding clears dock */
+    gap: 10px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    /* Ensure content is never hidden behind the dock */
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ── Dock: horizontal pill, centered above safe area ─── */
+  #pdx-dock {
+    position: fixed !important;
+    top: auto !important;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+
+    flex-direction: row;
+    border-radius: 40px;
+    padding: 5px 8px;
+    gap: 0;
+
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    box-shadow: 0 4px 28px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.1);
+
+    /* Dock must sit above the panel backdrop */
+    z-index: 99998 !important;
+  }
+
+  /* Dock hidden when panel is open — panel has its own close */
+  #pdx-dock.pdx-dock--panel-open {
+    transform: translateX(-50%) translateY(calc(100% + 20px)) !important;
+    pointer-events: none;
+  }
+
+  .pdx-sep {
+    width: 1px; height: 18px;
+    margin: 0 3px;
+  }
+
+  /* Active indicator: top dot on horizontal dock */
+  .pdx-btn.is-active::before {
+    left: 50% !important; right: auto !important;
+    top: -5px !important;
+    transform: translateX(-50%) !important;
+    width: 16px; height: 3px;
+    border-radius: 2px;
+  }
+
+  /* Touch targets: 44×44 minimum (Apple HIG) */
+  .pdx-btn {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+  }
+  .pdx-btn svg { width: 17px; height: 17px; }
+
+  /* Never show tooltips on touch devices */
+  .pdx-btn::after { display: none !important; }
+
+  /* ── Module caps: horizontal scroll ──────────────────── */
   .pdx-module-caps {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     padding-bottom: 2px;
+    margin-right: -16px; /* bleed to edge */
+    padding-right: 16px;
   }
   .pdx-module-caps::-webkit-scrollbar { display: none; }
   .pdx-cap-tag { flex-shrink: 0; }
 
-  /* ── Input rows: stack vertically ───────────────────── */
-  .pdx-input-row {
-    flex-direction: column;
-    gap: 8px;
-  }
-  .pdx-input-row .pdx-btn-primary {
-    width: 100%;
-    padding: 11px 16px;
-    font-size: 14px;
-  }
-  .pdx-input { font-size: 16px; } /* Prevent iOS zoom on focus */
-  .pdx-textarea { font-size: 16px; }
-  .pdx-select   { font-size: 16px; }
-  .pdx-chat-input { font-size: 16px; }
+  /* ── Input rows: stack vertically ────────────────────── */
+  .pdx-input-row { flex-direction: column; gap: 8px; }
+  .pdx-input-row .pdx-btn-primary { width: 100%; padding: 12px 16px; font-size: 15px; }
 
-  /* ── Grids: single column ────────────────────────────── */
-  .pdx-tpl-grid        { grid-template-columns: 1fr; }
-  .pdx-conn-grid       { grid-template-columns: 1fr; }
-  .pdx-field-row       { grid-template-columns: 1fr; }
-  .pdx-metric-grid     { grid-template-columns: 1fr 1fr; gap: 6px; }
+  /* Prevent iOS auto-zoom on input focus (needs font-size ≥ 16px) */
+  .pdx-input,
+  .pdx-textarea,
+  .pdx-select,
+  .pdx-chat-input { font-size: 16px !important; }
 
-  /* ── KV rows: stack key above value ─────────────────── */
-  .pdx-kv-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-  }
+  /* ── Grids: single column ─────────────────────────────── */
+  .pdx-tpl-grid    { grid-template-columns: 1fr; }
+  .pdx-conn-grid   { grid-template-columns: 1fr; }
+  .pdx-field-row   { grid-template-columns: 1fr; }
+  .pdx-metric-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+
+  /* ── KV rows: stack label above value ────────────────── */
+  .pdx-kv-row { flex-direction: column; align-items: flex-start; gap: 3px; }
   .pdx-kv-val { text-align: left; }
 
-  /* ── Risk header: compact ────────────────────────────── */
+  /* ── Risk header ──────────────────────────────────────── */
   .pdx-risk-header { padding: 12px; gap: 10px; }
   .pdx-risk-num    { font-size: 24px; }
 
-  /* ── Tabs: scrollable ────────────────────────────────── */
+  /* ── Tabs: horizontal scroll ──────────────────────────── */
   .pdx-tabs {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -832,66 +904,67 @@ body.pdx-no-scroll { overflow: hidden !important; }
   .pdx-tabs::-webkit-scrollbar { display: none; }
   .pdx-tab { flex-shrink: 0; white-space: nowrap; }
 
-  /* ── Chat: full height ───────────────────────────────── */
-  .pdx-chat-messages {
-    max-height: none;
-    flex: 1;
-    min-height: 180px;
-  }
-  .pdx-chat-footer { padding: 10px 14px; }
+  /* ── Chat ─────────────────────────────────────────────── */
+  .pdx-chat-messages { max-height: none; flex: 1; min-height: 160px; }
+  .pdx-chat-footer   { padding: 10px 14px; }
 
-  /* ── Deep pipeline: compact ──────────────────────────── */
-  .pdx-dp-header { padding: 8px 12px; }
-  .pdx-dp-stages { padding: 8px 12px; }
-  .pdx-dp-log    { margin: 0 12px 8px; max-height: 60px; }
+  /* ── Deep pipeline ────────────────────────────────────── */
+  .pdx-dp-header   { padding: 8px 12px; }
+  .pdx-dp-stages   { padding: 8px 12px; }
+  .pdx-dp-log      { margin: 0 12px 8px; max-height: 60px; }
   .pdx-dp-findings { padding: 0 12px 8px; }
-  .pdx-dp-stage-detail { display: none; } /* Hide detail on small screens */
+  .pdx-dp-stage-detail { display: none; }
 
-  /* ── Graph canvas ────────────────────────────────────── */
+  /* ── Graph canvas ─────────────────────────────────────── */
   .pdx-graph-canvas { height: 200px !important; }
 
-  /* ── Command palette ─────────────────────────────────── */
-  .pdx-cmd-box {
-    width: 96vw;
-    top: 12px;
-    max-height: 70vh;
-  }
+  /* ── Command palette ──────────────────────────────────── */
+  .pdx-cmd-box { width: 96vw; top: 12px; max-height: 70vh; }
 
-  /* ── Notifications ───────────────────────────────────── */
+  /* ── Notifications: above dock ────────────────────────── */
   #pdx-notif {
-    bottom: 90px;
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
     right: 12px;
     left: 12px;
   }
   .pdx-notif-item { max-width: 100%; font-size: 12px; }
 
-  /* ── Paywall ─────────────────────────────────────────── */
+  /* ── Paywall ──────────────────────────────────────────── */
   .pdx-paywall { padding: 20px 16px; }
 
-  /* ── Scan history ────────────────────────────────────── */
+  /* ── Scan history ─────────────────────────────────────── */
   .pdx-hist-item { flex-wrap: wrap; gap: 4px; }
 
-  /* ── Workspace items ─────────────────────────────────── */
+  /* ── Workspace items ──────────────────────────────────── */
   .pdx-ws-item { padding: 10px; }
 
-  /* ── Prevent horizontal overflow ────────────────────── */
-  .pdx-ph-body, .pdx-result, .pdx-section { overflow-x: hidden; }
+  /* ── Prevent horizontal overflow ─────────────────────── */
+  .pdx-result, .pdx-section { overflow-x: hidden; }
   .pdx-code { font-size: 10px; }
 
-  /* ── Agent/step rows: stack ──────────────────────────── */
-  .pdx-agent-row, .pdx-step-inner {
-    flex-wrap: wrap;
-  }
+  /* ── Agent/step rows ──────────────────────────────────── */
+  .pdx-agent-row, .pdx-step-inner { flex-wrap: wrap; }
   .pdx-agent-row .pdx-select,
   .pdx-step-inner .pdx-select { width: 100%; }
+
+  /* ── Evidence sections: full width ───────────────────── */
+  .pdx-evidence-section { margin-left: 0; margin-right: 0; }
+
+  /* ── Report components ────────────────────────────────── */
+  .pdx-metric-card { padding: 10px; }
+  .pdx-report-summary { padding: 12px; }
+  .pdx-risk-ring { width: 64px; height: 64px; }
 }
 
 /* ─── Very small screens (≤ 380px) ──────────────────────── */
 @media (max-width: 380px) {
-  .pdx-btn { width: 36px; height: 36px; }
+  #pdx-dock { padding: 4px 6px; }
+  .pdx-btn  { width: 40px; height: 40px; }
+  .pdx-btn svg { width: 15px; height: 15px; }
   .pdx-metric-grid { grid-template-columns: 1fr; }
-  .pdx-ph-title { font-size: 13px; }
-  .pdx-dp-log { display: none; } /* Too cramped */
+  .pdx-ph-title    { font-size: 13px; }
+  .pdx-dp-log      { display: none; }
+  .pdx-ph-body     { padding: 12px 12px calc(76px + env(safe-area-inset-bottom, 0px)); }
 }
 
 

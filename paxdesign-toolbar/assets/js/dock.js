@@ -76,15 +76,30 @@
     panel.style.borderRadius = pos === 'left' ? '0 12px 12px 0' : '12px 0 0 12px';
 
     /* ── Open/close ───────────────────────────────────────── */
+    // Track scroll position so iOS body-lock doesn't jump the page.
+    var _scrollY = 0;
+
     function openPanel(moduleId) {
       state.activeModule = moduleId;
       backdrop.classList.add('is-open');
       panel.classList.add('is-open');
+
+      // iOS body-lock: save scroll position, apply fixed positioning.
+      _scrollY = window.scrollY || window.pageYOffset;
+      document.body.style.top = '-' + _scrollY + 'px';
       document.body.classList.add('pdx-no-scroll');
+
+      // Hide dock on mobile so it doesn't overlap the panel (unless admin disabled it).
+      if (dock.dataset.pdxHideDock !== 'false') {
+        dock.classList.add('pdx-dock--panel-open');
+      }
+
       dock.querySelectorAll('.pdx-btn').forEach(function(b) {
         b.classList.toggle('is-active', b.dataset.module === moduleId);
         b.setAttribute('aria-expanded', b.dataset.module === moduleId ? 'true' : 'false');
       });
+      // Reset panel scroll to top on each open.
+      panel.scrollTop = 0;
       renderPanel(moduleId);
       if (C.analytics) logEvent(moduleId, 'panel_open');
     }
@@ -93,7 +108,17 @@
       state.activeModule = null;
       backdrop.classList.remove('is-open');
       panel.classList.remove('is-open');
+
+      // Restore scroll position after removing body-lock.
       document.body.classList.remove('pdx-no-scroll');
+      document.body.style.top = '';
+      window.scrollTo(0, _scrollY);
+
+      // Restore dock visibility.
+      if (dock.dataset.pdxHideDock !== 'false') {
+        dock.classList.remove('pdx-dock--panel-open');
+      }
+
       dock.querySelectorAll('.pdx-btn').forEach(function(b) {
         b.classList.remove('is-active');
         b.setAttribute('aria-expanded', 'false');
@@ -2646,51 +2671,128 @@
 
     /* ── Mobile ───────────────────────────────────────────── */
     function setupMobile(C, panel, dock) {
-      var bp = C.mobileBreakpoint || 680;
+      var bp           = C.mobileBreakpoint   || 680;
+      var dockPos      = C.mobileDockPosition || 'bottom-center';
+      var panelHeight  = Math.min(96, Math.max(50, C.mobilePanelHeight || 90));
+      var swipeClose   = C.mobileSwipeClose !== false;
+      var hideDock     = C.mobileHideDock   !== false;
 
-      function check() {
-        var mobile = window.innerWidth < bp;
-        panel.classList.toggle('pdx-panel--mobile', mobile);
-        dock.classList.toggle('pdx-dock--mobile', mobile);
-        // Fix iOS viewport height (100vh includes browser chrome)
+      // ── Viewport height fix (iOS Safari chrome eats ~10vh) ──
+      function setVh() {
         var vh = window.innerHeight * 0.01;
         document.documentElement.style.setProperty('--pdx-vh', vh + 'px');
       }
+      setVh();
+
+      // ── Apply dock position on mobile ────────────────────
+      function applyDockPosition(mobile) {
+        if (!mobile) {
+          // Restore desktop positioning (handled by CSS data-position attribute)
+          dock.style.removeProperty('left');
+          dock.style.removeProperty('right');
+          dock.style.removeProperty('bottom');
+          dock.style.removeProperty('transform');
+          return;
+        }
+        var safeBottom = 'calc(12px + env(safe-area-inset-bottom, 0px))';
+        dock.style.bottom = safeBottom;
+        dock.style.top    = 'auto';
+        if (dockPos === 'bottom-left') {
+          dock.style.left      = '12px';
+          dock.style.right     = 'auto';
+          dock.style.transform = 'none';
+        } else if (dockPos === 'bottom-right') {
+          dock.style.right     = '12px';
+          dock.style.left      = 'auto';
+          dock.style.transform = 'none';
+        } else { // bottom-center (default)
+          dock.style.left      = '50%';
+          dock.style.right     = 'auto';
+          dock.style.transform = 'translateX(-50%)';
+        }
+      }
+
+      // ── Apply panel height from admin setting ────────────
+      function applyPanelHeight(mobile) {
+        if (mobile) {
+          panel.style.height    = 'calc(var(--pdx-vh, 1svh) * ' + panelHeight + ')';
+          panel.style.maxHeight = 'calc(var(--pdx-vh, 1svh) * 96)';
+        } else {
+          panel.style.removeProperty('height');
+          panel.style.removeProperty('max-height');
+        }
+      }
+
+      // ── Mobile class toggle + layout apply ───────────────
+      function check() {
+        var mobile = window.innerWidth <= bp;
+        panel.classList.toggle('pdx-panel--mobile', mobile);
+        dock.classList.toggle('pdx-dock--mobile', mobile);
+        applyDockPosition(mobile);
+        applyPanelHeight(mobile);
+        setVh();
+      }
       check();
 
+      // Debounced resize + orientationchange
       var resizeTimer;
-      window.addEventListener('resize', function() {
+      function onResize() {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(check, 100);
+        resizeTimer = setTimeout(check, 80);
+      }
+      window.addEventListener('resize', onResize);
+      window.addEventListener('orientationchange', function() {
+        // Wait for browser to finish rotating before measuring
+        setTimeout(function() { setVh(); check(); }, 350);
       });
 
-      // Touch: swipe to close panel
-      var touchStartX = 0;
-      var touchStartY = 0;
+      // ── Override openPanel/closePanel for hideDock option ─
+      // Patch the dock hide behaviour based on admin setting.
+      if (!hideDock) {
+        // If admin disabled "hide dock when panel open", remove the CSS class effect.
+        var origOpen  = openPanel;
+        var origClose = closePanel;
+        // We can't easily monkey-patch closures, so we use a data attribute instead.
+        dock.dataset.pdxHideDock = 'false';
+      }
+
+      // ── Swipe-down to close (bottom sheet) ──────────────
+      if (!swipeClose) return; // admin disabled swipe-to-close
+
+      var tsX = 0, tsY = 0, tsMoved = false;
+
       panel.addEventListener('touchstart', function(e) {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-      }, { passive: true });
-      panel.addEventListener('touchend', function(e) {
-        if (!e.changedTouches.length) return;
-        var dx = e.changedTouches[0].clientX - touchStartX;
-        var dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
-        var pos = C.position || 'left';
-        // Swipe left to close (left dock) or right to close (right dock)
-        var swipeClose = pos === 'left' ? dx < -60 : dx > 60;
-        if (swipeClose && dy < 80) closePanel();
+        if (!e.touches.length) return;
+        tsX = e.touches[0].clientX;
+        tsY = e.touches[0].clientY;
+        tsMoved = false;
       }, { passive: true });
 
-      // Prevent body scroll when panel is open on mobile
       panel.addEventListener('touchmove', function(e) {
+        tsMoved = true;
+        // Walk up from touch target — if a scrollable element is found before
+        // reaching the panel root, let the browser handle it natively.
         var el = e.target;
-        // Allow scroll inside scrollable children
         while (el && el !== panel) {
-          if (el.scrollHeight > el.clientHeight) return;
+          var ov = window.getComputedStyle(el).overflowY;
+          if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) {
+            return; // scrollable child — don't interfere
+          }
           el = el.parentElement;
         }
+        // No scrollable child found — prevent body rubber-band.
         e.preventDefault();
       }, { passive: false });
+
+      panel.addEventListener('touchend', function(e) {
+        if (!e.changedTouches.length || !tsMoved) return;
+        var dy = e.changedTouches[0].clientY - tsY;
+        var dx = Math.abs(e.changedTouches[0].clientX - tsX);
+        // Swipe down ≥ 80px, clearly more vertical than horizontal → close
+        if (dy > 80 && dx < dy * 0.55) {
+          closePanel();
+        }
+      }, { passive: true });
     }
 
 

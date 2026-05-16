@@ -70,6 +70,10 @@ class PDX_Settings {
 			// Mobile
 			'mobile_enabled'       => true,
 			'mobile_breakpoint'    => 680,
+			'mobile_dock_position' => 'bottom-center', // bottom-center | bottom-left | bottom-right
+			'mobile_panel_height'  => 90,              // % of viewport height (50–96)
+			'mobile_swipe_close'   => true,            // swipe-down to close panel
+			'mobile_hide_dock'     => true,            // hide dock when panel is open
 
 			// PayPal
 			'paypal'               => [

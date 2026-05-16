@@ -194,8 +194,12 @@ class PDX_Admin {
 					'dock_size'      => in_array( $post['dock_size']     ?? '', [ 'compact', 'default', 'large' ] ) ? $post['dock_size'] : 'default',
 					'accent_color'   => sanitize_hex_color( $post['accent_color'] ?? '#3fb950' ) ?: '#3fb950',
 					'custom_css'     => wp_strip_all_tags( $post['custom_css'] ?? '' ),
-					'mobile_enabled'    => isset( $post['mobile_enabled'] ),
-					'mobile_breakpoint' => absint( $post['mobile_breakpoint'] ?? 680 ),
+					'mobile_enabled'       => isset( $post['mobile_enabled'] ),
+					'mobile_breakpoint'    => min( 1280, max( 320, absint( $post['mobile_breakpoint'] ?? 680 ) ) ),
+					'mobile_dock_position' => in_array( $post['mobile_dock_position'] ?? '', [ 'bottom-center', 'bottom-left', 'bottom-right' ] ) ? $post['mobile_dock_position'] : 'bottom-center',
+					'mobile_panel_height'  => min( 96, max( 50, absint( $post['mobile_panel_height'] ?? 90 ) ) ),
+					'mobile_swipe_close'   => isset( $post['mobile_swipe_close'] ),
+					'mobile_hide_dock'     => isset( $post['mobile_hide_dock'] ),
 				];
 
 			case 'privacy':
