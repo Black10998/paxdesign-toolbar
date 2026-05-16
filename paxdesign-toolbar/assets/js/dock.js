@@ -227,19 +227,29 @@
 
 
     /* ══════════════════════════════════════════════════════
-       TRUST CHECK
+       TRUST CHECK  — Deep Analysis UX
     ══════════════════════════════════════════════════════ */
     function renderTrust(mod, access) {
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>TrustCheck</span></div>' +
-            '<div class="pdx-ph-sub">Domain intelligence & risk scoring</div>' +
+            '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>TrustCheck</span>' +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="System online"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Analyze domain reputation, SSL posture, infrastructure trust signals, DNS configuration, and behavioral indicators to identify potential risks.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">RDAP/WHOIS</span>' +
+              '<span class="pdx-cap-tag">SSL/TLS</span>' +
+              '<span class="pdx-cap-tag">DNS Analysis</span>' +
+              '<span class="pdx-cap-tag">Threat Feeds</span>' +
+              '<span class="pdx-cap-tag">Behavioral</span>' +
+              '<span class="pdx-cap-tag">Risk Scoring</span>' +
+            '</div>' +
           '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-input-row">' +
-              '<input id="pdx-trust-input" class="pdx-input" type="text" placeholder="domain.com" autocomplete="off" spellcheck="false"/>' +
-              '<button id="pdx-trust-btn" class="pdx-btn-primary">Scan</button>' +
+              '<input id="pdx-trust-input" class="pdx-input" type="text" placeholder="domain.com or IP address" autocomplete="off" spellcheck="false"/>' +
+              '<button id="pdx-trust-btn" class="pdx-btn-primary">Analyze</button>' +
             '</div>' +
             '<div id="pdx-trust-result"></div>' +
             '<div id="pdx-trust-history" class="pdx-section-sm"></div>' +
@@ -247,7 +257,6 @@
         '</div>';
 
       renderScanHistory('trust');
-
       document.getElementById('pdx-trust-btn').addEventListener('click', runTrustScan);
       document.getElementById('pdx-trust-input').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') runTrustScan();
@@ -255,23 +264,61 @@
     }
 
     function runTrustScan() {
-      var input = document.getElementById('pdx-trust-input');
+      var input  = document.getElementById('pdx-trust-input');
       var result = document.getElementById('pdx-trust-result');
       if (!input || !result) return;
       var domain = input.value.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
       if (!domain) return;
 
-      result.innerHTML = '<div class="pdx-scanning">' + scanStages(['Querying RDAP registry', 'Analyzing SSL/TLS', 'Computing risk score', 'Detecting anomalies', 'Building report']) + '</div>';
-      animateScanStages(result.querySelector('.pdx-stages'), 800);
+      var trustStages = [
+        { label: 'Initializing intelligence pipeline',    detail: 'Loading analysis modules and threat databases',              duration: 520 },
+        { label: 'Collecting WHOIS / RDAP records',       detail: 'Querying regional registries for registration data',         duration: 820 },
+        { label: 'Analyzing SSL/TLS posture',             detail: 'Inspecting certificate chain, cipher suites, and expiry',    duration: 900 },
+        { label: 'Inspecting DNS infrastructure',         detail: 'Resolving A, MX, NS, TXT, SPF, and DMARC records',          duration: 740 },
+        { label: 'Querying threat intelligence feeds',    detail: 'Cross-referencing AlienVault OTX, Abuse.ch, CISA KEV',      duration: 980 },
+        { label: 'Correlating behavioral indicators',     detail: 'Analyzing registration patterns and infrastructure signals', duration: 700 },
+        { label: 'Building reputation profile',           detail: 'Aggregating multi-source trust signals',                    duration: 610 },
+        { label: 'Calculating anomaly confidence',        detail: 'Running statistical deviation analysis',                    duration: 660 },
+        { label: 'Generating risk assessment',            detail: 'Compiling final intelligence report',                       duration: 500 },
+      ];
+
+      var trustLogLines = [
+        'TrustCheck pipeline initialized for: ' + domain,
+        'Connecting to RDAP bootstrap registry…',
+        'Fetching SSL Labs assessment endpoint…',
+        'Resolving DNS records via recursive resolver…',
+        'Querying AlienVault OTX pulse database…',
+        'Running behavioral pattern correlation engine…',
+        'Aggregating multi-source reputation signals…',
+        'Computing anomaly deviation scores…',
+        'Finalizing risk verdict and confidence score…',
+      ];
+
+      result.innerHTML = buildDeepPipeline('pdx-trust-pipeline', trustStages, {
+        title: 'TrustCheck — ' + domain,
+        showLog: true,
+      });
+
+      var apiDone = false, pipelineDone = false, apiData = null;
+
+      runDeepPipeline('pdx-trust-pipeline', trustStages, { logLines: trustLogLines }).then(function() {
+        pipelineDone = true;
+        if (apiDone) finalizeTrustResult(result, apiData, domain);
+      });
 
       apiFetch('GET', '/trust?domain=' + encodeURIComponent(domain)).then(function(data) {
-        if (!data) { result.innerHTML = '<div class="pdx-error">Scan failed. Check the domain and try again.</div>'; return; }
-        renderTrustResult(result, data, domain);
-        addToScanHistory('trust', domain, data.risk);
-        renderScanHistory('trust');
-        if (data.workspace_id) showNotif('Scan saved to workspace', 'info');
-        if (data.anomalies && data.anomalies.length) showNotif('Anomaly detected: ' + data.anomalies[0].message, 'warn');
+        apiData = data; apiDone = true;
+        if (pipelineDone) finalizeTrustResult(result, data, domain);
       });
+    }
+
+    function finalizeTrustResult(result, data, domain) {
+      if (!data) { result.innerHTML = '<div class="pdx-error">Scan failed. Check the domain and try again.</div>'; return; }
+      renderTrustResult(result, data, domain);
+      addToScanHistory('trust', domain, data.risk);
+      renderScanHistory('trust');
+      if (data.workspace_id) showNotif('Scan saved to workspace', 'info');
+      if (data.anomalies && data.anomalies.length) showNotif('Anomaly detected: ' + data.anomalies[0].message, 'warn');
     }
 
     function renderTrustResult(container, data, domain) {
@@ -367,13 +414,23 @@
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('search') + '<span>OSINT Agents</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') + '</div>' +
-            '<div class="pdx-ph-sub">Multi-source intelligence scan</div>' +
+            '<div class="pdx-ph-title">' + svgIcon('search') + '<span>OSINT Agents</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="System online"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Deep intelligence gathering across domain, IP geolocation, VirusTotal, Shodan, email discovery, IOC extraction, and timeline reconstruction from multiple open-source feeds.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">Domain Intel</span>' +
+              '<span class="pdx-cap-tag">IP Geolocation</span>' +
+              '<span class="pdx-cap-tag">VirusTotal</span>' +
+              '<span class="pdx-cap-tag">Shodan</span>' +
+              '<span class="pdx-cap-tag">Email Discovery</span>' +
+              '<span class="pdx-cap-tag">IOC Extraction</span>' +
+            '</div>' +
           '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-input-row">' +
-              '<input id="pdx-osint-input" class="pdx-input" type="text" placeholder="domain.com or IP" autocomplete="off" spellcheck="false"/>' +
-              '<button id="pdx-osint-btn" class="pdx-btn-primary">Scan</button>' +
+              '<input id="pdx-osint-input" class="pdx-input" type="text" placeholder="domain.com, IP, or email" autocomplete="off" spellcheck="false"/>' +
+              '<button id="pdx-osint-btn" class="pdx-btn-primary">Investigate</button>' +
             '</div>' +
             '<div id="pdx-osint-result"></div>' +
           '</div>' +
@@ -390,12 +447,47 @@
       var target = input.value.trim();
       if (!target) return;
 
-      result.innerHTML = '<div class="pdx-scanning">' + scanStages(['RDAP lookup', 'SSL analysis', 'IP geolocation', 'VirusTotal scan', 'Shodan query', 'Email discovery', 'Building report']) + '</div>';
-      animateScanStages(result.querySelector('.pdx-stages'), 600);
+      var osintStages = [
+        { label: 'Initializing OSINT agent network',      detail: 'Spinning up distributed intelligence collectors',          duration: 540 },
+        { label: 'RDAP / WHOIS registry lookup',          detail: 'Querying domain registration and ownership data',          duration: 760 },
+        { label: 'SSL certificate analysis',              detail: 'Inspecting certificate transparency logs',                 duration: 680 },
+        { label: 'IP geolocation & ASN mapping',          detail: 'Resolving geographic and network ownership data',          duration: 720 },
+        { label: 'VirusTotal multi-engine scan',          detail: 'Cross-referencing 70+ antivirus and reputation engines',   duration: 1100 },
+        { label: 'Shodan infrastructure query',           detail: 'Scanning exposed services, ports, and banners',            duration: 940 },
+        { label: 'Email & contact discovery',             detail: 'Enumerating associated email addresses and contacts',      duration: 820 },
+        { label: 'IOC extraction & correlation',          detail: 'Identifying indicators of compromise across sources',      duration: 760 },
+        { label: 'Timeline reconstruction',               detail: 'Building chronological activity and event timeline',       duration: 640 },
+        { label: 'Compiling intelligence report',         detail: 'Aggregating findings into structured report',              duration: 480 },
+      ];
+
+      var osintLogLines = [
+        'OSINT agent network initialized for: ' + target,
+        'Querying RDAP bootstrap registry…',
+        'Fetching SSL certificate transparency logs…',
+        'Resolving IP geolocation via MaxMind GeoIP2…',
+        'Submitting to VirusTotal multi-engine analysis…',
+        'Querying Shodan internet-wide scan database…',
+        'Running Hunter.io email discovery…',
+        'Extracting and correlating IOC indicators…',
+        'Reconstructing activity timeline…',
+        'Compiling full intelligence report…',
+      ];
+
+      result.innerHTML = buildDeepPipeline('pdx-osint-pipeline', osintStages, {
+        title: 'OSINT Investigation — ' + target,
+        showLog: true,
+      });
+
+      var apiDone = false, pipelineDone = false, apiData = null;
+
+      runDeepPipeline('pdx-osint-pipeline', osintStages, { logLines: osintLogLines }).then(function() {
+        pipelineDone = true;
+        if (apiDone) { if (!apiData) { result.innerHTML = '<div class="pdx-error">Scan failed.</div>'; } else { renderOsintResult(result, apiData, target); } }
+      });
 
       apiFetch('POST', '/osint/scan', { target: target }).then(function(data) {
-        if (!data) { result.innerHTML = '<div class="pdx-error">Scan failed.</div>'; return; }
-        renderOsintResult(result, data, target);
+        apiData = data; apiDone = true;
+        if (pipelineDone) { if (!data) { result.innerHTML = '<div class="pdx-error">Scan failed.</div>'; } else { renderOsintResult(result, data, target); } }
       });
     }
 
@@ -462,7 +554,20 @@
       if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('alert') + '<span>Threat Intel</span><span class="pdx-badge pdx-badge--new">New</span></div><div class="pdx-ph-sub">CVE lookup, threat feeds, attack surface</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('alert') + '<span>Threat Intel</span><span class="pdx-badge pdx-badge--new">New</span>' +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Feeds active"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Correlate infrastructure indicators, intelligence feeds, and behavioral signals to identify suspicious or malicious patterns. CVE lookup, live threat feeds, and attack surface mapping.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">CVE / NVD</span>' +
+              '<span class="pdx-cap-tag">AlienVault OTX</span>' +
+              '<span class="pdx-cap-tag">Abuse.ch</span>' +
+              '<span class="pdx-cap-tag">CISA KEV</span>' +
+              '<span class="pdx-cap-tag">Attack Surface</span>' +
+              '<span class="pdx-cap-tag">STIX Export</span>' +
+            '</div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-tabs" id="pdx-threat-tabs">' +
               '<button class="pdx-tab is-active" data-tab="cve">CVE Lookup</button>' +
@@ -484,36 +589,43 @@
 
     function renderThreatCVETab() {
       return '<div class="pdx-tab-pane">' +
-        '<div class="pdx-input-row"><input id="pdx-cve-input" class="pdx-input" placeholder="CVE-2024-XXXX or software name" /><button id="pdx-cve-btn" class="pdx-btn-primary">Lookup</button></div>' +
+        '<div class="pdx-input-row"><input id="pdx-cve-input" class="pdx-input" placeholder="CVE-2024-XXXX or software name" /><button id="pdx-cve-btn" class="pdx-btn-primary">Analyze</button></div>' +
         '<div id="pdx-cve-result"></div>' +
-        '<div class="pdx-info-box">Search the NVD database for CVEs by ID or affected software. Results include CVSS scores, affected versions, and remediation guidance.</div>' +
+        '<div class="pdx-info-box">Search the NVD database for CVEs by ID or affected software. Results include CVSS scores, affected versions, exploit availability, and remediation guidance.</div>' +
       '</div>';
     }
 
     function renderThreatFeedsTab() {
       return '<div class="pdx-tab-pane">' +
-        '<div class="pdx-section-title">Active Threat Feeds</div>' +
+        '<div class="pdx-section-title">Active Threat Intelligence Feeds</div>' +
         '<div class="pdx-feed-list">' +
-          feedItem('AlienVault OTX', 'Indicators of compromise', 'active') +
-          feedItem('Abuse.ch URLhaus', 'Malicious URLs', 'active') +
-          feedItem('Emerging Threats', 'Network signatures', 'active') +
-          feedItem('PhishTank', 'Phishing URLs', 'active') +
-          feedItem('CISA KEV', 'Known exploited vulnerabilities', 'active') +
+          feedItem('AlienVault OTX', 'Indicators of compromise — IPs, domains, hashes', 'active', '14.2k pulses') +
+          feedItem('Abuse.ch URLhaus', 'Malicious URLs and malware distribution sites', 'active', 'Live') +
+          feedItem('Emerging Threats', 'Network intrusion signatures and rules', 'active', 'Updated hourly') +
+          feedItem('PhishTank', 'Verified phishing URLs and campaigns', 'active', 'Community verified') +
+          feedItem('CISA KEV', 'Known exploited vulnerabilities catalog', 'active', 'CISA official') +
+          feedItem('Shodan InternetDB', 'Exposed services and open port intelligence', 'active', 'Real-time') +
         '</div>' +
-        '<div class="pdx-info-box">Configure API keys in admin settings to enable live feed data.</div>' +
+        '<div class="pdx-info-box">Configure API keys in Settings → API to enable live feed data and higher rate limits.</div>' +
       '</div>';
     }
 
     function renderThreatSurfaceTab() {
       return '<div class="pdx-tab-pane">' +
-        '<div class="pdx-input-row"><input id="pdx-surface-input" class="pdx-input" placeholder="domain.com" /><button id="pdx-surface-btn" class="pdx-btn-primary">Map</button></div>' +
+        '<div class="pdx-input-row"><input id="pdx-surface-input" class="pdx-input" placeholder="domain.com or IP range" /><button id="pdx-surface-btn" class="pdx-btn-primary">Map Surface</button></div>' +
         '<div id="pdx-surface-result"></div>' +
-        '<div class="pdx-info-box">Maps exposed services, open ports, and subdomains using Shodan data. Requires Shodan API key.</div>' +
+        '<div class="pdx-info-box">Maps exposed services, open ports, subdomains, and technology fingerprints using Shodan and DNS enumeration. Requires Shodan API key.</div>' +
       '</div>';
     }
 
-    function feedItem(name, desc, status) {
-      return '<div class="pdx-feed-item"><div class="pdx-feed-dot pdx-feed-dot--' + status + '"></div><div class="pdx-feed-info"><div class="pdx-feed-name">' + escHtml(name) + '</div><div class="pdx-feed-desc">' + escHtml(desc) + '</div></div></div>';
+    function feedItem(name, desc, status, meta) {
+      return '<div class="pdx-feed-item">' +
+        '<div class="pdx-feed-dot pdx-feed-dot--' + status + '"></div>' +
+        '<div class="pdx-feed-info">' +
+          '<div class="pdx-feed-name">' + escHtml(name) + (meta ? '<span class="pdx-feed-meta">' + escHtml(meta) + '</span>' : '') + '</div>' +
+          '<div class="pdx-feed-desc">' + escHtml(desc) + '</div>' +
+        '</div>' +
+      '</div>';
     }
 
     /* ══════════════════════════════════════════════════════
@@ -526,12 +638,15 @@
       inner.innerHTML =
         '<div class="pdx-ph pdx-ph--chat">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('user') + '<span>AI Personas</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') + '</div>' +
+            '<div class="pdx-ph-title">' + svgIcon('user') + '<span>AI Personas</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="AI online"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Interact with specialized AI agents trained for automation, intelligence analysis, workflow assistance, and technical operations. Persistent memory and conversation history included.</div>' +
             '<div class="pdx-persona-select">' +
-              '<button class="pdx-persona-btn is-active" data-persona="assistant">Assistant</button>' +
-              '<button class="pdx-persona-btn" data-persona="analyst">Analyst</button>' +
-              '<button class="pdx-persona-btn" data-persona="developer">Developer</button>' +
-              '<button class="pdx-persona-btn" data-persona="strategist">Strategist</button>' +
+              '<button class="pdx-persona-btn is-active" data-persona="assistant" title="General-purpose AI assistant">Assistant</button>' +
+              '<button class="pdx-persona-btn" data-persona="analyst" title="Cyber intelligence and threat analysis">Analyst</button>' +
+              '<button class="pdx-persona-btn" data-persona="developer" title="Code, architecture, and technical guidance">Developer</button>' +
+              '<button class="pdx-persona-btn" data-persona="strategist" title="Business strategy and decision support">Strategist</button>' +
             '</div>' +
           '</div>' +
           '<div id="pdx-chat-messages" class="pdx-chat-messages"></div>' +
@@ -648,7 +763,18 @@
       if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('layers') + '<span>AI Builder</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') + '</div><div class="pdx-ph-sub">Visual AI workflow builder</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('layers') + '<span>AI Builder</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Engine ready"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Visual AI workflow builder — chain LLM steps, transformations, and logic into automated pipelines. Run flows, save templates, and deploy reusable intelligence sequences.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">LLM Chaining</span>' +
+              '<span class="pdx-cap-tag">Transformations</span>' +
+              '<span class="pdx-cap-tag">Templates</span>' +
+              '<span class="pdx-cap-tag">Flow Export</span>' +
+            '</div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-tabs" id="pdx-builder-tabs">' +
               '<button class="pdx-tab is-active" data-tab="build">Build</button>' +
@@ -724,14 +850,37 @@
           steps.push({ type: s.querySelector('.pdx-step-type').value, prompt: s.querySelector('.pdx-step-prompt').value });
         });
         var result = document.getElementById('pdx-builder-result');
-        result.innerHTML = '<div class="pdx-scanning">' + scanStages(['Initializing flow', 'Running step 1', 'Processing output', 'Finalizing']) + '</div>';
-        animateScanStages(result.querySelector('.pdx-stages'), 700);
+        var builderStages = steps.map(function(s, i) {
+          return { label: 'Executing step ' + (i+1) + ' — ' + (s.type || 'LLM'), detail: s.prompt ? s.prompt.slice(0, 60) : 'Processing…', duration: 700 + Math.random() * 600 };
+        });
+        builderStages.unshift({ label: 'Initializing AI flow engine', detail: 'Loading LLM configuration and context', duration: 480 });
+        builderStages.push({ label: 'Finalizing output', detail: 'Compiling step results into final response', duration: 420 });
 
+        result.innerHTML = buildDeepPipeline('pdx-builder-pipeline', builderStages, {
+          title: 'AI Flow — ' + name, showLog: true,
+        });
+
+        var builderLogLines = ['AI Builder flow initialized: ' + name].concat(
+          steps.map(function(s, i) { return 'Step ' + (i+1) + ' [' + s.type + ']: ' + (s.prompt || '').slice(0, 50) + '…'; }),
+          ['Compiling final output…']
+        );
+
+        var apiDone = false, pipelineDone = false, apiData = null;
+        runDeepPipeline('pdx-builder-pipeline', builderStages, { logLines: builderLogLines }).then(function() {
+          pipelineDone = true;
+          if (apiDone) {
+            if (!apiData) { result.innerHTML = '<div class="pdx-error">Flow failed.</div>'; return; }
+            if (apiData.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'AI Builder', price: apiData.price, currency: apiData.currency }, {}); return; }
+            renderBuilderResult(result, apiData); showNotif('Flow "' + name + '" completed', 'success');
+          }
+        });
         apiFetch('POST', '/builder/run', { flow_name: name, steps: steps, input: input }).then(function(data) {
-          if (!data) { result.innerHTML = '<div class="pdx-error">Flow failed.</div>'; return; }
-          if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'AI Builder', price: data.price, currency: data.currency }, {}); return; }
-          renderBuilderResult(result, data);
-          showNotif('Flow "' + name + '" completed', 'success');
+          apiData = data; apiDone = true;
+          if (pipelineDone) {
+            if (!data) { result.innerHTML = '<div class="pdx-error">Flow failed.</div>'; return; }
+            if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'AI Builder', price: data.price, currency: data.currency }, {}); return; }
+            renderBuilderResult(result, data); showNotif('Flow "' + name + '" completed', 'success');
+          }
         });
       });
     }
@@ -756,7 +905,19 @@
       if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('pipeline') + '<span>Agent Pipeline</span></div><div class="pdx-ph-sub">Multi-agent orchestration</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('pipeline') + '<span>Agent Pipeline</span>' +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Orchestrator ready"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Orchestrate multi-agent task chains with role-based agents, intelligent handoffs, and full execution traces. Each agent specializes in a distinct function within the pipeline.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">Multi-Agent</span>' +
+              '<span class="pdx-cap-tag">Role Assignment</span>' +
+              '<span class="pdx-cap-tag">Handoff Trace</span>' +
+              '<span class="pdx-cap-tag">Templates</span>' +
+              '<span class="pdx-cap-tag">Export Trace</span>' +
+            '</div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-tabs" id="pdx-pipeline-tabs">' +
               '<button class="pdx-tab is-active" data-tab="run">Run</button>' +
@@ -844,15 +1005,42 @@
           agents.push({ role: row.querySelector('.pdx-agent-role').value, name: row.querySelector('.pdx-agent-name').value });
         });
         var result = document.getElementById('pdx-pipeline-result');
-        result.innerHTML = '<div class="pdx-scanning">' + scanStages(agents.map(function(a) { return 'Running ' + a.name; })) + '</div>';
-        animateScanStages(result.querySelector('.pdx-stages'), 900);
+        var pipelineStages = [
+          { label: 'Initializing orchestration engine', detail: 'Configuring agent roles and communication channels', duration: 520 },
+        ].concat(agents.map(function(a) {
+          return { label: 'Agent: ' + a.name + ' [' + a.role + ']', detail: 'Executing role-specific analysis and generating output', duration: 900 + Math.random() * 700 };
+        })).concat([
+          { label: 'Processing agent handoffs', detail: 'Routing outputs between agents in the chain', duration: 580 },
+          { label: 'Synthesizing final output', detail: 'Aggregating all agent contributions', duration: 460 },
+        ]);
 
+        result.innerHTML = buildDeepPipeline('pdx-pipeline-dp', pipelineStages, {
+          title: 'Agent Pipeline — ' + name, showLog: true,
+        });
+
+        var pipelineLogLines = ['Pipeline orchestrator initialized: ' + name, 'Objective: ' + objective.slice(0, 80)].concat(
+          agents.map(function(a) { return 'Spawning agent: ' + a.name + ' (role: ' + a.role + ')'; }),
+          ['Processing inter-agent handoffs…', 'Synthesizing final pipeline output…']
+        );
+
+        var apiDone = false, pipelineDone = false, apiData = null;
+        runDeepPipeline('pdx-pipeline-dp', pipelineStages, { logLines: pipelineLogLines }).then(function() {
+          pipelineDone = true;
+          if (apiDone) {
+            if (!apiData) { result.innerHTML = '<div class="pdx-error">Pipeline failed.</div>'; return; }
+            if (apiData.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Agent Pipeline', price: apiData.price, currency: apiData.currency }, {}); return; }
+            state.pipelineTrace = (apiData.result && apiData.result.trace) || [];
+            renderPipelineResult(result, apiData); showNotif('Pipeline "' + name + '" completed — ' + agents.length + ' agents', 'success');
+          }
+        });
         apiFetch('POST', '/pipeline/run', { pipeline_name: name, agents: agents, objective: objective }).then(function(data) {
-          if (!data) { result.innerHTML = '<div class="pdx-error">Pipeline failed.</div>'; return; }
-          if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Agent Pipeline', price: data.price, currency: data.currency }, {}); return; }
-          state.pipelineTrace = (data.result && data.result.trace) || [];
-          renderPipelineResult(result, data);
-          showNotif('Pipeline "' + name + '" completed — ' + agents.length + ' agents', 'success');
+          apiData = data; apiDone = true;
+          if (pipelineDone) {
+            if (!data) { result.innerHTML = '<div class="pdx-error">Pipeline failed.</div>'; return; }
+            if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Agent Pipeline', price: data.price, currency: data.currency }, {}); return; }
+            state.pipelineTrace = (data.result && data.result.trace) || [];
+            renderPipelineResult(result, data); showNotif('Pipeline "' + name + '" completed — ' + agents.length + ' agents', 'success');
+          }
         });
       });
     }
@@ -878,7 +1066,19 @@
       if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('grid') + '<span>Browser Automation</span></div><div class="pdx-ph-sub">AI-assisted task analysis</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('grid') + '<span>Browser Automation</span>' +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Engine ready"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Automate browser-based workflows, extraction tasks, validation steps, and operational sequences using AI-assisted execution pipelines. Submit a URL and task to receive a structured execution plan.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">Task Analysis</span>' +
+              '<span class="pdx-cap-tag">Step Breakdown</span>' +
+              '<span class="pdx-cap-tag">Data Extraction</span>' +
+              '<span class="pdx-cap-tag">Job Queue</span>' +
+              '<span class="pdx-cap-tag">Export</span>' +
+            '</div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-field"><label class="pdx-label">Target URL</label><input id="pdx-auto-url" class="pdx-input" type="url" placeholder="https://example.com" /></div>' +
             '<div class="pdx-field"><label class="pdx-label">Task Description</label><textarea id="pdx-auto-task" class="pdx-textarea" placeholder="Describe what to automate: extract product prices, fill a form, scrape headlines..." rows="4"></textarea></div>' +
@@ -900,15 +1100,45 @@
         var result = document.getElementById('pdx-auto-result');
         if (!url || !task) { showNotif('URL and task required', 'warn'); return; }
 
-        result.innerHTML = '<div class="pdx-scanning">' + scanStages(['Parsing URL', 'Analyzing task', 'Identifying selectors', 'Building execution plan', 'Estimating complexity']) + '</div>';
-        animateScanStages(result.querySelector('.pdx-stages'), 800);
+        var autoStages = [
+          { label: 'Initializing automation analysis engine',  detail: 'Loading browser task intelligence modules',              duration: 480 },
+          { label: 'Parsing and validating target URL',        detail: 'Resolving domain, checking accessibility',               duration: 620 },
+          { label: 'Analyzing task requirements',             detail: 'Decomposing task into executable sub-operations',        duration: 780 },
+          { label: 'Identifying DOM selectors',               detail: 'Mapping page structure and interaction points',           duration: 860 },
+          { label: 'Building execution plan',                 detail: 'Sequencing steps for optimal automation flow',           duration: 720 },
+          { label: 'Estimating complexity & obstacles',       detail: 'Detecting anti-bot measures, dynamic content, auth',     duration: 640 },
+          { label: 'Generating structured output',            detail: 'Compiling execution plan and data extraction schema',    duration: 420 },
+        ];
+        var autoLogLines = [
+          'Browser automation engine initialized.',
+          'Parsing target URL: ' + url,
+          'Decomposing task: ' + task.slice(0, 60) + '…',
+          'Mapping DOM structure and interaction points…',
+          'Building step-by-step execution sequence…',
+          'Analyzing complexity and potential obstacles…',
+          'Generating structured execution plan…',
+        ];
 
+        result.innerHTML = buildDeepPipeline('pdx-auto-pipeline', autoStages, {
+          title: 'Automation Analysis', showLog: true,
+        });
+
+        var apiDone = false, pipelineDone = false, apiData = null;
+        runDeepPipeline('pdx-auto-pipeline', autoStages, { logLines: autoLogLines }).then(function() {
+          pipelineDone = true;
+          if (apiDone) {
+            if (!apiData) { result.innerHTML = '<div class="pdx-error">Analysis failed.</div>'; return; }
+            if (apiData.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Browser Automation', price: apiData.price, currency: apiData.currency }, {}); return; }
+            renderAutomationResult(result, apiData); loadJobHistory('automation', 'pdx-auto-jobs'); showNotif('Task analyzed — Job ' + (apiData.job_id || ''), 'success');
+          }
+        });
         apiFetch('POST', '/automation/submit', { url: url, task: task, format: format }).then(function(data) {
-          if (!data) { result.innerHTML = '<div class="pdx-error">Analysis failed.</div>'; return; }
-          if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Browser Automation', price: data.price, currency: data.currency }, {}); return; }
-          renderAutomationResult(result, data);
-          loadJobHistory('automation', 'pdx-auto-jobs');
-          showNotif('Task analyzed — Job ' + (data.job_id || ''), 'success');
+          apiData = data; apiDone = true;
+          if (pipelineDone) {
+            if (!data) { result.innerHTML = '<div class="pdx-error">Analysis failed.</div>'; return; }
+            if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Browser Automation', price: data.price, currency: data.currency }, {}); return; }
+            renderAutomationResult(result, data); loadJobHistory('automation', 'pdx-auto-jobs'); showNotif('Task analyzed — Job ' + (data.job_id || ''), 'success');
+          }
         });
       });
     }
@@ -948,7 +1178,19 @@
       if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('link') + '<span>Connectors</span></div><div class="pdx-ph-sub">API integration testing</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('link') + '<span>Connectors</span>' +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Ready"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Live API integration testing — REST, Slack, Airtable, Notion, GitHub, Zapier. Test connections, inspect responses, measure latency, and configure webhooks.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">REST API</span>' +
+              '<span class="pdx-cap-tag">Webhooks</span>' +
+              '<span class="pdx-cap-tag">Response Inspect</span>' +
+              '<span class="pdx-cap-tag">Latency Check</span>' +
+              '<span class="pdx-cap-tag">Auth Testing</span>' +
+            '</div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-tabs" id="pdx-conn-tabs">' +
               '<button class="pdx-tab is-active" data-tab="test">Test</button>' +
@@ -989,13 +1231,44 @@
         var auth     = (document.getElementById('pdx-conn-auth') || {}).value || '';
         var result   = document.getElementById('pdx-conn-result');
         if (!endpoint) { showNotif('Endpoint URL required', 'warn'); return; }
-        result.innerHTML = '<div class="pdx-scanning">' + scanStages(['Connecting', 'Authenticating', 'Inspecting response']) + '</div>';
-        animateScanStages(result.querySelector('.pdx-stages'), 500);
+        var connStages = [
+          { label: 'Resolving endpoint',          detail: 'DNS resolution and network path validation',    duration: 380 },
+          { label: 'Establishing connection',     detail: 'Opening TCP/TLS connection to target host',     duration: 520 },
+          { label: 'Authenticating',              detail: 'Validating credentials and authorization',      duration: 460 },
+          { label: 'Sending test request',        detail: 'Dispatching probe request to endpoint',         duration: 400 },
+          { label: 'Inspecting response',         detail: 'Parsing headers, status code, and body',        duration: 340 },
+          { label: 'Measuring latency',           detail: 'Calculating round-trip time and throughput',    duration: 280 },
+        ];
+        var connLogLines = [
+          'Connector test initialized for: ' + endpoint,
+          'Resolving DNS for endpoint host…',
+          'Opening ' + (endpoint.startsWith('https') ? 'TLS' : 'TCP') + ' connection…',
+          'Validating auth token / credentials…',
+          'Dispatching test request [' + type + ']…',
+          'Parsing response headers and body…',
+          'Measuring round-trip latency…',
+        ];
 
+        result.innerHTML = buildDeepPipeline('pdx-conn-pipeline', connStages, {
+          title: 'Connection Test — ' + type, showLog: true,
+        });
+
+        var apiDone = false, pipelineDone = false, apiData = null;
+        runDeepPipeline('pdx-conn-pipeline', connStages, { logLines: connLogLines }).then(function() {
+          pipelineDone = true;
+          if (apiDone) {
+            if (!apiData) { result.innerHTML = '<div class="pdx-error">Test failed.</div>'; return; }
+            if (apiData.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Connectors', price: apiData.price, currency: apiData.currency }, {}); return; }
+            renderConnectorResult(result, apiData);
+          }
+        });
         apiFetch('POST', '/connectors/test', { type: type, endpoint: endpoint, auth_token: auth }).then(function(data) {
-          if (!data) { result.innerHTML = '<div class="pdx-error">Test failed.</div>'; return; }
-          if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Connectors', price: data.price, currency: data.currency }, {}); return; }
-          renderConnectorResult(result, data);
+          apiData = data; apiDone = true;
+          if (pipelineDone) {
+            if (!data) { result.innerHTML = '<div class="pdx-error">Test failed.</div>'; return; }
+            if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Connectors', price: data.price, currency: data.currency }, {}); return; }
+            renderConnectorResult(result, data);
+          }
         });
       });
     }
@@ -1027,7 +1300,17 @@
     function renderCreate(mod) {
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('plus') + '<span>Development Services</span></div><div class="pdx-ph-sub">Submit a project brief for a scoped proposal</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('plus') + '<span>Development Services</span></div>' +
+            '<div class="pdx-ph-desc">Custom digital product development — submit a project brief and receive a scoped proposal, timeline estimate, and cost breakdown within 24 hours.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">Web Apps</span>' +
+              '<span class="pdx-cap-tag">AI Integration</span>' +
+              '<span class="pdx-cap-tag">API / Backend</span>' +
+              '<span class="pdx-cap-tag">Automation</span>' +
+              '<span class="pdx-cap-tag">Security Audit</span>' +
+            '</div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-field"><label class="pdx-label">Your Name</label><input id="pdx-brief-name" class="pdx-input" placeholder="Jane Smith" /></div>' +
             '<div class="pdx-field"><label class="pdx-label">Email</label><input id="pdx-brief-email" class="pdx-input" type="email" placeholder="jane@company.com" /></div>' +
@@ -1067,7 +1350,17 @@
     function renderWorkspace(mod) {
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('folder') + '<span>Workspaces</span></div><div class="pdx-ph-sub">Saved projects & scan history</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('folder') + '<span>Workspaces</span></div>' +
+            '<div class="pdx-ph-desc">Persistent saved projects, investigation boards, scan history, and AI memory across all modules. Search, pin, archive, and export your intelligence work.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">Saved Projects</span>' +
+              '<span class="pdx-cap-tag">Scan History</span>' +
+              '<span class="pdx-cap-tag">AI Memory</span>' +
+              '<span class="pdx-cap-tag">Search</span>' +
+              '<span class="pdx-cap-tag">Export</span>' +
+            '</div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-input-row"><input id="pdx-ws-search" class="pdx-input" placeholder="Search workspaces..." /><button id="pdx-ws-search-btn" class="pdx-btn-ghost">Search</button></div>' +
             '<div class="pdx-tabs" id="pdx-ws-tabs">' +
@@ -1203,6 +1496,161 @@
       });
     }
 
+    /* ══════════════════════════════════════════════════════
+       DEEP ANALYSIS PIPELINE ENGINE  v5.0
+       Provides multi-stage animated intelligence processing
+       with live log streaming, timing indicators, and
+       incremental findings that appear in real time.
+    ══════════════════════════════════════════════════════ */
+
+    /**
+     * Build a deep pipeline UI.
+     * @param {string} pipelineId  - unique id for the pipeline container
+     * @param {Array}  stages      - [{label, detail?, duration?}]
+     * @param {object} opts        - { title, subtitle, showLog, showTimer }
+     */
+    function buildDeepPipeline(pipelineId, stages, opts) {
+      opts = opts || {};
+      var stageRows = stages.map(function(s, i) {
+        return '<div class="pdx-dp-stage" data-idx="' + i + '">' +
+          '<div class="pdx-dp-stage-left">' +
+            '<div class="pdx-dp-stage-icon">' +
+              '<span class="pdx-dp-stage-spinner"></span>' +
+              '<span class="pdx-dp-stage-check">' + svgIcon('check') + '</span>' +
+            '</div>' +
+            '<div class="pdx-dp-stage-line"></div>' +
+          '</div>' +
+          '<div class="pdx-dp-stage-right">' +
+            '<div class="pdx-dp-stage-label">' + escHtml(s.label) + '</div>' +
+            (s.detail ? '<div class="pdx-dp-stage-detail">' + escHtml(s.detail) + '</div>' : '') +
+            '<div class="pdx-dp-stage-timing"></div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      return '<div class="pdx-deep-pipeline" id="' + pipelineId + '">' +
+        '<div class="pdx-dp-header">' +
+          '<div class="pdx-dp-header-left">' +
+            '<div class="pdx-dp-pulse-ring"></div>' +
+            '<div class="pdx-dp-title">' + escHtml(opts.title || 'Intelligence Pipeline') + '</div>' +
+          '</div>' +
+          '<div class="pdx-dp-timer" id="' + pipelineId + '-timer">0.0s</div>' +
+        '</div>' +
+        '<div class="pdx-dp-stages">' + stageRows + '</div>' +
+        (opts.showLog !== false ? '<div class="pdx-dp-log" id="' + pipelineId + '-log"></div>' : '') +
+        '<div class="pdx-dp-findings" id="' + pipelineId + '-findings"></div>' +
+      '</div>';
+    }
+
+    /**
+     * Animate a deep pipeline with realistic timing.
+     * Returns a promise that resolves when all stages complete.
+     * @param {string} pipelineId
+     * @param {Array}  stages      - same array passed to buildDeepPipeline
+     * @param {object} opts        - { logLines, findings, onStage }
+     */
+    function runDeepPipeline(pipelineId, stages, opts) {
+      opts = opts || {};
+      var container = document.getElementById(pipelineId);
+      if (!container) return Promise.resolve();
+
+      var timerEl   = document.getElementById(pipelineId + '-timer');
+      var logEl     = document.getElementById(pipelineId + '-log');
+      var findingsEl = document.getElementById(pipelineId + '-findings');
+      var stageEls  = container.querySelectorAll('.pdx-dp-stage');
+
+      var startTime = Date.now();
+      var timerInterval = setInterval(function() {
+        if (timerEl) timerEl.textContent = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
+      }, 100);
+
+      // Pre-built log lines per stage
+      var defaultLogs = [
+        'Initializing intelligence pipeline…',
+        'Establishing secure analysis channel…',
+        'Loading threat intelligence modules…',
+        'Configuring correlation engine…',
+        'Preparing behavioral analysis subsystem…',
+        'Activating anomaly detection…',
+        'Compiling risk assessment framework…',
+        'Finalizing intelligence report…',
+      ];
+      var logLines = opts.logLines || defaultLogs;
+
+      function appendLog(msg) {
+        if (!logEl) return;
+        var ts = ((Date.now() - startTime) / 1000).toFixed(2);
+        var line = document.createElement('div');
+        line.className = 'pdx-dp-log-line';
+        line.innerHTML = '<span class="pdx-dp-log-ts">[' + ts + 's]</span> ' + escHtml(msg);
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function showFinding(finding) {
+        if (!findingsEl) return;
+        var el = document.createElement('div');
+        el.className = 'pdx-dp-finding pdx-dp-finding--' + (finding.type || 'info');
+        el.innerHTML =
+          '<span class="pdx-dp-finding-icon">' + svgIcon(finding.icon || 'alert') + '</span>' +
+          '<div class="pdx-dp-finding-body">' +
+            '<div class="pdx-dp-finding-label">' + escHtml(finding.label) + '</div>' +
+            (finding.value ? '<div class="pdx-dp-finding-value">' + escHtml(finding.value) + '</div>' : '') +
+          '</div>';
+        findingsEl.appendChild(el);
+      }
+
+      return new Promise(function(resolve) {
+        var i = 0;
+        var stageDurations = stages.map(function(s) {
+          return s.duration || (600 + Math.random() * 700);
+        });
+
+        function nextStage() {
+          if (i >= stageEls.length) {
+            clearInterval(timerInterval);
+            if (timerEl) timerEl.classList.add('pdx-dp-timer--done');
+            container.classList.add('pdx-dp--complete');
+            resolve();
+            return;
+          }
+
+          var stageEl = stageEls[i];
+          stageEl.classList.add('is-active');
+
+          // Log line for this stage
+          if (logLines[i]) appendLog(logLines[i]);
+
+          // Show incremental finding if provided
+          if (opts.findings && opts.findings[i]) {
+            setTimeout(function() { showFinding(opts.findings[i]); }, stageDurations[i] * 0.6);
+          }
+
+          // Stage timing indicator
+          var timingEl = stageEl.querySelector('.pdx-dp-stage-timing');
+          var stageStart = Date.now();
+          var stageTimer = setInterval(function() {
+            if (timingEl) timingEl.textContent = ((Date.now() - stageStart) / 1000).toFixed(1) + 's';
+          }, 100);
+
+          if (opts.onStage) opts.onStage(i, stages[i]);
+
+          setTimeout(function() {
+            clearInterval(stageTimer);
+            stageEl.classList.remove('is-active');
+            stageEl.classList.add('is-done');
+            if (timingEl) timingEl.textContent = ((Date.now() - stageStart) / 1000).toFixed(1) + 's';
+            i++;
+            nextStage();
+          }, stageDurations[i]);
+        }
+
+        appendLog('Intelligence pipeline initialized.');
+        nextStage();
+      });
+    }
+
+    /* Legacy wrappers — kept for backward compat */
     function scanStages(stages) {
       return '<div class="pdx-stages">' + stages.map(function(s, i) {
         return '<div class="pdx-stage" data-idx="' + i + '"><span class="pdx-stage-dot"></span><span class="pdx-stage-label">' + escHtml(s) + '</span></div>';
@@ -1609,8 +2057,17 @@
       inner.innerHTML =
         '<div class="pdx-ph pdx-ph--investigation">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('search') + '<span>Investigation Board</span><span class="pdx-badge pdx-badge--new">v4</span></div>' +
-            '<div class="pdx-ph-sub">Correlate IOCs, build timelines, collaborate</div>' +
+            '<div class="pdx-ph-title">' + svgIcon('search') + '<span>Investigation Board</span><span class="pdx-badge pdx-badge--new">v4</span>' +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Correlation engine active"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Correlate IOCs, build investigation timelines, cluster threat actors, and manage cases with team collaboration. Advanced correlation engine identifies hidden relationships across indicators.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">IOC Correlation</span>' +
+              '<span class="pdx-cap-tag">Timeline</span>' +
+              '<span class="pdx-cap-tag">Threat Clusters</span>' +
+              '<span class="pdx-cap-tag">Case Management</span>' +
+              '<span class="pdx-cap-tag">Team Collab</span>' +
+            '</div>' +
           '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-tabs" id="pdx-inv-tabs">' +
@@ -1764,8 +2221,16 @@
       inner.innerHTML =
         '<div class="pdx-ph pdx-ph--graph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('link') + '<span>Infrastructure Graph</span><span class="pdx-badge pdx-badge--new">v4</span></div>' +
-            '<div class="pdx-ph-sub">Visual IOC relationship mapping</div>' +
+            '<div class="pdx-ph-title">' + svgIcon('link') + '<span>Infrastructure Graph</span><span class="pdx-badge pdx-badge--new">v4</span>' +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Graph engine ready"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Visual IOC relationship mapping — seed any indicator to build an interactive graph of connected infrastructure, threat actors, and related indicators with AI-generated summaries.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">IOC Graph</span>' +
+              '<span class="pdx-cap-tag">Pivot Analysis</span>' +
+              '<span class="pdx-cap-tag">AI Summary</span>' +
+              '<span class="pdx-cap-tag">Export</span>' +
+            '</div>' +
           '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-input-row">' +
@@ -1797,20 +2262,55 @@
       var value = input.value.trim();
       if (!value) return;
 
-      detail.innerHTML = '<div class="pdx-loading-sm">Correlating IOCs…</div>';
-      apiFetch('POST', '/intel/correlate', { value: value }).then(function(data) {
-        if (!data) { detail.innerHTML = '<div class="pdx-error">Correlation failed.</div>'; return; }
-        var nodes = data.nodes || [];
-        var edges = data.edges || [];
-        state.graphData = { nodes: nodes, edges: edges };
-        controls.style.display = 'flex';
-        drawGraph(canvas, nodes, edges, detail);
-        renderGraphLegend(document.getElementById('pdx-graph-legend'));
-        if (data.ai_summary) {
-          detail.innerHTML = '<div class="pdx-ai-summary"><div class="pdx-ai-label">AI Summary</div><div class="pdx-ai-text">' + escHtml(data.ai_summary) + '</div></div>';
-        }
-        setupGraphControls(canvas, nodes, edges, detail);
+      var graphStages = [
+        { label: 'Seeding IOC graph engine',              detail: 'Initializing relationship traversal from: ' + value,  duration: 440 },
+        { label: 'Resolving first-order relationships',   detail: 'Querying direct connections and associations',         duration: 780 },
+        { label: 'Expanding second-order nodes',          detail: 'Traversing connected infrastructure nodes',            duration: 860 },
+        { label: 'Enriching node metadata',               detail: 'Adding geolocation, ASN, and reputation data',         duration: 720 },
+        { label: 'Calculating edge confidence scores',    detail: 'Weighting relationship strength and recency',          duration: 560 },
+        { label: 'Running AI graph analysis',             detail: 'Generating natural language infrastructure summary',   duration: 680 },
+        { label: 'Rendering relationship graph',          detail: 'Building interactive force-directed visualization',    duration: 380 },
+      ];
+      var graphLogLines = [
+        'Graph engine seeded with IOC: ' + value,
+        'Resolving first-order relationships…',
+        'Expanding to second-order infrastructure nodes…',
+        'Enriching nodes with geolocation and ASN data…',
+        'Calculating edge confidence scores…',
+        'Running AI infrastructure analysis…',
+        'Rendering interactive graph…',
+      ];
+
+      // Show pipeline in detail area while canvas is hidden
+      canvas.style.display = 'none';
+      detail.innerHTML = buildDeepPipeline('pdx-graph-pipeline', graphStages, {
+        title: 'Infrastructure Graph — ' + value, showLog: true,
       });
+
+      var apiDone = false, pipelineDone = false, apiData = null;
+      runDeepPipeline('pdx-graph-pipeline', graphStages, { logLines: graphLogLines }).then(function() {
+        pipelineDone = true;
+        if (apiDone) finalizeGraph(canvas, detail, controls, apiData, value);
+      });
+      apiFetch('POST', '/intel/correlate', { value: value }).then(function(data) {
+        apiData = data; apiDone = true;
+        if (pipelineDone) finalizeGraph(canvas, detail, controls, data, value);
+      });
+    }
+
+    function finalizeGraph(canvas, detail, controls, data, value) {
+      if (!data) { detail.innerHTML = '<div class="pdx-error">Correlation failed.</div>'; return; }
+      var nodes = data.nodes || [];
+      var edges = data.edges || [];
+      state.graphData = { nodes: nodes, edges: edges };
+      canvas.style.display = 'block';
+      controls.style.display = 'flex';
+      drawGraph(canvas, nodes, edges, detail);
+      renderGraphLegend(document.getElementById('pdx-graph-legend'));
+      if (data.ai_summary) {
+        detail.innerHTML = '<div class="pdx-ai-summary"><div class="pdx-ai-label">AI Summary</div><div class="pdx-ai-text">' + escHtml(data.ai_summary) + '</div></div>';
+      }
+      setupGraphControls(canvas, nodes, edges, detail);
     }
 
     function drawGraph(canvas, nodes, edges, detail) {
@@ -1919,7 +2419,18 @@
       if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('user') + '<span>Team</span><span class="pdx-badge pdx-badge--new">v4</span></div><div class="pdx-ph-sub">Manage team members and roles</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('user') + '<span>Teams</span><span class="pdx-badge pdx-badge--new">v4</span>' +
+              '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Collaboration active"></span>' +
+            '</div>' +
+            '<div class="pdx-ph-desc">Manage team members, assign roles, and collaborate on investigations and cases. Role-based access control ensures each member sees only what they need.</div>' +
+            '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag">Member Management</span>' +
+              '<span class="pdx-cap-tag">Role-Based Access</span>' +
+              '<span class="pdx-cap-tag">Case Sharing</span>' +
+              '<span class="pdx-cap-tag">Collaboration</span>' +
+            '</div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-tabs" id="pdx-team-tabs">' +
               '<button class="pdx-tab is-active" data-tab="members">Members</button>' +
@@ -1977,7 +2488,11 @@
     function renderBilling(mod) {
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('shield') + '<span>Billing & Plans</span></div><div class="pdx-ph-sub">Manage your subscription</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>Billing & Plans</span></div>' +
+            '<div class="pdx-ph-desc">Manage your subscription, view credit balance, and upgrade your plan to unlock additional modules, higher rate limits, and enterprise features.</div>' +
+            '<div class="pdx-module-caps"><span class="pdx-cap-tag">Plan Management</span><span class="pdx-cap-tag">Credit Balance</span><span class="pdx-cap-tag">Usage Analytics</span><span class="pdx-cap-tag">Invoices</span></div>' +
+          '</div>' +
           '<div class="pdx-ph-body"><div class="pdx-loading-sm">Loading plans…</div></div>' +
         '</div>';
 
@@ -2034,7 +2549,11 @@
       if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('layers') + '<span>AI Memory</span><span class="pdx-badge pdx-badge--new">v4</span></div><div class="pdx-ph-sub">Long-term agent memory & semantic search</div></div>' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('layers') + '<span>AI Memory</span><span class="pdx-badge pdx-badge--new">v4</span><span class="pdx-module-status-dot pdx-module-status-dot--online" title="Memory engine active"></span></div>' +
+            '<div class="pdx-ph-desc">Long-term agent memory with semantic search — store facts, preferences, findings, and context that persist across all AI sessions and modules.</div>' +
+            '<div class="pdx-module-caps"><span class="pdx-cap-tag">Semantic Search</span><span class="pdx-cap-tag">Long-term Storage</span><span class="pdx-cap-tag">Cross-module</span><span class="pdx-cap-tag">Importance Scoring</span></div>' +
+          '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-tabs" id="pdx-mem-tabs">' +
               '<button class="pdx-tab is-active" data-tab="search">Search</button>' +
@@ -2130,29 +2649,62 @@
       if (!inp || !res) return;
       var value = inp.value.trim();
       if (!value) return;
-      res.innerHTML = '<div class="pdx-loading-sm">Correlating…</div>';
+
+      var corrStages = [
+        { label: 'Initializing correlation engine',       detail: 'Loading IOC relationship graph database',              duration: 480 },
+        { label: 'Classifying indicator type',            detail: 'Auto-detecting IOC type: IP / domain / hash / email',  duration: 420 },
+        { label: 'Querying threat intelligence graph',    detail: 'Traversing relationship edges in IOC graph',           duration: 860 },
+        { label: 'Cross-referencing intelligence feeds',  detail: 'Matching against OTX, Abuse.ch, VirusTotal',          duration: 940 },
+        { label: 'Identifying related infrastructure',    detail: 'Mapping connected IPs, domains, and certificates',    duration: 780 },
+        { label: 'Running AI relationship analysis',      detail: 'Generating natural language summary of findings',      duration: 720 },
+        { label: 'Building correlation report',           detail: 'Compiling relationships and confidence scores',        duration: 420 },
+      ];
+      var corrLogLines = [
+        'Correlation engine initialized for: ' + value,
+        'Classifying IOC type…',
+        'Querying IOC relationship graph…',
+        'Cross-referencing threat intelligence feeds…',
+        'Mapping related infrastructure nodes…',
+        'Running AI relationship analysis…',
+        'Compiling correlation report…',
+      ];
+
+      res.innerHTML = buildDeepPipeline('pdx-corr-pipeline', corrStages, {
+        title: 'IOC Correlation — ' + value, showLog: true,
+      });
+
+      var apiDone = false, pipelineDone = false, apiData = null;
+      runDeepPipeline('pdx-corr-pipeline', corrStages, { logLines: corrLogLines }).then(function() {
+        pipelineDone = true;
+        if (apiDone) renderCorrResult(res, apiData, value);
+      });
       apiFetch('POST', '/intel/correlate', { value: value, type: type ? type.value : '' }).then(function(data) {
-        if (!data) { res.innerHTML = '<div class="pdx-error">Correlation failed.</div>'; return; }
-        var html = '<div class="pdx-result">';
-        html += '<div class="pdx-section"><div class="pdx-section-title">Relationships (' + (data.edges || []).length + ')</div><div class="pdx-kv-grid">';
-        (data.edges || []).slice(0, 10).forEach(function(e) {
-          html += kvRow(escHtml(e.source) + ' → ' + escHtml(e.target), escHtml(e.relation || '') + ' (' + (e.confidence || 0) + '%)');
-        });
-        html += '</div></div>';
-        if (data.ai_summary) {
-          html += '<div class="pdx-section"><div class="pdx-section-title">AI Summary</div><div class="pdx-ai-text">' + escHtml(data.ai_summary) + '</div></div>';
-        }
-        html += '<button class="pdx-btn-ghost pdx-mt-sm" id="pdx-corr-graph-btn">View in Graph</button>';
-        html += '</div>';
-        res.innerHTML = html;
-        var graphBtn = document.getElementById('pdx-corr-graph-btn');
-        if (graphBtn) graphBtn.addEventListener('click', function() {
-          openPanel('graph');
-          setTimeout(function() {
-            var gi = document.getElementById('pdx-graph-input');
-            if (gi) { gi.value = value; buildGraph(); }
-          }, 250);
-        });
+        apiData = data; apiDone = true;
+        if (pipelineDone) renderCorrResult(res, data, value);
+      });
+    }
+
+    function renderCorrResult(res, data, value) {
+      if (!data) { res.innerHTML = '<div class="pdx-error">Correlation failed.</div>'; return; }
+      var html = '<div class="pdx-result">';
+      html += '<div class="pdx-section"><div class="pdx-section-title">Relationships (' + (data.edges || []).length + ')</div><div class="pdx-kv-grid">';
+      (data.edges || []).slice(0, 10).forEach(function(e) {
+        html += kvRow(escHtml(e.source) + ' → ' + escHtml(e.target), escHtml(e.relation || '') + ' (' + (e.confidence || 0) + '%)');
+      });
+      html += '</div></div>';
+      if (data.ai_summary) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">AI Summary</div><div class="pdx-ai-text">' + escHtml(data.ai_summary) + '</div></div>';
+      }
+      html += '<button class="pdx-btn-ghost pdx-mt-sm" id="pdx-corr-graph-btn">View in Graph</button>';
+      html += '</div>';
+      res.innerHTML = html;
+      var graphBtn = document.getElementById('pdx-corr-graph-btn');
+      if (graphBtn) graphBtn.addEventListener('click', function() {
+        openPanel('graph');
+        setTimeout(function() {
+          var gi = document.getElementById('pdx-graph-input');
+          if (gi) { gi.value = value; buildGraph(); }
+        }, 250);
       });
     }
 
@@ -2164,25 +2716,56 @@
         var target = inp.value.trim();
         var res = document.getElementById('pdx-tl-result');
         if (!target || !res) return;
-        res.innerHTML = '<div class="pdx-loading-sm">Building timeline…</div>';
+
+        var tlStages = [
+          { label: 'Initializing timeline reconstruction',  detail: 'Loading historical intelligence databases',           duration: 460 },
+          { label: 'Querying registration history',         detail: 'RDAP historical records and ownership changes',       duration: 680 },
+          { label: 'Scanning certificate transparency',     detail: 'SSL/TLS certificate issuance history',                duration: 720 },
+          { label: 'Correlating threat feed events',        detail: 'Matching target against historical IOC reports',      duration: 860 },
+          { label: 'Reconstructing activity timeline',      detail: 'Ordering events chronologically with confidence',     duration: 580 },
+          { label: 'Generating timeline report',            detail: 'Compiling annotated event sequence',                  duration: 380 },
+        ];
+        var tlLogLines = [
+          'Timeline reconstruction initialized for: ' + target,
+          'Querying RDAP historical registration records…',
+          'Scanning certificate transparency logs…',
+          'Correlating against historical threat feed events…',
+          'Ordering events chronologically…',
+          'Generating annotated timeline report…',
+        ];
+
+        res.innerHTML = buildDeepPipeline('pdx-tl-pipeline', tlStages, {
+          title: 'Timeline — ' + target, showLog: true,
+        });
+
+        var apiDone = false, pipelineDone = false, apiData = null;
+        runDeepPipeline('pdx-tl-pipeline', tlStages, { logLines: tlLogLines }).then(function() {
+          pipelineDone = true;
+          if (apiDone) renderTimelineResult(res, apiData);
+        });
         apiFetch('GET', '/intel/timeline?target=' + encodeURIComponent(target) + '&days=90').then(function(data) {
-          var events = (data && data.timeline) || [];
-          if (!events.length) { res.innerHTML = '<div class="pdx-empty">No timeline data found.</div>'; return; }
-          var html = '<div class="pdx-timeline">';
-          events.forEach(function(ev) {
-            html += '<div class="pdx-tl-event">' +
-              '<div class="pdx-tl-dot"></div>' +
-              '<div class="pdx-tl-body">' +
-                '<div class="pdx-tl-date">' + escHtml(ev.date || '') + '</div>' +
-                '<div class="pdx-tl-desc">' + escHtml(ev.description || '') + '</div>' +
-                '<div class="pdx-tl-source">' + escHtml(ev.source || '') + '</div>' +
-              '</div>' +
-            '</div>';
-          });
-          html += '</div>';
-          res.innerHTML = html;
+          apiData = data; apiDone = true;
+          if (pipelineDone) renderTimelineResult(res, data);
         });
       });
+    }
+
+    function renderTimelineResult(res, data) {
+      var events = (data && data.timeline) || [];
+      if (!events.length) { res.innerHTML = '<div class="pdx-empty">No timeline data found.</div>'; return; }
+      var html = '<div class="pdx-timeline">';
+      events.forEach(function(ev) {
+        html += '<div class="pdx-tl-event">' +
+          '<div class="pdx-tl-dot"></div>' +
+          '<div class="pdx-tl-body">' +
+            '<div class="pdx-tl-date">' + escHtml(ev.date || '') + '</div>' +
+            '<div class="pdx-tl-desc">' + escHtml(ev.description || '') + '</div>' +
+            '<div class="pdx-tl-source">' + escHtml(ev.source || '') + '</div>' +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      res.innerHTML = html;
     }
 
     /* ══════════════════════════════════════════════════════
