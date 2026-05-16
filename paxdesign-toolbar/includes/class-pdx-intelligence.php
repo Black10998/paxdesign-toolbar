@@ -476,70 +476,113 @@ class PDX_Intelligence {
 		$is_cve_id = (bool) preg_match( '/^CVE-\d{4}-\d{4,}$/i', $query );
 
 		// ── NVD API v2.0 ──────────────────────────────────
-		$nvd_key = $this->settings->get( 'api_keys.nvd', '' );
-		$nvd_headers = [ 'Accept' => 'application/json' ];
-		if ( $nvd_key ) {
-			$nvd_headers['apiKey'] = $nvd_key;
-		}
+		try {
+			$nvd_key     = (string) ( $this->settings->get( 'api_keys.nvd', '' ) ?? '' );
+			$nvd_headers = [ 'Accept' => 'application/json' ];
+			if ( $nvd_key !== '' ) {
+				$nvd_headers['apiKey'] = $nvd_key;
+			}
 
-		if ( $is_cve_id ) {
-			$nvd_url = 'https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=' . rawurlencode( strtoupper( $query ) );
-		} else {
-			$nvd_url = 'https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=' . rawurlencode( $query ) . '&resultsPerPage=10';
-		}
+			$nvd_url = $is_cve_id
+				? 'https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=' . rawurlencode( strtoupper( $query ) )
+				: 'https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=' . rawurlencode( $query ) . '&resultsPerPage=10';
 
-		$nvd_resp = wp_remote_get( $nvd_url, [
-			'timeout' => 15,
-			'headers' => $nvd_headers,
-		] );
+			$nvd_resp = wp_remote_get( $nvd_url, [ 'timeout' => 15, 'headers' => $nvd_headers ] );
+			$nvd_code = is_wp_error( $nvd_resp ) ? 0 : (int) wp_remote_retrieve_response_code( $nvd_resp );
 
-		if ( ! is_wp_error( $nvd_resp ) && wp_remote_retrieve_response_code( $nvd_resp ) === 200 ) {
-			$body = json_decode( wp_remote_retrieve_body( $nvd_resp ), true );
-			$items = $body['vulnerabilities'] ?? [];
-			if ( ! empty( $items ) ) {
-				return [
-					'cves'   => array_map( [ $this, 'parse_nvd_cve' ], $items ),
-					'total'  => (int) ( $body['totalResults'] ?? count( $items ) ),
-					'source' => 'NVD',
-				];
+			if ( $nvd_code === 200 ) {
+				$body  = json_decode( wp_remote_retrieve_body( $nvd_resp ), true );
+				$items = is_array( $body['vulnerabilities'] ?? null ) ? $body['vulnerabilities'] : [];
+				if ( ! empty( $items ) ) {
+					$cves = [];
+					foreach ( $items as $item ) {
+						if ( is_array( $item ) ) {
+							$cves[] = $this->parse_nvd_cve( $item );
+						}
+					}
+					return [
+						'cves'   => $cves,
+						'total'  => (int) ( $body['totalResults'] ?? count( $cves ) ),
+						'source' => 'NVD',
+					];
+				}
+			}
+
+			// Log NVD failures for debugging without crashing.
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				$err = is_wp_error( $nvd_resp ) ? $nvd_resp->get_error_message() : "HTTP {$nvd_code}";
+				error_log( "[PDX] NVD API failed for '{$query}': {$err}" );
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] fetch_cve NVD block exception: ' . $e->getMessage() );
 			}
 		}
 
 		// ── CIRCL CVE API fallback (no key required) ──────
-		if ( $is_cve_id ) {
-			$circl_url = 'https://cve.circl.lu/api/cve/' . rawurlencode( strtoupper( $query ) );
-			$circl_resp = wp_remote_get( $circl_url, [ 'timeout' => 10 ] );
-			if ( ! is_wp_error( $circl_resp ) && wp_remote_retrieve_response_code( $circl_resp ) === 200 ) {
-				$cve = json_decode( wp_remote_retrieve_body( $circl_resp ), true );
-				if ( ! empty( $cve ) && isset( $cve['id'] ) ) {
-					return [
-						'cves'   => [ $this->parse_circl_cve( $cve ) ],
-						'total'  => 1,
-						'source' => 'CIRCL',
-					];
+		try {
+			if ( $is_cve_id ) {
+				$circl_url  = 'https://cve.circl.lu/api/cve/' . rawurlencode( strtoupper( $query ) );
+				$circl_resp = wp_remote_get( $circl_url, [ 'timeout' => 10 ] );
+				$circl_code = is_wp_error( $circl_resp ) ? 0 : (int) wp_remote_retrieve_response_code( $circl_resp );
+
+				if ( $circl_code === 200 ) {
+					$cve = json_decode( wp_remote_retrieve_body( $circl_resp ), true );
+					// CIRCL returns the CVE object directly; must be an array with an id field.
+					if ( is_array( $cve ) && ! empty( $cve ) && ( isset( $cve['id'] ) || isset( $cve['cveMetadata']['cveId'] ) ) ) {
+						return [
+							'cves'   => [ $this->parse_circl_cve( $cve ) ],
+							'total'  => 1,
+							'source' => 'CIRCL',
+						];
+					}
+				}
+
+				if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+					$err = is_wp_error( $circl_resp ) ? $circl_resp->get_error_message() : "HTTP {$circl_code}";
+					error_log( "[PDX] CIRCL API failed for '{$query}': {$err}" );
+				}
+			} else {
+				$circl_url  = 'https://cve.circl.lu/api/search/' . rawurlencode( $query );
+				$circl_resp = wp_remote_get( $circl_url, [ 'timeout' => 10 ] );
+				$circl_code = is_wp_error( $circl_resp ) ? 0 : (int) wp_remote_retrieve_response_code( $circl_resp );
+
+				if ( $circl_code === 200 ) {
+					$data  = json_decode( wp_remote_retrieve_body( $circl_resp ), true );
+					$items = [];
+					if ( is_array( $data ) ) {
+						$items = isset( $data['results'] ) && is_array( $data['results'] )
+							? $data['results']
+							: array_values( $data );
+					}
+					if ( ! empty( $items ) ) {
+						$cves = [];
+						foreach ( array_slice( $items, 0, 10 ) as $item ) {
+							if ( is_array( $item ) ) {
+								$cves[] = $this->parse_circl_cve( $item );
+							}
+						}
+						if ( ! empty( $cves ) ) {
+							return [ 'cves' => $cves, 'total' => count( $items ), 'source' => 'CIRCL' ];
+						}
+					}
 				}
 			}
-		} else {
-			$circl_url = 'https://cve.circl.lu/api/search/' . rawurlencode( $query );
-			$circl_resp = wp_remote_get( $circl_url, [ 'timeout' => 10 ] );
-			if ( ! is_wp_error( $circl_resp ) && wp_remote_retrieve_response_code( $circl_resp ) === 200 ) {
-				$data = json_decode( wp_remote_retrieve_body( $circl_resp ), true );
-				$items = $data['results'] ?? ( is_array( $data ) ? $data : [] );
-				if ( ! empty( $items ) ) {
-					return [
-						'cves'   => array_map( [ $this, 'parse_circl_cve' ], array_slice( $items, 0, 10 ) ),
-						'total'  => count( $items ),
-						'source' => 'CIRCL',
-					];
-				}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] fetch_cve CIRCL block exception: ' . $e->getMessage() );
 			}
 		}
+
+		$rate_note = ( (string) ( $this->settings->get( 'api_keys.nvd', '' ) ?? '' ) === '' )
+			? ' Without an NVD API key, requests are limited to 5 per 30 seconds.'
+			: '';
 
 		return [
 			'cves'   => [],
 			'total'  => 0,
 			'source' => 'none',
-			'error'  => 'No CVE data found for "' . esc_html( $query ) . '". NVD may be rate-limiting; try again in 30 seconds or add an NVD API key in settings.',
+			'error'  => 'No CVE data found for "' . esc_html( $query ) . '".' . $rate_note . ' Check WP debug log for details.',
 		];
 	}
 
@@ -660,59 +703,73 @@ class PDX_Intelligence {
 		];
 
 		// ── Shodan host data ──────────────────────────────
-		$shodan = $this->fetch_shodan( $target );
-		if ( $shodan ) {
-			$result['ports']   = $shodan['ports']     ?? [];
-			$result['vulns']   = $shodan['vulns']     ?? [];
-			$result['os']      = $shodan['os']        ?? null;
-			$result['org']     = $shodan['org']       ?? null;
-			$result['country'] = $shodan['country']   ?? null;
-			$result['source'][] = 'Shodan';
-
-			// Parse service banners from raw Shodan data if available.
-			// (fetch_shodan returns a summary; services listed as port-based labels.)
-			foreach ( $result['ports'] as $port ) {
-				$result['services'][] = [ 'port' => $port, 'service' => $this->port_label( $port ) ];
+		try {
+			$shodan = $this->fetch_shodan( $target );
+			if ( is_array( $shodan ) ) {
+				$result['ports']    = is_array( $shodan['ports'] ?? null )  ? $shodan['ports']  : [];
+				$result['vulns']    = is_array( $shodan['vulns'] ?? null )  ? $shodan['vulns']  : [];
+				$result['os']       = $shodan['os']      ?? null;
+				$result['org']      = $shodan['org']     ?? null;
+				$result['country']  = $shodan['country'] ?? null;
+				$result['source'][] = 'Shodan';
+				foreach ( $result['ports'] as $port ) {
+					if ( is_numeric( $port ) ) {
+						$result['services'][] = [ 'port' => (int) $port, 'service' => $this->port_label( (int) $port ) ];
+					}
+				}
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] fetch_attack_surface Shodan block exception: ' . $e->getMessage() );
 			}
 		}
 
 		// ── DNS records via Google DoH ────────────────────
-		$dns_types = [ 'A', 'MX', 'TXT', 'NS', 'AAAA' ];
-		$dns_records = [];
-		foreach ( $dns_types as $type ) {
-			$dns_resp = wp_remote_get(
-				'https://dns.google/resolve?name=' . rawurlencode( $target ) . '&type=' . $type,
-				[ 'timeout' => 6, 'headers' => [ 'Accept' => 'application/dns-json' ] ]
-			);
-			if ( ! is_wp_error( $dns_resp ) && wp_remote_retrieve_response_code( $dns_resp ) === 200 ) {
-				$dns_data = json_decode( wp_remote_retrieve_body( $dns_resp ), true );
-				foreach ( $dns_data['Answer'] ?? [] as $rec ) {
-					$dns_records[] = [ 'type' => $type, 'value' => $rec['data'] ?? '' ];
+		try {
+			$dns_types   = [ 'A', 'MX', 'TXT', 'NS', 'AAAA' ];
+			$dns_records = [];
+			foreach ( $dns_types as $type ) {
+				$dns_resp = wp_remote_get(
+					'https://dns.google/resolve?name=' . rawurlencode( $target ) . '&type=' . $type,
+					[ 'timeout' => 6, 'headers' => [ 'Accept' => 'application/dns-json' ] ]
+				);
+				if ( ! is_wp_error( $dns_resp ) && (int) wp_remote_retrieve_response_code( $dns_resp ) === 200 ) {
+					$dns_data = json_decode( wp_remote_retrieve_body( $dns_resp ), true );
+					if ( is_array( $dns_data['Answer'] ?? null ) ) {
+						foreach ( $dns_data['Answer'] as $rec ) {
+							if ( is_array( $rec ) ) {
+								$dns_records[] = [ 'type' => $type, 'value' => (string) ( $rec['data'] ?? '' ) ];
+							}
+						}
+					}
+					$result['source'][] = 'DNS';
 				}
-				$result['source'][] = 'DNS';
+			}
+			$result['dns']    = $dns_records;
+			$result['source'] = array_values( array_unique( $result['source'] ) );
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] fetch_attack_surface DNS block exception: ' . $e->getMessage() );
 			}
 		}
-		$result['dns']    = $dns_records;
-		$result['source'] = array_unique( $result['source'] );
 
 		// ── Risk score ────────────────────────────────────
-		$score = 0;
 		$port_count = count( $result['ports'] );
 		$vuln_count = count( $result['vulns'] );
-		if ( $port_count > 20 ) $score += 30;
+		$score      = 0;
+		if ( $port_count > 20 )     $score += 30;
 		elseif ( $port_count > 10 ) $score += 20;
 		elseif ( $port_count > 5 )  $score += 10;
 		$score += min( 50, $vuln_count * 10 );
-		// Risky ports
 		$risky = array_intersect( $result['ports'], [ 21, 23, 445, 3389, 5900, 6379, 27017 ] );
 		$score += count( $risky ) * 5;
 		$result['score'] = min( 100, $score );
 
 		// ── Plain-language summary ────────────────────────
 		$parts = [];
-		if ( $port_count )  $parts[] = "{$port_count} open port" . ( $port_count !== 1 ? 's' : '' );
-		if ( $vuln_count )  $parts[] = "{$vuln_count} known CVE" . ( $vuln_count !== 1 ? 's' : '' );
-		if ( $result['os'] ) $parts[] = "OS: {$result['os']}";
+		if ( $port_count )   $parts[] = "{$port_count} open port" . ( $port_count !== 1 ? 's' : '' );
+		if ( $vuln_count )   $parts[] = "{$vuln_count} known CVE" . ( $vuln_count !== 1 ? 's' : '' );
+		if ( $result['os'] ) $parts[] = 'OS: ' . $result['os'];
 		$result['summary'] = $parts
 			? 'Attack surface analysis complete. Found: ' . implode( ', ', $parts ) . '.'
 			: 'No significant attack surface data found for this target.';

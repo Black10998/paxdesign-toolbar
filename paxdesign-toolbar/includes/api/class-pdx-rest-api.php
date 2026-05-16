@@ -1080,25 +1080,64 @@ class PDX_REST_API {
 	/* ── Threat Intel: CVE Lookup ────────────────────────── */
 
 	public function threat_cve( WP_REST_Request $req ): WP_REST_Response {
-		$rl = $this->rate_limit_check( 'threat_cve' );
-		if ( $rl ) return $rl;
+		// Rate-limit check — wrapped so a missing DB table doesn't 500.
+		try {
+			$rl = $this->rate_limit_check( 'threat_cve' );
+			if ( $rl ) return $rl;
+		} catch ( Throwable $e ) {
+			// Rate-limit table may not exist yet; log and continue.
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] threat_cve rate_limit_check failed: ' . $e->getMessage() );
+			}
+		}
 
-		$query = sanitize_text_field( $req->get_param( 'q' ) ?? '' );
+		$query = sanitize_text_field( trim( $req->get_param( 'q' ) ?? '' ) );
 		if ( ! $query ) {
 			return new WP_REST_Response( [ 'error' => 'Query parameter "q" is required.' ], 400 );
 		}
 
-		// Cache for 1 hour — CVE data doesn't change frequently.
-		$cache_key = 'pdx_cve_' . md5( strtolower( $query ) );
-		$cached    = PDX_Cache::get( $cache_key );
-		if ( $cached !== false ) {
-			return new WP_REST_Response( array_merge( $cached, [ 'cached' => true ] ), 200 );
+		// PDX_Cache::get() returns null on miss (not false) — check for null.
+		$cache_key = 'cve_' . md5( strtolower( $query ) );
+		try {
+			$cached = PDX_Cache::get( $cache_key );
+			if ( is_array( $cached ) && ! empty( $cached ) ) {
+				$cached['cached'] = true;
+				return new WP_REST_Response( $cached, 200 );
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] threat_cve cache read failed: ' . $e->getMessage() );
+			}
 		}
 
-		$result = $this->intel->fetch_cve( $query );
+		// Execute the lookup — catch any fatal/exception so we always return JSON.
+		try {
+			$result = $this->intel->fetch_cve( $query );
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] threat_cve fetch_cve exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+			return new WP_REST_Response( [
+				'cves'   => [],
+				'total'  => 0,
+				'source' => 'error',
+				'error'  => 'CVE lookup failed: ' . $e->getMessage(),
+			], 200 );
+		}
 
-		PDX_Cache::set( $cache_key, $result, HOUR_IN_SECONDS );
-		PDX_Audit::log( 'threat', 'cve_lookup', [ 'query' => $query, 'total' => $result['total'] ?? 0 ] );
+		// Ensure result is always a well-formed array before caching/returning.
+		if ( ! is_array( $result ) ) {
+			$result = [ 'cves' => [], 'total' => 0, 'source' => 'error', 'error' => 'Unexpected response from CVE source.' ];
+		}
+		$result += [ 'cves' => [], 'total' => 0, 'source' => 'none' ];
+
+		try {
+			PDX_Cache::set( $cache_key, $result, HOUR_IN_SECONDS );
+		} catch ( Throwable $e ) { /* non-fatal */ }
+
+		try {
+			PDX_Audit::log( 'threat', 'cve_lookup', [ 'query' => $query, 'total' => (int) ( $result['total'] ?? 0 ) ] );
+		} catch ( Throwable $e ) { /* non-fatal — audit table may not exist */ }
 
 		return new WP_REST_Response( $result, 200 );
 	}
@@ -1106,25 +1145,62 @@ class PDX_REST_API {
 	/* ── Threat Intel: Attack Surface ────────────────────── */
 
 	public function threat_surface( WP_REST_Request $req ): WP_REST_Response {
-		$rl = $this->rate_limit_check( 'threat_surface' );
-		if ( $rl ) return $rl;
+		try {
+			$rl = $this->rate_limit_check( 'threat_surface' );
+			if ( $rl ) return $rl;
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] threat_surface rate_limit_check failed: ' . $e->getMessage() );
+			}
+		}
 
-		$target = sanitize_text_field( $req->get_param( 'domain' ) ?? '' );
+		$target = sanitize_text_field( trim( $req->get_param( 'domain' ) ?? '' ) );
 		if ( ! $target ) {
 			return new WP_REST_Response( [ 'error' => 'Parameter "domain" is required.' ], 400 );
 		}
 
-		// Cache for 30 minutes — surface data can change but is expensive to fetch.
-		$cache_key = 'pdx_surface_' . md5( strtolower( $target ) );
-		$cached    = PDX_Cache::get( $cache_key );
-		if ( $cached !== false ) {
-			return new WP_REST_Response( array_merge( $cached, [ 'cached' => true ] ), 200 );
+		$cache_key = 'surface_' . md5( strtolower( $target ) );
+		try {
+			$cached = PDX_Cache::get( $cache_key );
+			if ( is_array( $cached ) && ! empty( $cached ) ) {
+				$cached['cached'] = true;
+				return new WP_REST_Response( $cached, 200 );
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] threat_surface cache read failed: ' . $e->getMessage() );
+			}
 		}
 
-		$result = $this->intel->fetch_attack_surface( $target );
+		try {
+			$result = $this->intel->fetch_attack_surface( $target );
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] threat_surface fetch_attack_surface exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+			return new WP_REST_Response( [
+				'target'  => $target,
+				'ports'   => [],
+				'vulns'   => [],
+				'dns'     => [],
+				'score'   => 0,
+				'summary' => 'Attack surface scan failed: ' . $e->getMessage(),
+				'source'  => [],
+				'error'   => $e->getMessage(),
+			], 200 );
+		}
 
-		PDX_Cache::set( $cache_key, $result, 30 * MINUTE_IN_SECONDS );
-		PDX_Audit::log( 'threat', 'surface_scan', [ 'target' => $target, 'score' => $result['score'] ?? 0 ] );
+		if ( ! is_array( $result ) ) {
+			$result = [ 'target' => $target, 'ports' => [], 'vulns' => [], 'dns' => [], 'score' => 0, 'summary' => '', 'source' => [] ];
+		}
+
+		try {
+			PDX_Cache::set( $cache_key, $result, 30 * MINUTE_IN_SECONDS );
+		} catch ( Throwable $e ) { /* non-fatal */ }
+
+		try {
+			PDX_Audit::log( 'threat', 'surface_scan', [ 'target' => $target, 'score' => (int) ( $result['score'] ?? 0 ) ] );
+		} catch ( Throwable $e ) { /* non-fatal */ }
 
 		return new WP_REST_Response( $result, 200 );
 	}
