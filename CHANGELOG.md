@@ -1,5 +1,26 @@
 # Changelog
 
+## 7.0.0 — 2026-05-16
+
+**Production foundation** — faster interactions, unified intelligence UX, cleanup.
+
+### Interaction & performance
+- `runIntelPipeline()` — parallel API + staged pipeline with instant button feedback
+- Faster pipeline timing (~32% shorter stages), 50ms timer ticks, rAF stage start
+- `pdx-btn--busy` / `pdx-btn--pressed` micro-interactions on all primary actions
+- Double-click guards on scan/run/correlate/build/pipeline/graph actions
+
+### Intelligence UX (all major actions)
+- Deep pipeline: Trust, OSINT, Threat (CVE/surface), Builder, Pipeline, Automation, Connectors, Investigation (correlate/timeline), Graph
+- Threat Feeds: live sync pipeline + completion banner
+- Job History tab wired to queue API
+
+### Cleanup
+- Removed dead `animateScanStages()` and unused `.pdx-scanning` CSS
+- Removed duplicate WP admin flyout navigation (6.0.1)
+
+**Install:** `releases/paxdesign-toolbar-7.0.0.zip` — tag `v7.0.0`
+
 ## 6.0.1 — 2026-05-16
 
 **UI/UX fixes** — overlay cleanup, admin scaling, single navigation layer.

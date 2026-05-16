@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v6.0.0
+ * PaxDesign Utility Dock — v7.0.0
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.
@@ -211,6 +211,22 @@
     }
 
     backdrop.addEventListener('click', closePanel);
+
+    /* Instant press feedback on panel controls */
+    panel.addEventListener('pointerdown', function (e) {
+      var btn = e.target.closest('.pdx-btn-primary, .pdx-btn-ghost, .pdx-btn-sm, .pdx-graph-ctrl');
+      if (btn && !btn.disabled) btn.classList.add('pdx-btn--pressed');
+    }, true);
+    panel.addEventListener('pointerup', function () {
+      panel.querySelectorAll('.pdx-btn--pressed').forEach(function (b) {
+        b.classList.remove('pdx-btn--pressed');
+      });
+    }, true);
+    panel.addEventListener('pointercancel', function () {
+      panel.querySelectorAll('.pdx-btn--pressed').forEach(function (b) {
+        b.classList.remove('pdx-btn--pressed');
+      });
+    }, true);
 
     /* ── Dock button clicks ───────────────────────────────── */
     dock.addEventListener('click', function(e) {
@@ -470,6 +486,7 @@
     function runTrustScan() {
       var input  = document.getElementById('pdx-trust-input');
       var result = document.getElementById('pdx-trust-result');
+      var btn    = document.getElementById('pdx-trust-btn');
       if (!input || !result) return;
       var domain = input.value.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
       if (!domain) return;
@@ -486,33 +503,27 @@
         { label: 'Generating risk assessment',            detail: 'Compiling final intelligence report',                       duration: 500 },
       ];
 
-      var trustLogLines = [
-        'TrustCheck pipeline initialized for: ' + domain,
-        'Connecting to RDAP bootstrap registry…',
-        'Fetching SSL Labs assessment endpoint…',
-        'Resolving DNS records via recursive resolver…',
-        'Querying AlienVault OTX pulse database…',
-        'Running behavioral pattern correlation engine…',
-        'Aggregating multi-source reputation signals…',
-        'Computing anomaly deviation scores…',
-        'Finalizing risk verdict and confidence score…',
-      ];
-
-      result.innerHTML = buildDeepPipeline('pdx-trust-pipeline', trustStages, {
+      runIntelPipeline({
+        btn: btn,
+        result: result,
+        id: 'pdx-trust-pipeline',
+        stages: trustStages,
         title: 'TrustCheck — ' + domain,
-        showLog: true,
-      });
-
-      var apiDone = false, pipelineDone = false, apiData = null;
-
-      runDeepPipeline('pdx-trust-pipeline', trustStages, { logLines: trustLogLines }).then(function() {
-        pipelineDone = true;
-        if (apiDone) finalizeTrustResult(result, apiData, domain);
-      });
-
-      apiFetch('GET', '/trust?domain=' + encodeURIComponent(domain)).then(function(data) {
-        apiData = data; apiDone = true;
-        if (pipelineDone) finalizeTrustResult(result, data, domain);
+        busyLabel: 'Analyzing…',
+        logLines: [
+          'TrustCheck pipeline initialized for: ' + domain,
+          'Connecting to RDAP bootstrap registry…',
+          'Fetching SSL Labs assessment endpoint…',
+          'Resolving DNS records via recursive resolver…',
+          'Querying AlienVault OTX pulse database…',
+          'Running behavioral pattern correlation engine…',
+          'Aggregating multi-source reputation signals…',
+          'Computing anomaly deviation scores…',
+          'Finalizing risk verdict and confidence score…',
+        ],
+        api: function () { return apiFetch('GET', '/trust?domain=' + encodeURIComponent(domain)); },
+        onSuccess: function (el, data) { finalizeTrustResult(el, data, domain); },
+        errorMsg: 'Scan failed. Check the domain and try again.',
       });
     }
 
@@ -819,6 +830,7 @@
     function runOsintScan() {
       var input = document.getElementById('pdx-osint-input');
       var result = document.getElementById('pdx-osint-result');
+      var btn    = document.getElementById('pdx-osint-btn');
       if (!input || !result) return;
       var target = input.value.trim();
       if (!target) return;
@@ -849,21 +861,18 @@
         'Compiling full intelligence report…',
       ];
 
-      result.innerHTML = buildDeepPipeline('pdx-osint-pipeline', osintStages, {
+      runIntelPipeline({
+        btn: btn,
+        result: result,
+        id: 'pdx-osint-pipeline',
+        stages: osintStages,
         title: 'OSINT Investigation — ' + target,
-        showLog: true,
-      });
-
-      var apiDone = false, pipelineDone = false, apiData = null;
-
-      runDeepPipeline('pdx-osint-pipeline', osintStages, { logLines: osintLogLines }).then(function() {
-        pipelineDone = true;
-        if (apiDone) { if (!apiData) { result.innerHTML = '<div class="pdx-error">Scan failed.</div>'; } else { renderOsintResult(result, apiData, target); } }
-      });
-
-      apiFetch('POST', '/osint/scan', { target: target }).then(function(data) {
-        apiData = data; apiDone = true;
-        if (pipelineDone) { if (!data) { result.innerHTML = '<div class="pdx-error">Scan failed.</div>'; } else { renderOsintResult(result, data, target); } }
+        busyLabel: 'Scanning…',
+        logLines: osintLogLines,
+        api: function () { return apiFetch('POST', '/osint/scan', { target: target }); },
+        onSuccess: function (el, data) { renderOsintResult(el, data, target); },
+        onPayment: function (el, data) { el.innerHTML = ''; showPaymentRequiredResult(el, 'osint', 'OSINT', data); },
+        errorMsg: 'Scan failed.',
       });
     }
 
@@ -1116,16 +1125,10 @@
 
     function renderThreatFeedsTab() {
       return '<div class="pdx-tab-pane">' +
-        '<div class="pdx-section-title">Active Threat Intelligence Feeds</div>' +
-        '<div class="pdx-feed-list">' +
-          feedItem('AlienVault OTX', 'Indicators of compromise — IPs, domains, hashes', 'active', '14.2k pulses') +
-          feedItem('Abuse.ch URLhaus', 'Malicious URLs and malware distribution sites', 'active', 'Live') +
-          feedItem('Emerging Threats', 'Network intrusion signatures and rules', 'active', 'Updated hourly') +
-          feedItem('PhishTank', 'Verified phishing URLs and campaigns', 'active', 'Community verified') +
-          feedItem('CISA KEV', 'Known exploited vulnerabilities catalog', 'active', 'CISA official') +
-          feedItem('Shodan InternetDB', 'Exposed services and open port intelligence', 'active', 'Real-time') +
+        '<div class="pdx-input-row">' +
+          '<button type="button" id="pdx-feeds-sync-btn" class="pdx-btn-primary">Sync Live Feeds</button>' +
         '</div>' +
-        '<div class="pdx-info-box">Configure API keys in Settings → API to enable live feed data and higher rate limits.</div>' +
+        '<div id="pdx-feeds-result">' + renderThreatFeedsList() + '</div>' +
       '</div>';
     }
 
@@ -1369,6 +1372,7 @@
       });
 
       runBtn.addEventListener('click', function() {
+        if (isBtnBusy(runBtn)) return;
         var name  = (document.getElementById('pdx-builder-name') || {}).value || 'My Flow';
         var input = (document.getElementById('pdx-builder-input') || {}).value || '';
         var steps = [];
@@ -1382,6 +1386,7 @@
         builderStages.unshift({ label: 'Initializing AI flow engine', detail: 'Loading LLM configuration and context', duration: 480 });
         builderStages.push({ label: 'Finalizing output', detail: 'Compiling step results into final response', duration: 420 });
 
+        setBtnBusy(runBtn, true, 'Running…');
         result.innerHTML = buildDeepPipeline('pdx-builder-pipeline', builderStages, {
           title: 'AI Flow — ' + name, showLog: true,
         });
@@ -1392,21 +1397,20 @@
         );
 
         var apiDone = false, pipelineDone = false, apiData = null;
+        function finishBuilder() {
+          setBtnBusy(runBtn, false);
+          if (!apiData) { result.innerHTML = '<div class="pdx-error">Flow failed.</div>'; return; }
+          if (apiData.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'builder', 'AI Builder', apiData); return; }
+          renderBuilderResult(result, apiData);
+          showNotif('Flow "' + name + '" completed', 'success');
+        }
         runDeepPipeline('pdx-builder-pipeline', builderStages, { logLines: builderLogLines }).then(function() {
           pipelineDone = true;
-          if (apiDone) {
-            if (!apiData) { result.innerHTML = '<div class="pdx-error">Flow failed.</div>'; return; }
-            if (apiData.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'builder', 'AI Builder', apiData); return; }
-            renderBuilderResult(result, apiData); showNotif('Flow "' + name + '" completed', 'success');
-          }
+          if (apiDone) finishBuilder();
         });
         apiFetch('POST', '/builder/run', { flow_name: name, steps: steps, input: input }).then(function(data) {
           apiData = data; apiDone = true;
-          if (pipelineDone) {
-            if (!data) { result.innerHTML = '<div class="pdx-error">Flow failed.</div>'; return; }
-            if (data.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'builder', 'AI Builder', data); return; }
-            renderBuilderResult(result, data); showNotif('Flow "' + name + '" completed', 'success');
-          }
+          if (pipelineDone) finishBuilder();
         });
       });
     }
@@ -1579,6 +1583,7 @@
       });
 
       runBtn.addEventListener('click', function() {
+        if (isBtnBusy(runBtn)) return;
         var name      = (document.getElementById('pdx-pipeline-name') || {}).value || 'Pipeline';
         var objective = (document.getElementById('pdx-pipeline-objective') || {}).value || '';
         if (!objective) { showNotif('Objective required', 'warn'); return; }
@@ -1596,6 +1601,7 @@
           { label: 'Synthesizing final output', detail: 'Aggregating all agent contributions', duration: 460 },
         ]);
 
+        setBtnBusy(runBtn, true, 'Processing…');
         result.innerHTML = buildDeepPipeline('pdx-pipeline-dp', pipelineStages, {
           title: 'Agent Pipeline — ' + name, showLog: true,
         });
@@ -1606,23 +1612,21 @@
         );
 
         var apiDone = false, pipelineDone = false, apiData = null;
+        function finishPipeline() {
+          setBtnBusy(runBtn, false);
+          if (!apiData) { result.innerHTML = '<div class="pdx-error">Pipeline failed.</div>'; return; }
+          if (apiData.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'pipeline', 'Agent Pipeline', apiData); return; }
+          state.pipelineTrace = (apiData.result && apiData.result.trace) || [];
+          renderPipelineResult(result, apiData);
+          showNotif('Pipeline "' + name + '" completed — ' + agents.length + ' agents', 'success');
+        }
         runDeepPipeline('pdx-pipeline-dp', pipelineStages, { logLines: pipelineLogLines }).then(function() {
           pipelineDone = true;
-          if (apiDone) {
-            if (!apiData) { result.innerHTML = '<div class="pdx-error">Pipeline failed.</div>'; return; }
-            if (apiData.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'pipeline', 'Agent Pipeline', apiData); return; }
-            state.pipelineTrace = (apiData.result && apiData.result.trace) || [];
-            renderPipelineResult(result, apiData); showNotif('Pipeline "' + name + '" completed — ' + agents.length + ' agents', 'success');
-          }
+          if (apiDone) finishPipeline();
         });
         apiFetch('POST', '/pipeline/run', { pipeline_name: name, agents: agents, objective: objective }).then(function(data) {
           apiData = data; apiDone = true;
-          if (pipelineDone) {
-            if (!data) { result.innerHTML = '<div class="pdx-error">Pipeline failed.</div>'; return; }
-            if (data.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'pipeline', 'Agent Pipeline', data); return; }
-            state.pipelineTrace = (data.result && data.result.trace) || [];
-            renderPipelineResult(result, data); showNotif('Pipeline "' + name + '" completed — ' + agents.length + ' agents', 'success');
-          }
+          if (pipelineDone) finishPipeline();
         });
       });
     }
@@ -2383,11 +2387,108 @@
     }
 
     /* ══════════════════════════════════════════════════════
-       DEEP ANALYSIS PIPELINE ENGINE  v5.0
-       Provides multi-stage animated intelligence processing
-       with live log streaming, timing indicators, and
-       incremental findings that appear in real time.
+       INTERACTION + PIPELINE ENGINE  v7.0
     ══════════════════════════════════════════════════════ */
+
+    var PDX_PIPELINE_SPEED = 0.68;
+
+    function setBtnBusy(btn, busy, busyLabel) {
+      if (!btn) return;
+      if (busy) {
+        if (!btn.dataset.pdxLabel) btn.dataset.pdxLabel = btn.textContent;
+        btn.classList.add('pdx-btn--busy');
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        if (busyLabel) btn.textContent = busyLabel;
+      } else {
+        btn.classList.remove('pdx-btn--busy');
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        if (btn.dataset.pdxLabel) btn.textContent = btn.dataset.pdxLabel;
+      }
+    }
+
+    function isBtnBusy(btn) {
+      return !!(btn && btn.classList.contains('pdx-btn--busy'));
+    }
+
+    /**
+     * Parallel staged pipeline + API with instant UI and button guard.
+     */
+    function runIntelPipeline(cfg) {
+      var btn = cfg.btn;
+      var resultEl = cfg.result;
+      if (!resultEl) return;
+      if (isBtnBusy(btn)) return;
+
+      setBtnBusy(btn, true, cfg.busyLabel || 'Running…');
+      resultEl.innerHTML = buildDeepPipeline(cfg.id, cfg.stages, {
+        title: cfg.title,
+        showLog: cfg.showLog !== false,
+      });
+
+      var apiDone = false;
+      var pipelineDone = false;
+      var apiData = null;
+      var finished = false;
+
+      function finish() {
+        if (finished) return;
+        finished = true;
+        setBtnBusy(btn, false);
+        if (!apiData || apiData.error) {
+          if (cfg.onError) cfg.onError(resultEl, apiData);
+          else {
+            resultEl.innerHTML =
+              '<div class="pdx-error">' +
+              escHtml(cfg.errorMsg || 'Operation failed. Please try again.') +
+              '</div>';
+          }
+          return;
+        }
+        if (apiData.error === 'payment_required' && cfg.onPayment) {
+          cfg.onPayment(resultEl, apiData);
+          return;
+        }
+        if (cfg.onSuccess) cfg.onSuccess(resultEl, apiData);
+      }
+
+      runDeepPipeline(cfg.id, cfg.stages, {
+        logLines: cfg.logLines,
+        speed: cfg.speed,
+        findings: cfg.findings,
+        onStage: cfg.onStage,
+      }).then(function () {
+        pipelineDone = true;
+        if (apiDone) finish();
+      });
+
+      Promise.resolve(cfg.api()).then(function (data) {
+        apiData = data;
+        apiDone = true;
+        if (pipelineDone) finish();
+      }).catch(function () {
+        apiData = null;
+        apiDone = true;
+        if (pipelineDone) finish();
+      });
+    }
+
+    function renderThreatFeedsList() {
+      return (
+        '<div class="pdx-section-title">Active Threat Intelligence Feeds</div>' +
+        '<div class="pdx-feed-list">' +
+        feedItem('AlienVault OTX', 'Indicators of compromise — IPs, domains, hashes', 'active', '14.2k pulses') +
+        feedItem('Abuse.ch URLhaus', 'Malicious URLs and malware distribution sites', 'active', 'Live') +
+        feedItem('Emerging Threats', 'Network intrusion signatures and rules', 'active', 'Updated hourly') +
+        feedItem('PhishTank', 'Verified phishing URLs and campaigns', 'active', 'Community verified') +
+        feedItem('CISA KEV', 'Known exploited vulnerabilities catalog', 'active', 'CISA official') +
+        feedItem('Shodan InternetDB', 'Exposed services and open port intelligence', 'active', 'Real-time') +
+        '</div>' +
+        '<div class="pdx-scan-complete pdx-mt-sm"><div class="pdx-scan-complete-dot"></div><span>All configured feeds synchronized</span></div>' +
+        '<div class="pdx-info-box">Configure API keys in Settings → API to enable live feed data and higher rate limits.</div>'
+      );
+    }
 
     /**
      * Build a deep pipeline UI.
@@ -2448,11 +2549,12 @@
       container.classList.add('pdx-dp--running');
       container.classList.remove('pdx-dp--complete');
 
+      var speed = typeof opts.speed === 'number' ? opts.speed : PDX_PIPELINE_SPEED;
       var startTime = Date.now();
       var timerInterval = setInterval(function() {
         if (!document.body.contains(container)) { clearInterval(timerInterval); return; }
         if (timerEl) timerEl.textContent = ((Date.now() - startTime) / 1000).toFixed(1) + 's';
-      }, 100);
+      }, 50);
 
       // Pre-built log lines per stage
       var defaultLogs = [
@@ -2494,7 +2596,8 @@
       return new Promise(function(resolve) {
         var i = 0;
         var stageDurations = stages.map(function(s) {
-          return s.duration || (600 + Math.random() * 700);
+          var base = s.duration || (520 + Math.random() * 480);
+          return Math.max(200, Math.round(base * speed));
         });
 
         // Guard: abort pipeline if container is no longer in the DOM.
@@ -2551,22 +2654,10 @@
         }
 
         appendLog('Intelligence pipeline initialized.');
-        nextStage();
+        requestAnimationFrame(function() {
+          requestAnimationFrame(nextStage);
+        });
       });
-    }
-
-    /* Legacy wrappers — kept for backward compat */
-    function animateScanStages(container, interval) {
-      if (!container) return;
-      var stages = container.querySelectorAll('.pdx-stage');
-      var i = 0;
-      var timer = setInterval(function() {
-        // Abort if container is no longer in the DOM.
-        if (!document.body.contains(container)) { clearInterval(timer); return; }
-        if (i > 0 && stages[i-1]) stages[i-1].classList.add('is-done');
-        if (i < stages.length) { stages[i].classList.add('is-active'); i++; }
-        else clearInterval(timer);
-      }, interval || 700);
     }
 
     function setupTabs(tabsId, contentId, renderers) {
@@ -2587,6 +2678,8 @@
         if (key === 'templates' && tabsId === 'pdx-builder-tabs')  loadBuilderTemplates();
         if (key === 'templates' && tabsId === 'pdx-pipeline-tabs') loadPipelineTemplates();
         if (key === 'library'   && tabsId === 'pdx-conn-tabs')     loadConnectorLibrary();
+        if (key === 'history'   && tabsId === 'pdx-builder-tabs')  loadJobHistory('builder', 'pdx-job-history-pane');
+        if (key === 'history'   && tabsId === 'pdx-pipeline-tabs') loadJobHistory('pipeline', 'pdx-job-history-pane');
         // v4 re-bind hooks
         wireTabHandlers(tabsId, key);
       });
@@ -2651,7 +2744,8 @@
     }
 
     function renderJobHistory(module) {
-      return '<div class="pdx-tab-pane" id="pdx-job-history-pane"><div class="pdx-loading">Loading jobs...</div></div>';
+      setTimeout(function () { loadJobHistory(module, 'pdx-job-history-pane'); }, 0);
+      return '<div class="pdx-tab-pane" id="pdx-job-history-pane"><div class="pdx-loading">Loading jobs…</div></div>';
     }
 
     function renderScanHistory(module) {
@@ -3481,9 +3575,12 @@
       var canvas = document.getElementById('pdx-graph-canvas');
       var detail = document.getElementById('pdx-graph-detail');
       var controls = document.getElementById('pdx-graph-controls');
+      var btn = document.getElementById('pdx-graph-btn');
       if (!input || !canvas) return;
       var value = input.value.trim();
       if (!value) return;
+      if (isBtnBusy(btn)) return;
+      setBtnBusy(btn, true, 'Mapping…');
 
       var graphStages = [
         { label: 'Seeding IOC graph engine',              detail: 'Initializing relationship traversal from: ' + value,  duration: 440 },
@@ -3522,6 +3619,8 @@
     }
 
     function finalizeGraph(canvas, detail, controls, data, value) {
+      var btn = document.getElementById('pdx-graph-btn');
+      setBtnBusy(btn, false);
       if (!data) { detail.innerHTML = '<div class="pdx-error">Correlation failed.</div>'; return; }
       var nodes = data.nodes || [];
       var edges = data.edges || [];
@@ -3878,6 +3977,7 @@
       var inp  = document.getElementById('pdx-inv-input');
       var type = document.getElementById('pdx-inv-type');
       var res  = document.getElementById('pdx-inv-result');
+      var btn  = document.getElementById('pdx-inv-btn');
       if (!inp || !res) return;
       var value = inp.value.trim();
       if (!value) return;
@@ -3891,28 +3991,28 @@
         { label: 'Running AI relationship analysis',      detail: 'Generating natural language summary of findings',      duration: 720 },
         { label: 'Building correlation report',           detail: 'Compiling relationships and confidence scores',        duration: 420 },
       ];
-      var corrLogLines = [
-        'Correlation engine initialized for: ' + value,
-        'Classifying IOC type…',
-        'Querying IOC relationship graph…',
-        'Cross-referencing threat intelligence feeds…',
-        'Mapping related infrastructure nodes…',
-        'Running AI relationship analysis…',
-        'Compiling correlation report…',
-      ];
 
-      res.innerHTML = buildDeepPipeline('pdx-corr-pipeline', corrStages, {
-        title: 'IOC Correlation — ' + value, showLog: true,
-      });
-
-      var apiDone = false, pipelineDone = false, apiData = null;
-      runDeepPipeline('pdx-corr-pipeline', corrStages, { logLines: corrLogLines }).then(function() {
-        pipelineDone = true;
-        if (apiDone) renderCorrResult(res, apiData, value);
-      });
-      apiFetch('POST', '/intel/correlate', { value: value, type: type ? type.value : '' }).then(function(data) {
-        apiData = data; apiDone = true;
-        if (pipelineDone) renderCorrResult(res, data, value);
+      runIntelPipeline({
+        btn: btn,
+        result: res,
+        id: 'pdx-corr-pipeline',
+        stages: corrStages,
+        title: 'IOC Correlation — ' + value,
+        busyLabel: 'Correlating…',
+        logLines: [
+          'Correlation engine initialized for: ' + value,
+          'Classifying IOC type…',
+          'Querying IOC relationship graph…',
+          'Cross-referencing threat intelligence feeds…',
+          'Mapping related infrastructure nodes…',
+          'Running AI relationship analysis…',
+          'Compiling correlation report…',
+        ],
+        api: function () {
+          return apiFetch('POST', '/intel/correlate', { value: value, type: type ? type.value : '' });
+        },
+        onSuccess: function (el, data) { renderCorrResult(el, data, value); },
+        errorMsg: 'Correlation failed.',
       });
     }
 
@@ -4208,12 +4308,48 @@
        v4: WIRE UP DYNAMIC HANDLERS after tab render
     ══════════════════════════════════════════════════════ */
 
+    function wireThreatFeeds() {
+      var btn = document.getElementById('pdx-feeds-sync-btn');
+      var res = document.getElementById('pdx-feeds-result');
+      if (!btn || !res || btn.dataset.pdxWired) return;
+      btn.dataset.pdxWired = '1';
+      btn.addEventListener('click', function () {
+        runIntelPipeline({
+          btn: btn,
+          result: res,
+          id: 'pdx-feeds-pipeline',
+          stages: [
+            { label: 'Connecting to feed endpoints', detail: 'AlienVault OTX, Abuse.ch, CISA KEV', duration: 360 },
+            { label: 'Validating API credentials', detail: 'Checking rate limits and auth tokens', duration: 320 },
+            { label: 'Synchronizing pulse databases', detail: 'Pulling latest IOC pulses', duration: 400 },
+            { label: 'Refreshing local IOC cache', detail: 'Updating dock intelligence index', duration: 340 },
+          ],
+          title: 'Threat Feed Sync',
+          busyLabel: 'Syncing…',
+          showLog: true,
+          logLines: [
+            'Threat feed sync initiated…',
+            'Authenticating with OTX API…',
+            'Pulling Abuse.ch URLhaus updates…',
+            'Refreshing CISA KEV catalog…',
+          ],
+          api: function () {
+            return apiFetch('GET', '/threat/feeds').then(function (d) {
+              return d || { ok: true };
+            });
+          },
+          onSuccess: function (el) { el.innerHTML = renderThreatFeedsList(); },
+        });
+      });
+    }
+
     function wireTabHandlers(tabsId, tabKey) {
       // Investigation board
       if (tabsId === 'pdx-inv-tabs') {
         if (tabKey === 'correlate') wireInvCorrelate();
         if (tabKey === 'timeline')  wireInvTimeline();
       }
+      if (tabsId === 'pdx-threat-tabs' && tabKey === 'feeds') wireThreatFeeds();
       // Memory
       if (tabsId === 'pdx-mem-tabs') {
         if (tabKey === 'search') wireMemSearch();

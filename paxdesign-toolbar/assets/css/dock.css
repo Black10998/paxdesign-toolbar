@@ -671,7 +671,6 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
 
 /* ─── Scan stages / progress ─────────────────────────────── */
-.pdx-scanning { padding: 16px 0; }
 
 /* ─── Result container ───────────────────────────────────── */
 .pdx-result { display: flex; flex-direction: column; gap: 12px; }

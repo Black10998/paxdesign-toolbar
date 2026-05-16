@@ -484,3 +484,59 @@
     pointer-events: none;
   }
 }
+
+/* ─── v7: responsive action feedback ─────────────────────── */
+.pdx-btn-primary,
+.pdx-btn-ghost,
+.pdx-btn-sm,
+.pdx-graph-ctrl {
+  touch-action: manipulation;
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+
+.pdx-btn--pressed {
+  transform: scale(0.97);
+}
+
+.pdx-btn-primary.pdx-btn--busy,
+.pdx-btn-primary:disabled[aria-busy="true"] {
+  opacity: 0.88;
+  cursor: wait;
+  position: relative;
+  padding-left: 28px;
+}
+
+.pdx-btn-primary.pdx-btn--busy::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border: 2px solid var(--pdx-border);
+  border-top-color: var(--pdx-accent);
+  border-radius: 50%;
+  animation: pdx-spin 0.55s linear infinite;
+}
+
+.pdx-deep-pipeline {
+  will-change: opacity;
+}
+
+.pdx-dp-stage.is-active .pdx-dp-stage-label {
+  transition: color 0.15s ease;
+}
+
+.pdx-dp-log-line.is-new {
+  animation: pdx-log-flash 0.35s ease;
+}
+
+@keyframes pdx-log-flash {
+  from { background: var(--pdx-accent-dim); }
+  to { background: transparent; }
+}
+
+.pdx-feed-dot--active {
+  animation: pdx-pulse 1.4s ease infinite;
+}
