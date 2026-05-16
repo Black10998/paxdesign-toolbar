@@ -48,8 +48,15 @@ class PDX_CachePurge {
 		$last = get_option( self::VERSION_OPT, '' );
 		if ( $last === PDX_VERSION ) return;
 
+		// Version changed — purge all layers and record new version.
+		// This fires once per version bump, on the first WordPress load
+		// after the plugin files are updated.
 		self::purge_all();
 		update_option( self::VERSION_OPT, PDX_VERSION, false );
+
+		// Also delete any cached asset URLs WordPress may have stored.
+		delete_transient( 'pdx_asset_urls' );
+		wp_cache_delete( 'pdx_asset_urls' );
 	}
 
 	/* ── Master purge ───────────────────────────────────── */

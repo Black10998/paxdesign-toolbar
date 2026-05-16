@@ -1,4 +1,4 @@
-/* PaxDesign Utility Dock — v4.1.3
+/* PaxDesign Utility Dock — v4.2.0
    Enterprise AI/Cyber SaaS dock styles.
    #pdx-dock stays inside #pdx-root (scoped variables, fixed position).
    #pdx-backdrop, #pdx-panel, #pdx-notif are appended to <body> by JS. */
@@ -303,22 +303,74 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
 /* ─── Panel header ───────────────────────────────────────── */
 .pdx-ph { display: flex; flex-direction: column; flex: 1; }
+
+/* Panel header: column layout for content, close button absolutely positioned.
+   The close button is injected by JS as the last child of .pdx-ph-hd.
+   Using position:relative + absolute close button avoids needing a wrapper div
+   in the 17 JS render locations. Content gets full width; close is always visible. */
 .pdx-ph-hd {
-  padding: 20px 20px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 14px 52px 14px 20px; /* right padding reserves space for close button */
   border-bottom: 1px solid rgba(255,255,255,.08);
-  background: #161b22;
-  position: sticky; top: 0; z-index: 10;
+  background: var(--pdx-bg-el, #161b22);
+  flex-shrink: 0;
 }
+
+/* Title row */
 .pdx-ph-title {
   display: flex; align-items: center; gap: 8px;
-  font: 600 15px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  color: #e6edf3; margin-bottom: 4px;
+  font: 600 15px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color: var(--pdx-hi, #e6edf3);
+  margin: 0;
+  flex-wrap: wrap;
 }
-.pdx-ph-title svg { width: 16px; height: 16px; stroke: #c2ff00; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
-.pdx-ph-sub { font: 12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: #6e7681; }
+.pdx-ph-title svg { width: 16px; height: 16px; stroke: var(--pdx-accent, #c2ff00); fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.pdx-ph-sub { font: 12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: var(--pdx-lo, #6e7681); margin-top: 3px; }
 .pdx-ph-body { padding: 16px 20px; flex: 1; display: flex; flex-direction: column; gap: 12px; }
 .pdx-ph--chat { height: 100%; }
 .pdx-ph--chat .pdx-ph-body { padding: 0; gap: 0; }
+
+/* Close button — absolutely positioned top-right, always visible.
+   Works with the existing JS HTML structure without any wrapper div. */
+.pdx-mobile-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--pdx-bg-hov, rgba(255,255,255,.07));
+  border-radius: 50%;
+  color: var(--pdx-mid, #8b949e);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+  -webkit-tap-highlight-color: transparent;
+  z-index: 2;
+}
+.pdx-mobile-close:hover,
+.pdx-mobile-close:active {
+  background: var(--pdx-bg-el2, rgba(255,255,255,.12));
+  color: var(--pdx-hi, #e6edf3);
+}
+.pdx-mobile-close svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  pointer-events: none;
+  display: block;
+}
 
 /* ─── Badges ─────────────────────────────────────────────── */
 .pdx-badge {
@@ -379,14 +431,24 @@ body.pdx-no-scroll { overflow: hidden !important; }
 .pdx-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
 .pdx-btn-primary.pdx-btn-full { width: 100%; }
 
-.pdx-btn-ghost {
+.pdx-btn-ghost,
+.pdx-btn-secondary {
   padding: 7px 12px; background: transparent;
   border: 1px solid rgba(255,255,255,.12); border-radius: 6px;
   color: #8b949e; font: 13px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   cursor: pointer; transition: border-color .15s, color .15s;
   white-space: nowrap; flex-shrink: 0;
 }
-.pdx-btn-ghost:hover { border-color: rgba(255,255,255,.25); color: #e6edf3; }
+.pdx-btn-ghost:hover,
+.pdx-btn-secondary:hover { border-color: rgba(255,255,255,.25); color: #e6edf3; }
+.pdx-btn-danger {
+  padding: 7px 12px; background: rgba(248,81,73,.12);
+  border: 1px solid rgba(248,81,73,.3); border-radius: 6px;
+  color: #f85149; font: 13px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  cursor: pointer; transition: background .15s, border-color .15s;
+  white-space: nowrap; flex-shrink: 0;
+}
+.pdx-btn-danger:hover { background: rgba(248,81,73,.2); border-color: rgba(248,81,73,.5); }
 .pdx-btn-sm   { padding: 5px 10px; font-size: 12px; }
 .pdx-btn-icon { padding: 4px 8px; font-size: 14px; line-height: 1; }
 
@@ -860,55 +922,18 @@ body.pdx-no-scroll { overflow: hidden !important; }
     min-height: 0;
   }
 
-  /* Panel header: sticky, compact, with close button */
+  /* Panel header: tighter padding on mobile, preserve right space for close button */
   .pdx-ph-hd {
-    padding: 12px 16px 10px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--pdx-bg-el, #161b22);
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    border-bottom: 1px solid var(--pdx-border, rgba(255,255,255,.08));
+    padding: 12px 48px 10px 16px;
   }
 
   .pdx-ph-title {
     font-size: 14px;
-    flex: 1;
-    min-width: 0;
   }
 
-  /* Close button: small, round, accessible */
   .pdx-mobile-close {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: var(--pdx-bg-hov, rgba(255,255,255,.07));
-    border-radius: 50%;
-    color: var(--pdx-mid, #8b949e);
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background .15s, color .15s;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .pdx-mobile-close:active {
-    background: var(--pdx-bg-el2, rgba(255,255,255,.12));
-    color: var(--pdx-hi, #e6edf3);
-  }
-  .pdx-mobile-close svg {
-    width: 13px;
-    height: 13px;
-    stroke: currentColor;
-    fill: none;
-    stroke-width: 2;
-    stroke-linecap: round;
-    pointer-events: none;
+    top: 10px;
+    right: 12px;
   }
 
   /* Panel body: natural scroll, safe-area bottom padding */
@@ -971,14 +996,16 @@ body.pdx-no-scroll { overflow: hidden !important; }
   .pdx-select,
   .pdx-chat-input { font-size: 16px !important; }
 
-  /* Capability tags: horizontal scroll, no scrollbar */
+  /* Capability tags: horizontal scroll, no scrollbar.
+     No negative margin — header already has right padding for close button. */
   .pdx-module-caps {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    margin-right: calc(-1 * var(--pdx-sp-4, 16px));
-    padding-right: var(--pdx-sp-4, 16px);
+    margin-right: 0;
+    padding-right: 0;
+    max-width: 100%;
   }
   .pdx-module-caps::-webkit-scrollbar { display: none; }
   .pdx-cap-tag { flex-shrink: 0; }
@@ -1227,8 +1254,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
   /* Single-column metrics */
   .pdx-metric-grid { grid-template-columns: 1fr; }
 
-  /* Tighter panel header */
-  .pdx-ph-hd { padding: 10px 12px 8px; }
+  /* Tighter panel header — preserve right padding for close button */
+  .pdx-ph-hd { padding: 10px 44px 8px 12px; }
 
   /* Hide verbose pipeline log */
   .pdx-dp-log { display: none; }
@@ -1500,6 +1527,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
   /* ── Content-area buttons (not dock buttons) ────────────── */
   .pdx-btn-primary,
   .pdx-btn-secondary,
+  .pdx-btn-ghost,
   .pdx-btn-danger {
     height: var(--pdx-cbtn-h);
     font-size: var(--pdx-cbtn-fs);
@@ -1511,6 +1539,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     justify-content: center;
     min-width: 0;
     white-space: nowrap;
+    box-sizing: border-box;
   }
   /* Full-width primary CTA inside panels */
   .pdx-ph-body .pdx-btn-primary,
@@ -1525,10 +1554,13 @@ body.pdx-no-scroll { overflow: hidden !important; }
     flex-direction: column;
     gap: var(--pdx-sp-2);
   }
-  .pdx-input-row .pdx-btn-primary {
+  .pdx-input-row .pdx-btn-primary,
+  .pdx-input-row .pdx-btn-ghost,
+  .pdx-input-row .pdx-btn-secondary {
     width: 100%;
     height: 40px;
     font-size: var(--pdx-t-md);
+    justify-content: center;
   }
 
   /* ── Code blocks ────────────────────────────────────────── */
@@ -1747,7 +1779,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     gap: var(--pdx-card-gap);
   }
   #pdx-root[data-mobile-spacing="compact"] .pdx-ph-hd {
-    padding: var(--pdx-sp-2) var(--pdx-sp-3);
+    padding: var(--pdx-sp-2) 44px var(--pdx-sp-2) var(--pdx-sp-3);
   }
 
   /* Relaxed: loosen the token scale */
@@ -1763,7 +1795,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     gap: var(--pdx-card-gap);
   }
   #pdx-root[data-mobile-spacing="relaxed"] .pdx-ph-hd {
-    padding: var(--pdx-sp-4) var(--pdx-sp-5) var(--pdx-sp-3);
+    padding: var(--pdx-sp-4) 52px var(--pdx-sp-3) var(--pdx-sp-5);
   }
 
   /* Compact mode: smaller buttons and icons */
@@ -2440,13 +2472,16 @@ body.pdx-no-scroll { overflow: hidden !important; }
    v5.0 — MODULE DESCRIPTION & CAPABILITY TAGS
 ═══════════════════════════════════════════════════════════ */
 .pdx-ph-desc {
-  font: 12px/1.55 var(--pdx-font, sans-serif);
+  font: 12px/1.55 var(--pdx-font, -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif);
   color: var(--pdx-mid, #8b949e);
   margin-top: 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255,255,255,.05);
+  margin-bottom: 0;
+  display: block;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
-.pdx-module-caps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.pdx-module-caps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; max-width: 100%; }
 .pdx-cap-tag {
   font: 500 9px/1 var(--pdx-mono, monospace);
   text-transform: uppercase; letter-spacing: .05em;
@@ -2752,6 +2787,95 @@ body.pdx-no-scroll { overflow: hidden !important; }
   border: 1px solid rgba(255,255,255,.08);
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MISSING CLASS DEFINITIONS — v5 timeline, AI summary, pipeline
+   Classes used in JS render functions but previously undefined.
+═══════════════════════════════════════════════════════════ */
+
+/* ─── v5 Timeline ────────────────────────────────────────── */
+.pdx-timeline-v5 {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 0;
+}
+.pdx-tl-event-v5 {
+  display: flex;
+  gap: 10px;
+  position: relative;
+  padding-bottom: 14px;
+}
+.pdx-tl-event-v5:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 12px;
+  width: 1px;
+  bottom: 0;
+  background: var(--pdx-border, rgba(255,255,255,.08));
+}
+.pdx-tl-dot-v5 {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+  background: var(--pdx-indigo, #6366f1);
+  border: 2px solid var(--pdx-bg-el, #161b22);
+  box-shadow: 0 0 0 2px rgba(99,102,241,.2);
+}
+.pdx-tl-body-v5 {
+  flex: 1;
+  min-width: 0;
+}
+.pdx-tl-date-v5 {
+  font: 10px/1 var(--pdx-mono, monospace);
+  color: var(--pdx-lo, #6e7681);
+  margin-bottom: 3px;
+}
+.pdx-tl-desc-v5 {
+  font: 12px/1.5 var(--pdx-font, sans-serif);
+  color: var(--pdx-hi, #e6edf3);
+  word-break: break-word;
+}
+.pdx-tl-source-v5 {
+  font: 10px/1 var(--pdx-mono, monospace);
+  color: var(--pdx-mute, #484f58);
+  margin-top: 3px;
+}
+
+/* ─── v5 AI Summary ──────────────────────────────────────── */
+.pdx-ai-summary-v5 {
+  background: var(--pdx-indigo-dim, rgba(99,102,241,.15));
+  border: 1px solid rgba(99,102,241,.25);
+  border-radius: var(--pdx-r, 8px);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pdx-ai-label-v5 {
+  font: 700 9px/1 var(--pdx-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--pdx-indigo, #6366f1);
+}
+
+/* ─── Pipeline finding body ──────────────────────────────── */
+.pdx-dp-finding-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ─── Stage label (simple pipeline) ─────────────────────── */
+.pdx-stage-label {
+  font: 11px/1.3 var(--pdx-mono, monospace);
+  color: var(--pdx-hi, #e6edf3);
+}
+.pdx-stage.is-active .pdx-stage-label { color: #fff; }
+.pdx-stage.is-done   .pdx-stage-label { color: var(--pdx-mid, #8b949e); }
 
 /* ─── Light mode overrides ───────────────────────────────── */
 @media (prefers-color-scheme: light) {

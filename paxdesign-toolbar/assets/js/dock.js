@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v4.1.3
+ * PaxDesign Utility Dock — v4.2.0
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.
@@ -249,6 +249,29 @@
 
     /* ── v4: Billing badge in dock ────────────────────────── */
     buildBillingBadge();
+
+    /* ── Close button — always inject, not gated on mobileEnabled ── */
+    // The close button is always rendered in the panel header.
+    // CSS controls its size/visibility per breakpoint.
+    var _closeSvg = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>';
+
+    function injectCloseBtnGlobal() {
+      var hd = panel.querySelector('.pdx-ph-hd');
+      if (!hd || hd.querySelector('.pdx-mobile-close')) return;
+      var btn = document.createElement('button');
+      btn.className = 'pdx-mobile-close';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'Close panel');
+      btn.innerHTML = _closeSvg;
+      btn.addEventListener('click', closePanel);
+      hd.appendChild(btn);
+    }
+
+    // Re-inject after every renderPanel() call via MutationObserver.
+    var _closeBtnObserver = new MutationObserver(function() {
+      injectCloseBtnGlobal();
+    });
+    _closeBtnObserver.observe(panel, { childList: true, subtree: true });
 
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
@@ -2747,27 +2770,9 @@
         ].forEach(removeProp);
       }
 
-      // ── Close button ─────────────────────────────────────
-      var closeSvg = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>';
-
-      function injectCloseBtn() {
-        if (!isMobile) return;
-        var hd = panel.querySelector('.pdx-ph-hd');
-        if (!hd || hd.querySelector('.pdx-mobile-close')) return;
-        var btn = document.createElement('button');
-        btn.className = 'pdx-mobile-close';
-        btn.type = 'button';
-        btn.setAttribute('aria-label', 'Close panel');
-        btn.innerHTML = closeSvg;
-        btn.addEventListener('click', closePanel);
-        hd.appendChild(btn);
-      }
-
-      // Re-inject after every renderPanel() call.
-      var panelObserver = new MutationObserver(function() {
-        if (isMobile) injectCloseBtn();
-      });
-      panelObserver.observe(panel, { childList: true, subtree: true });
+      // Close button is handled globally by injectCloseBtnGlobal() above.
+      // setupMobile only needs to call it once on enter.
+      function injectCloseBtn() { injectCloseBtnGlobal(); }
 
       // ── Enter / exit mobile mode ─────────────────────────
       function enterMobile() {
