@@ -1963,9 +1963,96 @@
        SHARED UTILITIES
     ══════════════════════════════════════════════════════ */
 
+    /* Per-module benefit copy shown on the paywall screen. */
+    var PDX_MODULE_FEATURES = {
+      threat: [
+        'CVE lookup across NVD & CIRCL databases',
+        'Real-time threat feed aggregation',
+        'Attack surface mapping with risk scoring',
+        'Infrastructure graph visualisation',
+        'IOC search & STIX export'
+      ],
+      osint: [
+        'Deep domain & IP intelligence',
+        'VirusTotal & Shodan integration',
+        'Email discovery via Hunter.io',
+        'IOC extraction & timeline reconstruction',
+        'Full investigation report with AI summary'
+      ],
+      personas: [
+        'Specialist AI personas (Analyst, Developer, Strategist)',
+        'Persistent memory across sessions',
+        'Full conversation history & export',
+        'Context-aware responses per role',
+        'Workspace save & recall'
+      ],
+      builder: [
+        'Visual AI workflow builder',
+        'Chain LLM steps, transforms & logic',
+        'Reusable template library',
+        'One-click flow execution',
+        'Export & deploy pipelines'
+      ],
+      pipeline: [
+        'Multi-agent task orchestration',
+        'Role-based agent assignment',
+        'Handoff tracing & execution logs',
+        'Parallel & sequential agent chains',
+        'Full trace export'
+      ],
+      automation: [
+        'AI-assisted browser task analysis',
+        'Structured step-by-step execution plans',
+        'Data extraction & scraping reports',
+        'Job queue with async processing',
+        'Result export & workspace save'
+      ],
+      connectors: [
+        'Live REST, Slack, Airtable & Notion testing',
+        'GitHub & Zapier integration',
+        'Response inspection & latency checks',
+        'Webhook configuration',
+        'Connector library with saved configs'
+      ],
+      investigation: [
+        'Unified multi-source investigation board',
+        'Cross-module evidence correlation',
+        'Timeline & event reconstruction',
+        'Collaborative case notes',
+        'Export full investigation report'
+      ],
+      graph: [
+        'Interactive infrastructure graph',
+        'Node relationship mapping',
+        'Live data from Shodan & DNS',
+        'Exportable graph snapshots',
+        'Drill-down host details'
+      ],
+      team: [
+        'Shared team workspaces',
+        'Role-based access control',
+        'Collaborative case management',
+        'Audit trail per member',
+        'Invite & manage team members'
+      ]
+    };
+
+    function paywallFeaturesHtml(modId) {
+      var features = PDX_MODULE_FEATURES[modId];
+      if (!features || !features.length) return '';
+      var items = features.map(function(f) {
+        return '<li class="pdx-pwf-item">' +
+          '<svg class="pdx-pwf-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,8 6,12 14,4"/></svg>' +
+          '<span>' + escHtml(f) + '</span>' +
+          '</li>';
+      }).join('');
+      return '<ul class="pdx-paywall-features">' + items + '</ul>';
+    }
+
     function renderPaywall(mod, access) {
       var price    = (access && access.price) || mod.price || mod.default_price || 0;
       var currency = (access && access.currency) || 'USD';
+      var priceFormatted = parseFloat(price).toFixed(2);
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('shield') + '<span>' + escHtml(mod.label || 'Module') + '</span></div></div>' +
@@ -1974,8 +2061,9 @@
               '<div class="pdx-paywall-icon">' + svgIcon('shield') + '</div>' +
               '<div class="pdx-paywall-title">Premium Module</div>' +
               '<div class="pdx-paywall-desc">' + escHtml(mod.description || '') + '</div>' +
-              '<div class="pdx-paywall-price">' + currency + ' ' + price + '</div>' +
-              '<button class="pdx-btn-primary pdx-btn-full pdx-unlock-btn" data-module="' + escHtml(mod.id || '') + '" data-price="' + price + '" data-currency="' + currency + '">Unlock Access</button>' +
+              '<div class="pdx-paywall-price">' + escHtml(currency) + ' ' + priceFormatted + '</div>' +
+              '<button class="pdx-btn-primary pdx-btn-full pdx-unlock-btn" data-module="' + escHtml(mod.id || '') + '" data-price="' + price + '" data-currency="' + escHtml(currency) + '">Unlock Access</button>' +
+              paywallFeaturesHtml(mod.id || '') +
             '</div>' +
           '</div>' +
         '</div>';
