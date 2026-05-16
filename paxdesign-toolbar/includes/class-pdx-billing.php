@@ -16,12 +16,16 @@ class PDX_Billing {
 	const T_USAGE   = 'pdx_usage';
 	const T_CREDITS = 'pdx_credits';
 
+	/** No-arg constructor — all methods are static; instance only used for DI container. */
+	public function __construct() {}
+
 	/* ── Plans ──────────────────────────────────────────── */
 
 	public static function plans(): array {
 		return [
 			'free' => [
 				'id'          => 'free',
+				'name'        => 'Free',
 				'label'       => 'Free',
 				'price_month' => 0,
 				'price_year'  => 0,
@@ -42,6 +46,7 @@ class PDX_Billing {
 			],
 			'pro' => [
 				'id'          => 'pro',
+				'name'        => 'Pro',
 				'label'       => 'Pro',
 				'price_month' => 29,
 				'price_year'  => 290,
@@ -62,6 +67,7 @@ class PDX_Billing {
 			],
 			'team' => [
 				'id'          => 'team',
+				'name'        => 'Team',
 				'label'       => 'Team',
 				'price_month' => 99,
 				'price_year'  => 990,
@@ -82,6 +88,7 @@ class PDX_Billing {
 			],
 			'enterprise' => [
 				'id'          => 'enterprise',
+				'name'        => 'Enterprise',
 				'label'       => 'Enterprise',
 				'price_month' => 0,
 				'price_year'  => 0,
@@ -286,8 +293,13 @@ class PDX_Billing {
 	/* ── Stripe architecture ────────────────────────────── */
 
 	public static function create_stripe_checkout( int $user_id, string $plan_id, string $cycle = 'month' ): array {
-		$key = get_option( 'pdx_stripe_secret_key', '' );
-		if ( ! $key ) return [ 'error' => 'Stripe not configured.' ];
+		// Read from PDX_Settings if available, fall back to raw option
+		$key = '';
+		if ( class_exists( 'PDX_Settings', false ) && function_exists( 'pdx_settings' ) ) {
+			$key = pdx_settings()->get( 'stripe.secret_key', '' );
+		}
+		if ( ! $key ) $key = get_option( 'pdx_stripe_secret_key', '' );
+		if ( ! $key ) return [ 'error' => 'Stripe not configured. Add your Stripe secret key in Admin → Billing.' ];
 
 		$plans = self::plans();
 		$plan  = $plans[ $plan_id ] ?? null;
@@ -328,10 +340,15 @@ class PDX_Billing {
 
 	public static function plan_distribution(): array {
 		global $wpdb;
-		return $wpdb->get_results(
+		$rows = $wpdb->get_results(
 			"SELECT plan_id, COUNT(*) as users FROM {$wpdb->prefix}" . self::T_SUBS . " GROUP BY plan_id",
 			ARRAY_A
 		) ?: [];
+		$out = [];
+		foreach ( $rows as $r ) {
+			$out[ $r['plan_id'] ] = (int) $r['users'];
+		}
+		return $out;
 	}
 
 	public static function mrr(): float {

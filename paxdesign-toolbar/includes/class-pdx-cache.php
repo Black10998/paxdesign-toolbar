@@ -19,6 +19,28 @@ class PDX_Cache {
 	private static array $local = [];
 	private static array $stats = [ 'hits' => 0, 'misses' => 0, 'writes' => 0 ];
 
+	/* ── Bootstrap ─────────────────────────────────────── */
+
+	/** Called at plugin boot — no-op for now, reserved for future warm-up. */
+	public static function init(): void {}
+
+	/** Delete expired transients matching our namespace (maintenance cron). */
+	public static function flush_expired(): void {
+		global $wpdb;
+		$like = $wpdb->esc_like( '_transient_timeout_' . self::NS ) . '%';
+		$keys = $wpdb->get_col( $wpdb->prepare(
+			"SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND option_value < %d",
+			$like, time()
+		) );
+		foreach ( $keys as $timeout_key ) {
+			$transient_key = str_replace( '_transient_timeout_', '_transient_', $timeout_key );
+			$name          = str_replace( '_transient_', '', $transient_key );
+			delete_transient( $name );
+		}
+		// Clear local cache entirely on maintenance run
+		self::$local = [];
+	}
+
 	/* ── Read ───────────────────────────────────────────── */
 
 	public static function get( string $key, $default = null ) {

@@ -25,6 +25,9 @@ class PDX_Memory {
 	const TABLE = 'pdx_memory';
 	const MAX_PER_AGENT = 1000;
 
+	/** No-arg constructor — all methods are static. */
+	public function __construct() {}
+
 	/* ── Schema ─────────────────────────────────────────── */
 
 	public static function install(): void {
@@ -104,12 +107,16 @@ class PDX_Memory {
 			$user_id, $agent, $limit
 		), ARRAY_A ) ?: [];
 
-		// Update access counts
+		// Update access counts — mem_id is a VARCHAR, quote each value safely
 		if ( ! empty( $rows ) ) {
-			$ids = implode( ',', array_map( 'intval', array_column( $rows, 'mem_id' ) ) );
-			$wpdb->query( "UPDATE {$wpdb->prefix}" . self::TABLE . "
-				SET access_count = access_count + 1, last_accessed = NOW()
-				WHERE mem_id IN ('{$ids}')" );
+			$placeholders = implode( ',', array_fill( 0, count( $rows ), '%s' ) );
+			$ids          = array_column( $rows, 'mem_id' );
+			$wpdb->query( $wpdb->prepare(
+				"UPDATE {$wpdb->prefix}" . self::TABLE . "
+				 SET access_count = access_count + 1, last_accessed = NOW()
+				 WHERE mem_id IN ({$placeholders})",
+				...$ids
+			) );
 		}
 
 		return $rows;
@@ -233,5 +240,10 @@ class PDX_Memory {
 		return (int) $wpdb->query(
 			"DELETE FROM {$wpdb->prefix}" . self::TABLE . " WHERE expires_at IS NOT NULL AND expires_at < NOW()"
 		);
+	}
+
+	/** Alias called by maintenance cron — prunes expired entries (days arg ignored; TTL-based). */
+	public static function prune_old( int $days = 90 ): int {
+		return self::prune_expired();
 	}
 }

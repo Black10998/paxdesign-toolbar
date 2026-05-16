@@ -25,7 +25,7 @@ class PDX_SSE {
 	}
 
 	public function register(): void {
-		register_rest_route( 'pdx/v1', '/stream', [
+		register_rest_route( 'pdx/v1', '/sse', [
 			'methods'             => 'GET',
 			'callback'            => [ $this, 'stream' ],
 			'permission_callback' => '__return_true',
@@ -43,7 +43,11 @@ class PDX_SSE {
 		header( 'Connection: keep-alive' );
 		header( 'Access-Control-Allow-Origin: ' . esc_url( home_url() ) );
 
-		$channels = (array) ( $req->get_param( 'channels' ) ?? [ 'activity' ] );
+		// Accept both ?channel=activity (singular) and ?channels[]=... (plural)
+		$channel  = $req->get_param( 'channel' );
+		$channels = $channel
+			? [ sanitize_key( $channel ) ]
+			: (array) ( $req->get_param( 'channels' ) ?? [ 'activity' ] );
 		$user_id  = is_user_logged_in() ? get_current_user_id() : 0;
 		$start    = time();
 		$last_hb  = 0;

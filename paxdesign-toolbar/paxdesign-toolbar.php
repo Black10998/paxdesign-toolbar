@@ -11,7 +11,7 @@
  * Text Domain:  paxdesign-toolbar
  * Domain Path:  /languages
  * Requires at least: 6.0
- * Requires PHP: 7.4
+ * Requires PHP: 8.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -100,16 +100,12 @@ final class PaxDesign_Toolbar {
 		$this->admin    = new PDX_Admin( $this->settings, $this->modules );
 		$this->setup    = new PDX_Setup();
 
-		// v4 services — register in container
-		$this->container->singleton( 'settings',    fn() => $this->settings );
-		$this->container->singleton( 'modules',     fn() => $this->modules );
-		$this->container->singleton( 'commerce',    fn() => $this->commerce );
-		$this->container->singleton( 'intel',       fn() => $this->intel );
-		$this->container->singleton( 'billing',     fn() => new PDX_Billing( $this->settings ) );
-		$this->container->singleton( 'correlation', fn() => new PDX_Correlation() );
-		$this->container->singleton( 'worker',      fn() => new PDX_Worker() );
-		$this->container->singleton( 'memory',      fn() => new PDX_Memory( $this->settings ) );
-		$this->container->singleton( 'team',        fn() => new PDX_Team() );
+		// v4 services — register instantiable objects in container
+		// (all-static classes like PDX_Billing, PDX_Correlation, etc. are used directly)
+		$this->container->bind_instance( 'settings', $this->settings );
+		$this->container->bind_instance( 'modules',  $this->modules );
+		$this->container->bind_instance( 'commerce', $this->commerce );
+		$this->container->bind_instance( 'intel',    $this->intel );
 
 		// REST API + SSE
 		$this->rest = new PDX_REST_API( $this->settings, $this->modules, $this->commerce, $this->intel );

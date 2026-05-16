@@ -11,8 +11,17 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 class PDX_EventBus {
 
+	private static ?self $instance  = null;
 	private static array $listeners = [];
 	private static array $fired     = [];
+
+	private function __construct() {}
+
+	/** Singleton accessor — allows bootstrap to call PDX_EventBus::instance(). */
+	public static function instance(): self {
+		if ( null === self::$instance ) self::$instance = new self();
+		return self::$instance;
+	}
 
 	/* ── Registration ───────────────────────────────────── */
 
@@ -55,18 +64,21 @@ class PDX_EventBus {
 				try {
 					$listener( $payload );
 				} catch ( \Throwable $e ) {
-					// Log but don't halt
-					PDX_Audit::log( 'event_bus', 'listener_error', [
-						'event'   => $event,
-						'error'   => $e->getMessage(),
-						'class'   => get_class( $e ),
-					], 'error' );
+					// Log but don't halt — guard against circular dependency at boot
+					if ( class_exists( 'PDX_Audit', false ) ) {
+						PDX_Audit::log( 'event_bus', 'listener_error', [
+							'event' => $event,
+							'error' => $e->getMessage(),
+							'class' => get_class( $e ),
+						], 'error' );
+					}
 				}
 			}
 		}
 
 		// Also dispatch to webhooks asynchronously via queue
-		if ( ! in_array( $event, [ 'audit.log', 'queue.enqueue' ], true ) ) {
+		if ( ! in_array( $event, [ 'audit.log', 'queue.enqueue' ], true )
+			&& class_exists( 'PDX_Webhook', false ) ) {
 			PDX_Webhook::dispatch( $event, $payload );
 		}
 	}

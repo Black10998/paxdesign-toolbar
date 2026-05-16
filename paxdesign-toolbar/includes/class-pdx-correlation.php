@@ -25,6 +25,9 @@ class PDX_Correlation {
 
 	const T_IOCS = 'pdx_iocs';
 
+	/** No-arg constructor — all methods are static. */
+	public function __construct() {}
+
 	/* ── Schema ─────────────────────────────────────────── */
 
 	public static function install(): void {
@@ -174,11 +177,15 @@ class PDX_Correlation {
 			}
 		}
 
+		$graph = self::build_graph( $ioc_value, $direct, $unique_related );
 		return [
 			'target'  => $ioc_value,
 			'direct'  => $direct,
 			'related' => array_slice( $unique_related, 0, 20 ),
-			'graph'   => self::build_graph( $ioc_value, $direct, $unique_related ),
+			'graph'   => $graph,
+			// Top-level aliases for dock.js graph renderer
+			'nodes'   => $graph['nodes'],
+			'edges'   => $graph['edges'],
 		];
 	}
 
@@ -333,10 +340,13 @@ class PDX_Correlation {
 
 	public static function stats(): array {
 		global $wpdb;
-		return $wpdb->get_results(
-			"SELECT ioc_type, severity, COUNT(*) as total, AVG(confidence) as avg_conf
-			 FROM {$wpdb->prefix}" . self::T_IOCS . " GROUP BY ioc_type, severity ORDER BY total DESC",
-			ARRAY_A
-		) ?: [];
+		$table = $wpdb->prefix . self::T_IOCS;
+		return [
+			'total_iocs'      => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ),
+			'unique_sources'  => (int) $wpdb->get_var( "SELECT COUNT(DISTINCT source) FROM {$table}" ),
+			'high_confidence' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE confidence >= 80" ),
+			'recent_7d'       => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE first_seen >= DATE_SUB(NOW(), INTERVAL 7 DAY)" ),
+			'by_type'         => $wpdb->get_results( "SELECT ioc_type, COUNT(*) as total FROM {$table} GROUP BY ioc_type ORDER BY total DESC", ARRAY_A ) ?: [],
+		];
 	}
 }

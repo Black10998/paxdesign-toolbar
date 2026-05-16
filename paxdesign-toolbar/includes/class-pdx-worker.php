@@ -32,6 +32,9 @@ class PDX_Worker {
 	const MAX_RETRIES    = 3;
 	const BACKOFF_BASE   = 30;   // seconds
 
+	/** No-arg constructor — all methods are static. */
+	public function __construct() {}
+
 	/* ── Schema ─────────────────────────────────────────── */
 
 	public static function install(): void {

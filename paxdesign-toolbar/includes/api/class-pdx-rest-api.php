@@ -74,8 +74,9 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/pipeline/templates', [ 'methods' => 'GET',  'callback' => [ $this, 'pipeline_templates' ], 'permission_callback' => $pub ] );
 
 		// Queue
-		register_rest_route( $ns, '/queue/jobs', [ 'methods' => 'GET', 'callback' => [ $this, 'queue_jobs'  ], 'permission_callback' => $pub ] );
-		register_rest_route( $ns, '/queue/job',  [ 'methods' => 'GET', 'callback' => [ $this, 'job_status'  ], 'permission_callback' => $pub, 'args' => [ 'job_id' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
+		register_rest_route( $ns, '/queue/jobs',  [ 'methods' => 'GET', 'callback' => [ $this, 'queue_jobs'  ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/queue/job',   [ 'methods' => 'GET', 'callback' => [ $this, 'job_status'  ], 'permission_callback' => $pub, 'args' => [ 'job_id' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
+		register_rest_route( $ns, '/queue/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'queue_stats_endpoint' ], 'permission_callback' => $pub ] );
 
 		// Workspaces
 		register_rest_route( $ns, '/workspace',                          [ [ 'methods' => 'GET',   'callback' => [ $this, 'workspace_list'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'workspace_create' ], 'permission_callback' => $pub ] ] );
@@ -106,20 +107,22 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/billing/usage',    [ 'methods' => 'GET',  'callback' => [ $this, 'billing_usage'    ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/billing/credits',  [ 'methods' => 'GET',  'callback' => [ $this, 'billing_credits'  ], 'permission_callback' => $pub ] );
 
-		// Correlation / IOC
-		register_rest_route( $ns, '/intel/correlate',  [ 'methods' => 'GET',  'callback' => [ $this, 'intel_correlate'  ], 'permission_callback' => $pub ] );
-		register_rest_route( $ns, '/intel/timeline',   [ 'methods' => 'GET',  'callback' => [ $this, 'intel_timeline'   ], 'permission_callback' => $pub ] );
-		register_rest_route( $ns, '/intel/clusters',   [ 'methods' => 'GET',  'callback' => [ $this, 'intel_clusters'   ], 'permission_callback' => $pub ] );
-		register_rest_route( $ns, '/intel/search',     [ 'methods' => 'GET',  'callback' => [ $this, 'intel_search'     ], 'permission_callback' => $pub ] );
-		register_rest_route( $ns, '/intel/stats',      [ 'methods' => 'GET',  'callback' => [ $this, 'intel_stats'      ], 'permission_callback' => $adm ] );
+		// Correlation / IOC — accept both GET and POST (dock.js uses POST)
+		register_rest_route( $ns, '/intel/correlate',  [ 'methods' => [ 'GET', 'POST' ], 'callback' => [ $this, 'intel_correlate'  ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/intel/timeline',   [ 'methods' => 'GET',             'callback' => [ $this, 'intel_timeline'   ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/intel/clusters',   [ 'methods' => 'GET',             'callback' => [ $this, 'intel_clusters'   ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/intel/search',     [ 'methods' => 'GET',             'callback' => [ $this, 'intel_search'     ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/intel/stats',      [ 'methods' => 'GET',             'callback' => [ $this, 'intel_stats'      ], 'permission_callback' => $adm ] );
 
-		// Workers
+		// Workers — /worker/* (internal) + /workers alias (dock.js GET)
 		register_rest_route( $ns, '/worker/register',  [ 'methods' => 'POST', 'callback' => [ $this, 'worker_register'  ], 'permission_callback' => $adm ] );
 		register_rest_route( $ns, '/worker/heartbeat', [ 'methods' => 'POST', 'callback' => [ $this, 'worker_heartbeat' ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/worker/callback',  [ 'methods' => 'POST', 'callback' => [ $this, 'worker_callback'  ], 'permission_callback' => $pub ] );
-		register_rest_route( $ns, '/worker/list',      [ 'methods' => 'GET',  'callback' => [ $this, 'worker_list'      ], 'permission_callback' => $adm ] );
+		register_rest_route( $ns, '/worker/list',      [ 'methods' => 'GET',  'callback' => [ $this, 'worker_list'      ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/worker/profiles',  [ 'methods' => 'GET',  'callback' => [ $this, 'worker_profiles'  ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/worker/(?P<worker_id>[a-z0-9\-]+)', [ 'methods' => 'DELETE', 'callback' => [ $this, 'worker_delete' ], 'permission_callback' => $adm ] );
+		// Alias: dock.js calls /workers (plural)
+		register_rest_route( $ns, '/workers', [ 'methods' => 'GET', 'callback' => [ $this, 'worker_list' ], 'permission_callback' => $pub ] );
 
 		// AI Memory
 		register_rest_route( $ns, '/memory/store',   [ 'methods' => 'POST', 'callback' => [ $this, 'memory_store'   ], 'permission_callback' => $pub ] );
@@ -127,18 +130,25 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/memory/context', [ 'methods' => 'GET',  'callback' => [ $this, 'memory_context' ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/memory/recent',  [ 'methods' => 'GET',  'callback' => [ $this, 'memory_recent'  ], 'permission_callback' => $pub ] );
 
-		// Teams
-		register_rest_route( $ns, '/team',                                   [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_list'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_create' ], 'permission_callback' => $pub ] ] );
-		register_rest_route( $ns, '/team/(?P<team_id>[a-z0-9\-]+)/members', [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_members'       ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_add_member' ], 'permission_callback' => $pub ] ] );
-		register_rest_route( $ns, '/team/(?P<team_id>[a-z0-9\-]+)/cases',   [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_cases'         ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_create_case' ], 'permission_callback' => $pub ] ] );
-		register_rest_route( $ns, '/team/case/(?P<case_id>[a-z0-9\-]+)/notes', [ [ 'methods' => 'GET', 'callback' => [ $this, 'case_notes' ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'case_add_note' ], 'permission_callback' => $pub ] ] );
+		// Teams — /team/* (internal) + /teams alias (dock.js)
+		register_rest_route( $ns, '/team',                                    [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_list'         ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_create'     ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/teams',                                   [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_list'         ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_create'     ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/team/(?P<team_id>[a-z0-9\-]+)/members',  [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_members'      ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_add_member' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/teams/(?P<team_id>[a-z0-9\-]+)/members', [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_members'      ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_add_member' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/team/(?P<team_id>[a-z0-9\-]+)/cases',    [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_cases'        ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_create_case'], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/teams/(?P<team_id>[a-z0-9\-]+)/cases',   [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_cases'        ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_create_case'], 'permission_callback' => $pub ] ] );
+		// Case notes — dock.js calls /cases/{id}/notes
+		register_rest_route( $ns, '/team/case/(?P<case_id>[a-z0-9\-]+)/notes', [ [ 'methods' => 'GET', 'callback' => [ $this, 'case_notes'    ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'case_add_note' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/cases/(?P<case_id>[a-z0-9\-]+)/notes',     [ [ 'methods' => 'GET', 'callback' => [ $this, 'case_notes'    ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'case_add_note' ], 'permission_callback' => $pub ] ] );
 
 		// Command palette
 		register_rest_route( $ns, '/command/search', [ 'methods' => 'GET', 'callback' => [ $this, 'command_search' ], 'permission_callback' => $pub ] );
 
 		// Developer tokens
-		register_rest_route( $ns, '/dev/token',  [ [ 'methods' => 'GET',    'callback' => [ $this, 'dev_token_list'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'dev_token_create' ], 'permission_callback' => $pub ] ] );
-		register_rest_route( $ns, '/dev/token/(?P<token_id>[a-z0-9\-]+)', [ 'methods' => 'DELETE', 'callback' => [ $this, 'dev_token_delete' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/dev/token',                              [ [ 'methods' => 'GET', 'callback' => [ $this, 'dev_token_list'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'dev_token_create' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/dev/token/(?P<token_id>[a-z0-9\-]+)',   [ 'methods' => 'DELETE', 'callback' => [ $this, 'dev_token_delete' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/dev/tokens',                             [ [ 'methods' => 'GET', 'callback' => [ $this, 'dev_token_list'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'dev_token_create' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/dev/tokens/(?P<token_id>[a-z0-9\-]+)',  [ 'methods' => 'DELETE', 'callback' => [ $this, 'dev_token_delete' ], 'permission_callback' => $pub ] );
 
 		// Platform stats (admin dashboard)
 		register_rest_route( $ns, '/platform/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_stats' ], 'permission_callback' => $adm ] );
@@ -852,6 +862,12 @@ class PDX_REST_API {
 		$this->settings->save( $body );
 		return new WP_REST_Response( [ 'ok' => true, 'settings' => $this->settings->all() ], 200 );
 
+	/* ── Queue stats endpoint ────────────────────────────── */
+
+	public function queue_stats_endpoint(): WP_REST_Response {
+		return new WP_REST_Response( PDX_Queue::queue_stats(), 200 );
+	}
+
 	/* ── Billing ─────────────────────────────────────────── */
 
 	public function billing_plans(): WP_REST_Response {
@@ -863,11 +879,15 @@ class PDX_REST_API {
 		if ( ! $user_id ) return new WP_REST_Response( [ 'plan' => 'free', 'authenticated' => false ], 200 );
 		$sub  = PDX_Billing::get_subscription( $user_id );
 		$plan = PDX_Billing::get_plan_for_user( $user_id );
+		$quotas = [];
+		foreach ( array_keys( $plan['quotas'] ?? [] ) as $metric ) {
+			$quotas[ $metric ] = PDX_Billing::check_quota( $user_id, $metric );
+		}
 		return new WP_REST_Response( [
 			'subscription' => $sub,
 			'plan'         => $plan,
 			'credits'      => PDX_Billing::credit_balance( $user_id ),
-			'quotas'       => array_map( fn( $m ) => PDX_Billing::check_quota( $user_id, $m ), array_keys( $plan['quotas'] ) ),
+			'quotas'       => $quotas,
 		], 200 );
 	}
 
@@ -897,8 +917,10 @@ class PDX_REST_API {
 	public function intel_correlate( WP_REST_Request $req ): WP_REST_Response {
 		$rl = $this->rate_limit_check( 'intel' );
 		if ( $rl ) return $rl;
-		$value = sanitize_text_field( $req->get_param( 'value' ) ?? '' );
-		$type  = sanitize_key( $req->get_param( 'type' ) ?? '' );
+		// Support both GET query params and POST JSON body
+		$body  = $req->get_json_params() ?: [];
+		$value = sanitize_text_field( $req->get_param( 'value' ) ?? $body['value'] ?? '' );
+		$type  = sanitize_key( $req->get_param( 'type' )  ?? $body['type']  ?? '' );
 		if ( ! $value ) return new WP_REST_Response( [ 'error' => 'value required.' ], 400 );
 		$data    = PDX_Correlation::correlate( $value, $type );
 		$api_key = $this->settings->get( 'api_keys.openai', '' );

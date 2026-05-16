@@ -80,11 +80,12 @@ for ( $h = 0; $h < 24; $h++ ) :
 <h2>Cache Performance</h2>
 <table class="widefat striped" style="max-width:400px">
   <tbody>
-    <tr><td>L1 Hits</td><td><?php echo (int) ( $cache_stats['l1_hits'] ?? 0 ); ?></td></tr>
-    <tr><td>L2 Hits</td><td><?php echo (int) ( $cache_stats['l2_hits'] ?? 0 ); ?></td></tr>
-    <tr><td>L3 Hits</td><td><?php echo (int) ( $cache_stats['l3_hits'] ?? 0 ); ?></td></tr>
+    <tr><td>Hits</td><td><?php echo (int) ( $cache_stats['hits'] ?? 0 ); ?></td></tr>
     <tr><td>Misses</td><td><?php echo (int) ( $cache_stats['misses'] ?? 0 ); ?></td></tr>
+    <tr><td>Writes</td><td><?php echo (int) ( $cache_stats['writes'] ?? 0 ); ?></td></tr>
     <tr><td>Hit Rate</td><td><?php echo isset( $cache_stats['hit_rate'] ) ? round( $cache_stats['hit_rate'], 1 ) . '%' : '—'; ?></td></tr>
+    <tr><td>Backend</td><td><?php echo esc_html( $cache_stats['backend'] ?? '—' ); ?></td></tr>
+    <tr><td>Local Keys</td><td><?php echo (int) ( $cache_stats['local_keys'] ?? 0 ); ?></td></tr>
   </tbody>
 </table>
 

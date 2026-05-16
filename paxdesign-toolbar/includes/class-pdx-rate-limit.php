@@ -16,6 +16,16 @@ class PDX_RateLimit {
 
 	const TABLE = 'pdx_rate_limits';
 
+	/* ── Bootstrap ─────────────────────────────────────── */
+
+	/** Called at plugin boot — no-op, reserved for future config. */
+	public static function init(): void {}
+
+	/** Alias for maintenance cron compatibility. */
+	public static function prune(): void {
+		self::prune_stale( 24 );
+	}
+
 	/* ── Schema ─────────────────────────────────────────── */
 
 	public static function install(): void {
@@ -119,12 +129,21 @@ class PDX_RateLimit {
 
 	public static function stats(): array {
 		global $wpdb;
-		return $wpdb->get_results(
-			"SELECT bucket_key, tokens, hits_total, last_refill
-			 FROM {$wpdb->prefix}" . self::TABLE . "
-			 ORDER BY hits_total DESC LIMIT 50",
+		$table = $wpdb->prefix . self::TABLE;
+		$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+		// Buckets with 0 tokens in last 24h = blocked
+		$blocks = (int) $wpdb->get_var(
+			"SELECT COUNT(*) FROM {$table} WHERE tokens < 1 AND last_refill >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+		);
+		$top = $wpdb->get_results(
+			"SELECT bucket_key, tokens, hits_total, last_refill FROM {$table} ORDER BY hits_total DESC LIMIT 20",
 			ARRAY_A
 		) ?: [];
+		return [
+			'total_buckets' => $total,
+			'blocks_24h'    => $blocks,
+			'top_buckets'   => $top,
+		];
 	}
 
 	public static function prune_stale( int $hours = 24 ): int {

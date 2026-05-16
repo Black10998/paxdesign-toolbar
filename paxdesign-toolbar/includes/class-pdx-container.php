@@ -35,7 +35,7 @@ class PDX_Container {
 		$this->singletons[ $abstract ] = $factory;
 	}
 
-	public function instance( string $abstract, object $obj ): void {
+	public function bind_instance( string $abstract, object $obj ): void {
 		$this->instances[ $abstract ] = $obj;
 	}
 

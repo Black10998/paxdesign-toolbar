@@ -18,6 +18,9 @@ class PDX_Team {
 	const T_CASES   = 'pdx_cases';
 	const T_NOTES   = 'pdx_case_notes';
 
+	/** No-arg constructor — all methods are static. */
+	public function __construct() {}
+
 	const ROLES = [ 'owner', 'admin', 'analyst', 'viewer' ];
 
 	const ROLE_CAPS = [
