@@ -44,6 +44,12 @@ class PDX_Admin {
 		add_submenu_page( PDX_SLUG, __( 'Privacy',    'paxdesign-toolbar' ), __( 'Privacy',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-privacy',       [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Roles',      'paxdesign-toolbar' ), __( 'Roles',      'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-roles',         [ $this, 'render_page' ] );
 		add_submenu_page( PDX_SLUG, __( 'Analytics',  'paxdesign-toolbar' ), __( 'Analytics',  'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-analytics',     [ $this, 'render_page' ] );
+		// v4 pages
+		add_submenu_page( PDX_SLUG, __( 'Billing',    'paxdesign-toolbar' ), __( 'Billing',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-billing',       [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Teams',      'paxdesign-toolbar' ), __( 'Teams',      'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-teams',         [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Workers',    'paxdesign-toolbar' ), __( 'Workers',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-workers',       [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Dev Tokens', 'paxdesign-toolbar' ), __( 'Dev Tokens', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-dev-tokens',    [ $this, 'render_page' ] );
+		add_submenu_page( PDX_SLUG, __( 'Platform',   'paxdesign-toolbar' ), __( 'Platform',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-platform',      [ $this, 'render_page' ] );
 
 		// Webhook form handlers
 		add_action( 'admin_post_pdx_webhook_create', [ $this, 'handle_webhook_create' ] );
@@ -97,6 +103,12 @@ class PDX_Admin {
 			PDX_SLUG . '-privacy'    => 'privacy',
 			PDX_SLUG . '-roles'      => 'roles',
 			PDX_SLUG . '-analytics'  => 'analytics',
+			// v4
+			PDX_SLUG . '-billing'    => 'billing',
+			PDX_SLUG . '-teams'      => 'teams',
+			PDX_SLUG . '-workers'    => 'workers',
+			PDX_SLUG . '-dev-tokens' => 'dev-tokens',
+			PDX_SLUG . '-platform'   => 'platform',
 		];
 		return $map[ $page ] ?? 'general';
 	}

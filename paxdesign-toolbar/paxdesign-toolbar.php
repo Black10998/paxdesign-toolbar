@@ -2,8 +2,8 @@
 /**
  * Plugin Name:  PaxDesign Utility Dock
  * Plugin URI:   https://paxdesign.io
- * Description:  Enterprise AI/Cyber SaaS dock — threat intelligence, AI agents, browser automation, multi-agent pipelines, connectors, persistent workspaces, audit logs, and a full admin control panel.
- * Version:      3.0.0
+ * Description:  Enterprise AI/Cyber SaaS dock — SSE real-time, command palette, IOC correlation graph, investigation board, team collaboration, billing enforcement, AI memory, and 84-endpoint REST API.
+ * Version:      4.0.0
  * Author:       PaxDesign
  * Author URI:   https://paxdesign.io
  * License:      GPL-2.0-or-later
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'PDX_VERSION',   '3.0.0' );
+define( 'PDX_VERSION',   '4.0.0' );
 define( 'PDX_DIR',       plugin_dir_path( __FILE__ ) );
 define( 'PDX_URL',       plugin_dir_url( __FILE__ ) );
 define( 'PDX_SLUG',      'paxdesign-toolbar' );
@@ -38,14 +38,26 @@ require_once PDX_DIR . 'includes/admin/class-pdx-setup.php';
 require_once PDX_DIR . 'includes/commerce/class-pdx-commerce.php';
 require_once PDX_DIR . 'includes/commerce/class-pdx-access.php';
 
-// Enterprise systems
+// v3 enterprise systems
 require_once PDX_DIR . 'includes/class-pdx-audit.php';
 require_once PDX_DIR . 'includes/class-pdx-queue.php';
 require_once PDX_DIR . 'includes/class-pdx-workspace.php';
 require_once PDX_DIR . 'includes/class-pdx-webhook.php';
 require_once PDX_DIR . 'includes/class-pdx-intelligence.php';
 
+// v4 platform infrastructure (load order matters)
+require_once PDX_DIR . 'includes/class-pdx-event-bus.php';
+require_once PDX_DIR . 'includes/class-pdx-cache.php';
+require_once PDX_DIR . 'includes/class-pdx-rate-limit.php';
+require_once PDX_DIR . 'includes/class-pdx-container.php';
+require_once PDX_DIR . 'includes/class-pdx-billing.php';
+require_once PDX_DIR . 'includes/class-pdx-correlation.php';
+require_once PDX_DIR . 'includes/class-pdx-worker.php';
+require_once PDX_DIR . 'includes/class-pdx-memory.php';
+require_once PDX_DIR . 'includes/class-pdx-team.php';
+
 // API + Modules
+require_once PDX_DIR . 'includes/api/class-pdx-sse.php';
 require_once PDX_DIR . 'includes/api/class-pdx-rest-api.php';
 require_once PDX_DIR . 'includes/modules/class-pdx-module-registry.php';
 
@@ -56,6 +68,7 @@ final class PaxDesign_Toolbar {
 
 	private static ?self $instance = null;
 
+	// v3
 	public PDX_Loader          $loader;
 	public PDX_Settings        $settings;
 	public PDX_Frontend        $frontend;
@@ -65,8 +78,19 @@ final class PaxDesign_Toolbar {
 	public PDX_REST_API        $rest;
 	public PDX_Module_Registry $modules;
 	public PDX_Intelligence    $intel;
+	// v4
+	public PDX_EventBus        $event_bus;
+	public PDX_Container       $container;
+	public PDX_SSE             $sse;
 
 	private function __construct() {
+		// v4 infrastructure — boot first
+		$this->event_bus = PDX_EventBus::instance();
+		$this->container = PDX_Container::instance();
+		PDX_Cache::init();
+		PDX_RateLimit::init();
+
+		// Core
 		$this->loader   = new PDX_Loader();
 		$this->settings = new PDX_Settings();
 		$this->modules  = new PDX_Module_Registry();
@@ -75,7 +99,22 @@ final class PaxDesign_Toolbar {
 		$this->frontend = new PDX_Frontend( $this->settings, $this->modules );
 		$this->admin    = new PDX_Admin( $this->settings, $this->modules );
 		$this->setup    = new PDX_Setup();
-		$this->rest     = new PDX_REST_API( $this->settings, $this->modules, $this->commerce, $this->intel );
+
+		// v4 services — register in container
+		$this->container->singleton( 'settings',    fn() => $this->settings );
+		$this->container->singleton( 'modules',     fn() => $this->modules );
+		$this->container->singleton( 'commerce',    fn() => $this->commerce );
+		$this->container->singleton( 'intel',       fn() => $this->intel );
+		$this->container->singleton( 'billing',     fn() => new PDX_Billing( $this->settings ) );
+		$this->container->singleton( 'correlation', fn() => new PDX_Correlation() );
+		$this->container->singleton( 'worker',      fn() => new PDX_Worker() );
+		$this->container->singleton( 'memory',      fn() => new PDX_Memory( $this->settings ) );
+		$this->container->singleton( 'team',        fn() => new PDX_Team() );
+
+		// REST API + SSE
+		$this->rest = new PDX_REST_API( $this->settings, $this->modules, $this->commerce, $this->intel );
+		$this->sse  = new PDX_SSE();
+
 		$this->loader->run();
 
 		// Scheduled maintenance
@@ -88,6 +127,10 @@ final class PaxDesign_Toolbar {
 	public function run_maintenance(): void {
 		PDX_Audit::prune();
 		PDX_Queue::prune_expired();
+		PDX_Worker::check_heartbeats();
+		PDX_Cache::flush_expired();
+		PDX_RateLimit::prune();
+		PDX_Memory::prune_old( 90 );
 	}
 
 	public static function instance(): self {
@@ -105,6 +148,12 @@ register_activation_hook( __FILE__, static function () {
 	PDX_Queue::install();
 	PDX_Workspace::install();
 	PDX_Webhook::install();
+	PDX_Billing::install();
+	PDX_Correlation::install();
+	PDX_Worker::install();
+	PDX_Memory::install();
+	PDX_Team::install();
+	PDX_RateLimit::install();
 	PDX_Setup::on_activate();
 	flush_rewrite_rules();
 } );
@@ -116,4 +165,49 @@ register_deactivation_hook( __FILE__, static function () {
 
 add_action( 'plugins_loaded', static function () {
 	PaxDesign_Toolbar::instance();
+} );
+
+/* ── Global helpers ──────────────────────────────────────── */
+
+/**
+ * Returns the PDX_Settings instance.
+ */
+function pdx_settings(): PDX_Settings {
+	return PaxDesign_Toolbar::instance()->settings;
+}
+
+/**
+ * Returns the service container instance.
+ */
+function pdx_container(): PDX_Container {
+	return PDX_Container::instance();
+}
+
+/* ── Admin-post handlers (v4) ────────────────────────────── */
+
+add_action( 'admin_post_pdx_deregister_worker', static function () {
+	if ( ! current_user_can( PDX_CAP ) ) wp_die( 'Unauthorized', 403 );
+	check_admin_referer( 'pdx_deregister_worker' );
+	$worker_id = sanitize_text_field( $_GET['worker_id'] ?? '' );
+	if ( $worker_id ) PDX_Worker::deregister( $worker_id );
+	wp_safe_redirect( admin_url( 'admin.php?page=' . PDX_SLUG . '-workers&deregistered=1' ) );
+	exit;
+} );
+
+add_action( 'admin_post_pdx_save_settings', static function () {
+	if ( ! current_user_can( PDX_CAP ) ) wp_die( 'Unauthorized', 403 );
+	check_admin_referer( 'pdx_save_settings', 'pdx_nonce' );
+	$tab = sanitize_key( $_POST['pdx_tab'] ?? 'general' );
+	// Billing tab — Stripe keys
+	if ( $tab === 'billing' && isset( $_POST['stripe'] ) ) {
+		$stripe = [
+			'secret_key'     => sanitize_text_field( $_POST['stripe']['secret_key']     ?? '' ),
+			'pub_key'        => sanitize_text_field( $_POST['stripe']['pub_key']         ?? '' ),
+			'webhook_secret' => sanitize_text_field( $_POST['stripe']['webhook_secret']  ?? '' ),
+			'mode'           => in_array( $_POST['stripe']['mode'] ?? '', [ 'test', 'live' ], true ) ? $_POST['stripe']['mode'] : 'test',
+		];
+		pdx_settings()->save( [ 'stripe' => $stripe ] );
+	}
+	wp_safe_redirect( add_query_arg( [ 'page' => PDX_SLUG . '-billing', 'updated' => '1' ], admin_url( 'admin.php' ) ) );
+	exit;
 } );

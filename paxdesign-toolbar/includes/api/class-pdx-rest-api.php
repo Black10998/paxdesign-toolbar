@@ -17,6 +17,34 @@ class PDX_REST_API {
 		add_action( 'rest_api_init', [ $this, 'register_routes' ] );
 	}
 
+	private function rate_limit_check( string $action ): ?WP_REST_Response {
+		$result = PDX_RateLimit::check( PDX_RateLimit::key_for_user( $action ) );
+		if ( ! $result['allowed'] ) {
+			return new WP_REST_Response( [
+				'error'       => 'rate_limited',
+				'message'     => 'Too many requests. Please slow down.',
+				'retry_after' => $result['retry_after'],
+				'remaining'   => $result['remaining'],
+			], 429 );
+		}
+		return null;
+	}
+
+	private function quota_check( string $metric ): ?WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! $user_id ) return null;
+		$q = PDX_Billing::check_quota( $user_id, $metric );
+		if ( ! $q['allowed'] ) {
+			return new WP_REST_Response( [
+				'error'     => 'quota_exceeded',
+				'message'   => "Daily {$metric} limit reached ({$q['used']}/{$q['limit']}).",
+				'quota'     => $q,
+				'upgrade'   => rest_url( 'pdx/v1/billing/plans' ),
+			], 429 );
+		}
+		return null;
+	}
+
 	public function register_routes(): void {
 		$ns  = 'pdx/v1';
 		$pub = '__return_true';
@@ -70,6 +98,50 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/brief/submit', [ 'methods' => 'POST', 'callback' => [ $this, 'brief_submit' ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/event',        [ 'methods' => 'POST', 'callback' => [ $this, 'log_event'    ], 'permission_callback' => $pub, 'args' => [ 'module' => [ 'required' => true, 'sanitize_callback' => 'sanitize_key' ], 'action' => [ 'required' => true, 'sanitize_callback' => 'sanitize_key' ], 'meta' => [ 'required' => false, 'default' => [] ] ] ] );
 		register_rest_route( $ns, '/settings',     [ [ 'methods' => 'GET', 'callback' => [ $this, 'get_settings' ], 'permission_callback' => $adm ], [ 'methods' => 'POST', 'callback' => [ $this, 'update_settings' ], 'permission_callback' => $adm ] ] );
+
+		// Billing
+		register_rest_route( $ns, '/billing/plans',    [ 'methods' => 'GET',  'callback' => [ $this, 'billing_plans'    ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/billing/status',   [ 'methods' => 'GET',  'callback' => [ $this, 'billing_status'   ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/billing/checkout', [ 'methods' => 'POST', 'callback' => [ $this, 'billing_checkout' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/billing/usage',    [ 'methods' => 'GET',  'callback' => [ $this, 'billing_usage'    ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/billing/credits',  [ 'methods' => 'GET',  'callback' => [ $this, 'billing_credits'  ], 'permission_callback' => $pub ] );
+
+		// Correlation / IOC
+		register_rest_route( $ns, '/intel/correlate',  [ 'methods' => 'GET',  'callback' => [ $this, 'intel_correlate'  ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/intel/timeline',   [ 'methods' => 'GET',  'callback' => [ $this, 'intel_timeline'   ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/intel/clusters',   [ 'methods' => 'GET',  'callback' => [ $this, 'intel_clusters'   ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/intel/search',     [ 'methods' => 'GET',  'callback' => [ $this, 'intel_search'     ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/intel/stats',      [ 'methods' => 'GET',  'callback' => [ $this, 'intel_stats'      ], 'permission_callback' => $adm ] );
+
+		// Workers
+		register_rest_route( $ns, '/worker/register',  [ 'methods' => 'POST', 'callback' => [ $this, 'worker_register'  ], 'permission_callback' => $adm ] );
+		register_rest_route( $ns, '/worker/heartbeat', [ 'methods' => 'POST', 'callback' => [ $this, 'worker_heartbeat' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/worker/callback',  [ 'methods' => 'POST', 'callback' => [ $this, 'worker_callback'  ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/worker/list',      [ 'methods' => 'GET',  'callback' => [ $this, 'worker_list'      ], 'permission_callback' => $adm ] );
+		register_rest_route( $ns, '/worker/profiles',  [ 'methods' => 'GET',  'callback' => [ $this, 'worker_profiles'  ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/worker/(?P<worker_id>[a-z0-9\-]+)', [ 'methods' => 'DELETE', 'callback' => [ $this, 'worker_delete' ], 'permission_callback' => $adm ] );
+
+		// AI Memory
+		register_rest_route( $ns, '/memory/store',   [ 'methods' => 'POST', 'callback' => [ $this, 'memory_store'   ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/memory/search',  [ 'methods' => 'GET',  'callback' => [ $this, 'memory_search'  ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/memory/context', [ 'methods' => 'GET',  'callback' => [ $this, 'memory_context' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/memory/recent',  [ 'methods' => 'GET',  'callback' => [ $this, 'memory_recent'  ], 'permission_callback' => $pub ] );
+
+		// Teams
+		register_rest_route( $ns, '/team',                                   [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_list'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_create' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/team/(?P<team_id>[a-z0-9\-]+)/members', [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_members'       ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_add_member' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/team/(?P<team_id>[a-z0-9\-]+)/cases',   [ [ 'methods' => 'GET',  'callback' => [ $this, 'team_cases'         ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'team_create_case' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/team/case/(?P<case_id>[a-z0-9\-]+)/notes', [ [ 'methods' => 'GET', 'callback' => [ $this, 'case_notes' ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'case_add_note' ], 'permission_callback' => $pub ] ] );
+
+		// Command palette
+		register_rest_route( $ns, '/command/search', [ 'methods' => 'GET', 'callback' => [ $this, 'command_search' ], 'permission_callback' => $pub ] );
+
+		// Developer tokens
+		register_rest_route( $ns, '/dev/token',  [ [ 'methods' => 'GET',    'callback' => [ $this, 'dev_token_list'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'dev_token_create' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/dev/token/(?P<token_id>[a-z0-9\-]+)', [ 'methods' => 'DELETE', 'callback' => [ $this, 'dev_token_delete' ], 'permission_callback' => $pub ] );
+
+		// Platform stats (admin dashboard)
+		register_rest_route( $ns, '/platform/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_stats' ], 'permission_callback' => $adm ] );
 	}
 
 	/* ── Trust check ─────────────────────────────────────── */
@@ -768,6 +840,316 @@ class PDX_REST_API {
 		$log   = array_values( array_filter( $log, static fn( $e ) => $e['ts'] >= time() - $days * DAY_IN_SECONDS ) );
 		update_option( 'pdx_event_log', $log );
 		return new WP_REST_Response( [ 'ok' => true ], 200 );
+	}
+
+	public function get_settings(): WP_REST_Response {
+		return new WP_REST_Response( $this->settings->all(), 200 );
+	}
+
+	public function update_settings( WP_REST_Request $req ): WP_REST_Response {
+		$body = $req->get_json_params();
+		if ( ! is_array( $body ) ) return new WP_REST_Response( [ 'error' => 'Invalid payload' ], 400 );
+		$this->settings->save( $body );
+		return new WP_REST_Response( [ 'ok' => true, 'settings' => $this->settings->all() ], 200 );
+
+	/* ── Billing ─────────────────────────────────────────── */
+
+	public function billing_plans(): WP_REST_Response {
+		return new WP_REST_Response( [ 'plans' => PDX_Billing::plans() ], 200 );
+	}
+
+	public function billing_status(): WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! $user_id ) return new WP_REST_Response( [ 'plan' => 'free', 'authenticated' => false ], 200 );
+		$sub  = PDX_Billing::get_subscription( $user_id );
+		$plan = PDX_Billing::get_plan_for_user( $user_id );
+		return new WP_REST_Response( [
+			'subscription' => $sub,
+			'plan'         => $plan,
+			'credits'      => PDX_Billing::credit_balance( $user_id ),
+			'quotas'       => array_map( fn( $m ) => PDX_Billing::check_quota( $user_id, $m ), array_keys( $plan['quotas'] ) ),
+		], 200 );
+	}
+
+	public function billing_checkout( WP_REST_Request $req ): WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! $user_id ) return new WP_REST_Response( [ 'error' => 'Authentication required.' ], 401 );
+		$plan_id = sanitize_key( $req->get_param( 'plan_id' ) ?? '' );
+		$cycle   = sanitize_key( $req->get_param( 'cycle' ) ?? 'month' );
+		$result  = PDX_Billing::create_stripe_checkout( $user_id, $plan_id, $cycle );
+		return new WP_REST_Response( $result, isset( $result['error'] ) ? 400 : 200 );
+	}
+
+	public function billing_usage( WP_REST_Request $req ): WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! $user_id ) return new WP_REST_Response( [ 'usage' => [] ], 200 );
+		$days = min( 90, (int) ( $req->get_param( 'days' ) ?? 30 ) );
+		return new WP_REST_Response( [ 'usage' => PDX_Billing::usage_summary( $user_id, $days ) ], 200 );
+	}
+
+	public function billing_credits(): WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		return new WP_REST_Response( [ 'balance' => $user_id ? PDX_Billing::credit_balance( $user_id ) : 0 ], 200 );
+	}
+
+	/* ── Intelligence / Correlation ──────────────────────── */
+
+	public function intel_correlate( WP_REST_Request $req ): WP_REST_Response {
+		$rl = $this->rate_limit_check( 'intel' );
+		if ( $rl ) return $rl;
+		$value = sanitize_text_field( $req->get_param( 'value' ) ?? '' );
+		$type  = sanitize_key( $req->get_param( 'type' ) ?? '' );
+		if ( ! $value ) return new WP_REST_Response( [ 'error' => 'value required.' ], 400 );
+		$data    = PDX_Correlation::correlate( $value, $type );
+		$api_key = $this->settings->get( 'api_keys.openai', '' );
+		if ( $api_key ) $data['ai_summary'] = PDX_Correlation::ai_summary( $value, $data, $api_key );
+		PDX_Audit::log( 'intel', 'correlation_run', [ 'value' => $value, 'type' => $type ] );
+		return new WP_REST_Response( $data, 200 );
+	}
+
+	public function intel_timeline( WP_REST_Request $req ): WP_REST_Response {
+		$target = sanitize_text_field( $req->get_param( 'target' ) ?? '' );
+		$days   = min( 365, (int) ( $req->get_param( 'days' ) ?? 90 ) );
+		if ( ! $target ) return new WP_REST_Response( [ 'error' => 'target required.' ], 400 );
+		return new WP_REST_Response( [ 'timeline' => PDX_Correlation::timeline( $target, $days ) ], 200 );
+	}
+
+	public function intel_clusters(): WP_REST_Response {
+		return new WP_REST_Response( [ 'clusters' => PDX_Correlation::cluster_threats() ], 200 );
+	}
+
+	public function intel_search( WP_REST_Request $req ): WP_REST_Response {
+		$q = sanitize_text_field( $req->get_param( 'q' ) ?? '' );
+		if ( strlen( $q ) < 2 ) return new WP_REST_Response( [ 'results' => [] ], 200 );
+		return new WP_REST_Response( [ 'results' => PDX_Correlation::search( $q ) ], 200 );
+	}
+
+	public function intel_stats(): WP_REST_Response {
+		return new WP_REST_Response( [ 'stats' => PDX_Correlation::stats() ], 200 );
+	}
+
+	/* ── Workers ─────────────────────────────────────────── */
+
+	public function worker_register( WP_REST_Request $req ): WP_REST_Response {
+		$label    = sanitize_text_field( $req->get_param( 'label' ) ?? 'Worker' );
+		$endpoint = esc_url_raw( $req->get_param( 'endpoint' ) ?? '' );
+		$caps     = (array) ( $req->get_param( 'capabilities' ) ?? [] );
+		if ( ! $endpoint ) return new WP_REST_Response( [ 'error' => 'endpoint required.' ], 400 );
+		return new WP_REST_Response( PDX_Worker::register( $label, $endpoint, $caps ), 201 );
+	}
+
+	public function worker_heartbeat( WP_REST_Request $req ): WP_REST_Response {
+		$worker_id = sanitize_text_field( $req->get_param( 'worker_id' ) ?? '' );
+		$token     = sanitize_text_field( $req->get_param( 'token' ) ?? '' );
+		if ( ! PDX_Worker::authenticate( $worker_id, $token ) ) return new WP_REST_Response( [ 'error' => 'Unauthorized.' ], 401 );
+		PDX_Worker::heartbeat( $worker_id );
+		$job = PDX_Queue::next_queued( 'automation' );
+		return new WP_REST_Response( [ 'ok' => true, 'next_job' => $job ], 200 );
+	}
+
+	public function worker_callback( WP_REST_Request $req ): WP_REST_Response {
+		$job_id  = sanitize_text_field( $req->get_param( 'job_id' ) ?? '' );
+		$success = (bool) $req->get_param( 'success' );
+		$result  = (array) ( $req->get_param( 'result' ) ?? [] );
+		if ( ! $job_id ) return new WP_REST_Response( [ 'error' => 'job_id required.' ], 400 );
+		PDX_Worker::receive_callback( $job_id, $result, $success );
+		return new WP_REST_Response( [ 'ok' => true ], 200 );
+	}
+
+	public function worker_list(): WP_REST_Response {
+		PDX_Worker::check_heartbeats();
+		return new WP_REST_Response( [ 'workers' => PDX_Worker::all() ], 200 );
+	}
+
+	public function worker_profiles(): WP_REST_Response {
+		return new WP_REST_Response( [ 'profiles' => PDX_Worker::browser_profiles() ], 200 );
+	}
+
+	public function worker_delete( WP_REST_Request $req ): WP_REST_Response {
+		$ok = PDX_Worker::deregister( sanitize_text_field( $req->get_param( 'worker_id' ) ?? '' ) );
+		return new WP_REST_Response( [ 'ok' => $ok ], $ok ? 200 : 404 );
+	}
+
+	/* ── AI Memory ───────────────────────────────────────── */
+
+	public function memory_store( WP_REST_Request $req ): WP_REST_Response {
+		$content    = sanitize_textarea_field( $req->get_param( 'content' ) ?? '' );
+		$agent      = sanitize_key( $req->get_param( 'agent' ) ?? 'global' );
+		$mem_type   = sanitize_key( $req->get_param( 'type' ) ?? 'fact' );
+		$importance = min( 100, max( 0, (int) ( $req->get_param( 'importance' ) ?? 50 ) ) );
+		if ( ! $content ) return new WP_REST_Response( [ 'error' => 'content required.' ], 400 );
+		$mem_id = PDX_Memory::store( $content, $agent, $mem_type, $importance );
+		return new WP_REST_Response( [ 'mem_id' => $mem_id ], 201 );
+	}
+
+	public function memory_search( WP_REST_Request $req ): WP_REST_Response {
+		$q     = sanitize_text_field( $req->get_param( 'q' ) ?? '' );
+		$agent = sanitize_key( $req->get_param( 'agent' ) ?? '' );
+		if ( strlen( $q ) < 2 ) return new WP_REST_Response( [ 'results' => [] ], 200 );
+		return new WP_REST_Response( [ 'results' => PDX_Memory::search( $q, $agent ) ], 200 );
+	}
+
+	public function memory_context( WP_REST_Request $req ): WP_REST_Response {
+		$agent = sanitize_key( $req->get_param( 'agent' ) ?? 'global' );
+		return new WP_REST_Response( [ 'context' => PDX_Memory::build_context( $agent ) ], 200 );
+	}
+
+	public function memory_recent( WP_REST_Request $req ): WP_REST_Response {
+		$agent = sanitize_key( $req->get_param( 'agent' ) ?? 'global' );
+		$limit = min( 50, (int) ( $req->get_param( 'limit' ) ?? 20 ) );
+		return new WP_REST_Response( [ 'memories' => PDX_Memory::get_recent( $agent, $limit ) ], 200 );
+	}
+
+	/* ── Teams ───────────────────────────────────────────── */
+
+	public function team_list(): WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! $user_id ) return new WP_REST_Response( [ 'teams' => [] ], 200 );
+		return new WP_REST_Response( [ 'teams' => PDX_Team::get_user_teams( $user_id ) ], 200 );
+	}
+
+	public function team_create( WP_REST_Request $req ): WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! $user_id ) return new WP_REST_Response( [ 'error' => 'Authentication required.' ], 401 );
+		$name = sanitize_text_field( $req->get_param( 'name' ) ?? '' );
+		if ( ! $name ) return new WP_REST_Response( [ 'error' => 'name required.' ], 400 );
+		$team_id = PDX_Team::create_team( $name, $user_id );
+		return new WP_REST_Response( [ 'team_id' => $team_id ], 201 );
+	}
+
+	public function team_members( WP_REST_Request $req ): WP_REST_Response {
+		$team_id = sanitize_text_field( $req->get_param( 'team_id' ) ?? '' );
+		return new WP_REST_Response( [ 'members' => PDX_Team::get_members( $team_id ) ], 200 );
+	}
+
+	public function team_add_member( WP_REST_Request $req ): WP_REST_Response {
+		$team_id = sanitize_text_field( $req->get_param( 'team_id' ) ?? '' );
+		$user_id = (int) $req->get_param( 'user_id' );
+		$role    = sanitize_key( $req->get_param( 'role' ) ?? 'viewer' );
+		$actor   = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! PDX_Team::user_can( $team_id, $actor, 'invite_members' ) ) return new WP_REST_Response( [ 'error' => 'Insufficient permissions.' ], 403 );
+		$ok = PDX_Team::add_member( $team_id, $user_id, $role, $actor );
+		return new WP_REST_Response( [ 'ok' => $ok ], $ok ? 200 : 400 );
+	}
+
+	public function team_cases( WP_REST_Request $req ): WP_REST_Response {
+		$team_id = sanitize_text_field( $req->get_param( 'team_id' ) ?? '' );
+		$status  = sanitize_key( $req->get_param( 'status' ) ?? '' );
+		return new WP_REST_Response( [ 'cases' => PDX_Team::get_cases( $team_id, $status ) ], 200 );
+	}
+
+	public function team_create_case( WP_REST_Request $req ): WP_REST_Response {
+		$team_id = sanitize_text_field( $req->get_param( 'team_id' ) ?? '' );
+		$title   = sanitize_text_field( $req->get_param( 'title' ) ?? '' );
+		$desc    = sanitize_textarea_field( $req->get_param( 'description' ) ?? '' );
+		$prio    = sanitize_key( $req->get_param( 'priority' ) ?? 'medium' );
+		$tags    = (array) ( $req->get_param( 'tags' ) ?? [] );
+		if ( ! $title ) return new WP_REST_Response( [ 'error' => 'title required.' ], 400 );
+		$case_id = PDX_Team::create_case( $team_id, $title, $desc, $prio, $tags );
+		return new WP_REST_Response( [ 'case_id' => $case_id ], 201 );
+	}
+
+	public function case_notes( WP_REST_Request $req ): WP_REST_Response {
+		$case_id = sanitize_text_field( $req->get_param( 'case_id' ) ?? '' );
+		return new WP_REST_Response( [ 'notes' => PDX_Team::get_notes( $case_id ) ], 200 );
+	}
+
+	public function case_add_note( WP_REST_Request $req ): WP_REST_Response {
+		$case_id = sanitize_text_field( $req->get_param( 'case_id' ) ?? '' );
+		$content = sanitize_textarea_field( $req->get_param( 'content' ) ?? '' );
+		$type    = sanitize_key( $req->get_param( 'type' ) ?? 'comment' );
+		if ( ! $content ) return new WP_REST_Response( [ 'error' => 'content required.' ], 400 );
+		$ok = PDX_Team::add_note( $case_id, $content, $type );
+		return new WP_REST_Response( [ 'ok' => $ok ], $ok ? 201 : 400 );
+	}
+
+	/* ── Command palette ─────────────────────────────────── */
+
+	public function command_search( WP_REST_Request $req ): WP_REST_Response {
+		$q       = sanitize_text_field( $req->get_param( 'q' ) ?? '' );
+		$results = [];
+
+		// Module commands
+		foreach ( $this->modules->all() as $id => $mod ) {
+			if ( ! $q || stripos( $mod['label'], $q ) !== false || stripos( $mod['description'], $q ) !== false ) {
+				$results[] = [ 'type' => 'module', 'id' => $id, 'label' => $mod['label'], 'description' => $mod['description'], 'icon' => $mod['icon'] ];
+			}
+		}
+
+		// Workspace search
+		if ( strlen( $q ) >= 2 ) {
+			$ws = PDX_Workspace::search( $q, 5 );
+			foreach ( $ws as $w ) {
+				$results[] = [ 'type' => 'workspace', 'id' => $w['ws_id'], 'label' => $w['title'], 'description' => $w['module'] . ' · ' . $w['ws_type'], 'icon' => 'folder' ];
+			}
+			// IOC search
+			$iocs = PDX_Correlation::search( $q, 5 );
+			foreach ( $iocs as $ioc ) {
+				$results[] = [ 'type' => 'ioc', 'id' => $ioc['ioc_type'] . ':' . $ioc['ioc_value'], 'label' => $ioc['ioc_value'], 'description' => $ioc['ioc_type'] . ' · ' . $ioc['source'], 'icon' => 'alert' ];
+			}
+		}
+
+		// Static commands
+		$static = [
+			[ 'type' => 'action', 'id' => 'new_scan',         'label' => 'New TrustCheck Scan',    'description' => 'Run a domain intelligence scan', 'icon' => 'shield' ],
+			[ 'type' => 'action', 'id' => 'new_investigation', 'label' => 'New Investigation',      'description' => 'Open investigation board',       'icon' => 'search' ],
+			[ 'type' => 'action', 'id' => 'open_workspace',   'label' => 'Open Workspaces',         'description' => 'Browse saved projects',           'icon' => 'folder' ],
+			[ 'type' => 'action', 'id' => 'view_audit',       'label' => 'View Audit Log',          'description' => 'Platform activity log',           'icon' => 'shield' ],
+		];
+		foreach ( $static as $cmd ) {
+			if ( ! $q || stripos( $cmd['label'], $q ) !== false ) $results[] = $cmd;
+		}
+
+		return new WP_REST_Response( [ 'results' => array_slice( $results, 0, 20 ) ], 200 );
+	}
+
+	/* ── Developer tokens ────────────────────────────────── */
+
+	public function dev_token_list(): WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! $user_id ) return new WP_REST_Response( [ 'tokens' => [] ], 200 );
+		$tokens = get_user_meta( $user_id, 'pdx_dev_tokens', true );
+		$safe   = array_map( fn( $t ) => array_diff_key( $t, [ 'hash' => '' ] ), is_array( $tokens ) ? $tokens : [] );
+		return new WP_REST_Response( [ 'tokens' => array_values( $safe ) ], 200 );
+	}
+
+	public function dev_token_create( WP_REST_Request $req ): WP_REST_Response {
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( ! $user_id ) return new WP_REST_Response( [ 'error' => 'Authentication required.' ], 401 );
+		$label   = sanitize_text_field( $req->get_param( 'label' ) ?? 'API Token' );
+		$token   = 'pdx_' . bin2hex( random_bytes( 24 ) );
+		$token_id = 'tok-' . substr( bin2hex( random_bytes( 6 ) ), 0, 10 );
+		$tokens  = get_user_meta( $user_id, 'pdx_dev_tokens', true );
+		if ( ! is_array( $tokens ) ) $tokens = [];
+		$tokens[ $token_id ] = [ 'id' => $token_id, 'label' => $label, 'hash' => hash( 'sha256', $token ), 'created_at' => time(), 'last_used' => null ];
+		update_user_meta( $user_id, 'pdx_dev_tokens', $tokens );
+		PDX_Audit::log( 'dev', 'token_created', [ 'label' => $label ] );
+		return new WP_REST_Response( [ 'token_id' => $token_id, 'token' => $token, 'label' => $label, 'note' => 'Store this token securely — it will not be shown again.' ], 201 );
+	}
+
+	public function dev_token_delete( WP_REST_Request $req ): WP_REST_Response {
+		$user_id  = is_user_logged_in() ? get_current_user_id() : 0;
+		$token_id = sanitize_text_field( $req->get_param( 'token_id' ) ?? '' );
+		if ( ! $user_id ) return new WP_REST_Response( [ 'error' => 'Authentication required.' ], 401 );
+		$tokens = get_user_meta( $user_id, 'pdx_dev_tokens', true );
+		if ( ! is_array( $tokens ) || ! isset( $tokens[ $token_id ] ) ) return new WP_REST_Response( [ 'error' => 'Token not found.' ], 404 );
+		unset( $tokens[ $token_id ] );
+		update_user_meta( $user_id, 'pdx_dev_tokens', $tokens );
+		return new WP_REST_Response( [ 'ok' => true ], 200 );
+	}
+
+	/* ── Platform stats ──────────────────────────────────── */
+
+	public function platform_stats(): WP_REST_Response {
+		return new WP_REST_Response( [
+			'audit'       => [ 'total' => PDX_Audit::count(), 'by_module' => PDX_Audit::stats_by_module(), 'hourly' => PDX_Audit::stats_by_hour( 24 ) ],
+			'queue'       => PDX_Queue::queue_stats(),
+			'workers'     => PDX_Worker::all(),
+			'ioc_stats'   => PDX_Correlation::stats(),
+			'billing'     => [ 'mrr' => PDX_Billing::mrr(), 'plans' => PDX_Billing::plan_distribution() ],
+			'cache'       => PDX_Cache::stats(),
+			'rate_limits' => PDX_RateLimit::stats(),
+		], 200 );
 	}
 
 	public function get_settings(): WP_REST_Response {

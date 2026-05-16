@@ -1,7 +1,8 @@
 /**
- * PaxDesign Utility Dock — v3.0.0
- * Enterprise AI/Cyber SaaS dock with deep module UX, job queues,
- * workspaces, AI memory, investigation boards, and real-time systems.
+ * PaxDesign Utility Dock — v4.0.0
+ * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
+ * infrastructure graph, investigation board, team collaboration,
+ * billing enforcement, AI memory, keyboard shortcuts.
  */
 (function () {
   'use strict';
@@ -25,6 +26,20 @@
     connectorResults: {},
     pipelineTrace: [],
     builderOutputs: [],
+    // v4
+    sseConnections: {},
+    commandPaletteOpen: false,
+    billingPlan: null,
+    billingCredits: 0,
+    workers: [],
+    teams: [],
+    activeTeam: null,
+    activeCaseId: null,
+    graphData: { nodes: [], edges: [] },
+    investigationItems: [],
+    liveActivity: [],
+    queueStats: {},
+    memoryItems: [],
   };
 
   function init() {
@@ -98,7 +113,20 @@
 
     /* ── Keyboard ─────────────────────────────────────────── */
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape' && state.activeModule) closePanel();
+      if (e.key === 'Escape') {
+        if (state.commandPaletteOpen) { closeCommandPalette(); return; }
+        if (state.activeModule) closePanel();
+      }
+      // Cmd/Ctrl+K → command palette
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        toggleCommandPalette();
+      }
+      // Cmd/Ctrl+Shift+A → activity feed
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        openPanel('workspace');
+      }
     });
 
     /* ── Load access status ───────────────────────────────── */
@@ -113,6 +141,55 @@
       });
     }
 
+    /* ── v4: Load billing status ──────────────────────────── */
+    apiFetch('GET', '/billing/status').then(function(data) {
+      if (!data) return;
+      state.billingPlan    = data.plan;
+      state.billingCredits = data.credits || 0;
+      updateBillingBadge();
+    });
+
+    /* ── v4: Load worker nodes ────────────────────────────── */
+    apiFetch('GET', '/workers').then(function(data) {
+      if (data && data.workers) state.workers = data.workers;
+    });
+
+    /* ── v4: Load teams ───────────────────────────────────── */
+    apiFetch('GET', '/teams').then(function(data) {
+      if (data && data.teams && data.teams.length) {
+        state.teams = data.teams;
+        state.activeTeam = data.teams[0].team_id;
+      }
+    });
+
+    /* ── v4: SSE activity feed ────────────────────────────── */
+    if (C.sseEnabled !== false) {
+      startSSE('activity', function(evt) {
+        try {
+          var d = JSON.parse(evt.data);
+          state.liveActivity.unshift(d);
+          if (state.liveActivity.length > 100) state.liveActivity.pop();
+          if (d.severity === 'critical' || d.severity === 'high') {
+            showNotif('[' + (d.module || 'system') + '] ' + (d.action || ''), 'warn');
+          }
+          if (state.activeModule === 'workspace') refreshActivityFeed();
+        } catch(e) {}
+      });
+      startSSE('queue', function(evt) {
+        try {
+          var d = JSON.parse(evt.data);
+          state.queueStats = d;
+          updateQueueBadge(d);
+        } catch(e) {}
+      });
+    }
+
+    /* ── v4: Command palette DOM ──────────────────────────── */
+    buildCommandPalette();
+
+    /* ── v4: Billing badge in dock ────────────────────────── */
+    buildBillingBadge();
+
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
 
@@ -124,17 +201,23 @@
       var locked = access.status === 'locked';
 
       switch (moduleId) {
-        case 'trust':      renderTrust(mod, access); break;
-        case 'osint':      renderOsint(mod, access, locked); break;
-        case 'threat':     renderThreat(mod, access, locked); break;
-        case 'personas':   renderPersonas(mod, access, locked); break;
-        case 'builder':    renderBuilder(mod, access, locked); break;
-        case 'pipeline':   renderPipeline(mod, access, locked); break;
-        case 'automation': renderAutomation(mod, access, locked); break;
-        case 'connectors': renderConnectors(mod, access, locked); break;
-        case 'create':     renderCreate(mod); break;
-        case 'workspace':  renderWorkspace(mod); break;
-        default:           inner.innerHTML = '<div class="pdx-empty">Coming soon.</div>';
+        case 'trust':          renderTrust(mod, access); break;
+        case 'osint':          renderOsint(mod, access, locked); break;
+        case 'threat':         renderThreat(mod, access, locked); break;
+        case 'personas':       renderPersonas(mod, access, locked); break;
+        case 'builder':        renderBuilder(mod, access, locked); break;
+        case 'pipeline':       renderPipeline(mod, access, locked); break;
+        case 'automation':     renderAutomation(mod, access, locked); break;
+        case 'connectors':     renderConnectors(mod, access, locked); break;
+        case 'create':         renderCreate(mod); break;
+        case 'workspace':      renderWorkspace(mod); break;
+        // v4 modules
+        case 'investigation':  renderInvestigation(mod, access, locked); break;
+        case 'graph':          renderInfraGraph(mod, access, locked); break;
+        case 'team':           renderTeam(mod, access, locked); break;
+        case 'billing':        renderBilling(mod); break;
+        case 'memory':         renderMemory(mod, access, locked); break;
+        default:               inner.innerHTML = '<div class="pdx-empty">Coming soon.</div>';
       }
     }
 
@@ -1314,6 +1397,953 @@
       }
       check();
       window.addEventListener('resize', check);
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       v4: SSE INFRASTRUCTURE
+    ══════════════════════════════════════════════════════ */
+    function startSSE(channel, onMessage) {
+      if (!window.EventSource) return;
+      var url = C.restUrl.replace('/wp-json/pdx/v1', '') + '/wp-json/pdx/v1/sse?channel=' + channel + '&nonce=' + (C.nonce || '');
+      var es = new EventSource(url);
+      es.onmessage = onMessage;
+      es.onerror = function() { setTimeout(function() { startSSE(channel, onMessage); }, 5000); };
+      state.sseConnections[channel] = es;
+      return es;
+    }
+
+    function stopSSE(channel) {
+      if (state.sseConnections[channel]) {
+        state.sseConnections[channel].close();
+        delete state.sseConnections[channel];
+      }
+    }
+
+    function updateQueueBadge(stats) {
+      var badge = document.getElementById('pdx-queue-badge');
+      if (!badge) return;
+      var running = (stats && stats.running) || 0;
+      badge.textContent = running > 0 ? running : '';
+      badge.style.display = running > 0 ? 'flex' : 'none';
+    }
+
+    function updateBillingBadge() {
+      var el = document.getElementById('pdx-billing-plan-badge');
+      if (!el || !state.billingPlan) return;
+      var plan = state.billingPlan;
+      el.textContent = typeof plan === 'object' ? (plan.name || 'Free') : plan;
+    }
+
+    function buildBillingBadge() {
+      var badge = document.createElement('div');
+      badge.id = 'pdx-billing-plan-badge';
+      badge.className = 'pdx-dock-plan-badge';
+      badge.title = 'Current plan';
+      dock.appendChild(badge);
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: COMMAND PALETTE
+    ══════════════════════════════════════════════════════ */
+    function buildCommandPalette() {
+      var overlay = document.createElement('div');
+      overlay.id = 'pdx-cmd-overlay';
+      overlay.className = 'pdx-cmd-overlay';
+      overlay.innerHTML =
+        '<div class="pdx-cmd-box" role="dialog" aria-label="Command palette">' +
+          '<div class="pdx-cmd-search-row">' +
+            svgIcon('search') +
+            '<input id="pdx-cmd-input" class="pdx-cmd-input" type="text" placeholder="Search modules, workspaces, IOCs…" autocomplete="off" spellcheck="false"/>' +
+            '<kbd class="pdx-cmd-esc">Esc</kbd>' +
+          '</div>' +
+          '<div id="pdx-cmd-results" class="pdx-cmd-results"></div>' +
+          '<div class="pdx-cmd-footer"><kbd>↑↓</kbd> navigate &nbsp; <kbd>↵</kbd> select &nbsp; <kbd>Esc</kbd> close</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeCommandPalette();
+      });
+
+      var input = document.getElementById('pdx-cmd-input');
+      var results = document.getElementById('pdx-cmd-results');
+      var selectedIdx = 0;
+      var currentResults = [];
+
+      input.addEventListener('input', function() {
+        var q = input.value.trim();
+        apiFetch('GET', '/command/search?q=' + encodeURIComponent(q)).then(function(data) {
+          currentResults = (data && data.results) || [];
+          selectedIdx = 0;
+          renderCmdResults(results, currentResults, selectedIdx, handleCmdSelect);
+        });
+      });
+
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); selectedIdx = Math.min(selectedIdx + 1, currentResults.length - 1); renderCmdResults(results, currentResults, selectedIdx, handleCmdSelect); }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); selectedIdx = Math.max(selectedIdx - 1, 0); renderCmdResults(results, currentResults, selectedIdx, handleCmdSelect); }
+        if (e.key === 'Enter' && currentResults[selectedIdx]) { handleCmdSelect(currentResults[selectedIdx]); }
+      });
+
+      // Initial load
+      apiFetch('GET', '/command/search?q=').then(function(data) {
+        currentResults = (data && data.results) || [];
+        renderCmdResults(results, currentResults, 0, handleCmdSelect);
+      });
+    }
+
+    function renderCmdResults(container, items, selectedIdx, onSelect) {
+      if (!items.length) { container.innerHTML = '<div class="pdx-cmd-empty">No results</div>'; return; }
+      container.innerHTML = items.map(function(item, i) {
+        return '<div class="pdx-cmd-item' + (i === selectedIdx ? ' is-selected' : '') + '" data-idx="' + i + '">' +
+          '<span class="pdx-cmd-icon">' + svgIcon(item.icon || 'shield') + '</span>' +
+          '<span class="pdx-cmd-label">' + escHtml(item.label) + '</span>' +
+          '<span class="pdx-cmd-desc">' + escHtml(item.description || '') + '</span>' +
+          '<span class="pdx-cmd-type">' + escHtml(item.type || '') + '</span>' +
+        '</div>';
+      }).join('');
+      container.querySelectorAll('.pdx-cmd-item').forEach(function(el) {
+        el.addEventListener('click', function() { onSelect(items[parseInt(el.dataset.idx)]); });
+      });
+    }
+
+    function handleCmdSelect(item) {
+      closeCommandPalette();
+      if (item.type === 'module') { openPanel(item.id); return; }
+      if (item.type === 'workspace') { openPanel('workspace'); return; }
+      if (item.type === 'action') {
+        if (item.id === 'new_scan') openPanel('trust');
+        else if (item.id === 'new_investigation') openPanel('investigation');
+        else if (item.id === 'open_workspace') openPanel('workspace');
+        else if (item.id === 'view_audit') openPanel('workspace');
+      }
+    }
+
+    function toggleCommandPalette() {
+      state.commandPaletteOpen ? closeCommandPalette() : openCommandPalette();
+    }
+
+    function openCommandPalette() {
+      var overlay = document.getElementById('pdx-cmd-overlay');
+      if (!overlay) return;
+      overlay.classList.add('is-open');
+      state.commandPaletteOpen = true;
+      setTimeout(function() { var inp = document.getElementById('pdx-cmd-input'); if (inp) inp.focus(); }, 50);
+    }
+
+    function closeCommandPalette() {
+      var overlay = document.getElementById('pdx-cmd-overlay');
+      if (overlay) overlay.classList.remove('is-open');
+      state.commandPaletteOpen = false;
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       v4: INVESTIGATION BOARD
+    ══════════════════════════════════════════════════════ */
+    function renderInvestigation(mod, access, locked) {
+      if (locked) { renderPaywall(mod, access); return; }
+      inner.innerHTML =
+        '<div class="pdx-ph pdx-ph--investigation">' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('search') + '<span>Investigation Board</span><span class="pdx-badge pdx-badge--new">v4</span></div>' +
+            '<div class="pdx-ph-sub">Correlate IOCs, build timelines, collaborate</div>' +
+          '</div>' +
+          '<div class="pdx-ph-body">' +
+            '<div class="pdx-tabs" id="pdx-inv-tabs">' +
+              '<button class="pdx-tab is-active" data-tab="correlate">Correlate</button>' +
+              '<button class="pdx-tab" data-tab="timeline">Timeline</button>' +
+              '<button class="pdx-tab" data-tab="clusters">Clusters</button>' +
+              '<button class="pdx-tab" data-tab="cases">Cases</button>' +
+            '</div>' +
+            '<div id="pdx-inv-content">' + renderInvCorrelateTab() + '</div>' +
+          '</div>' +
+        '</div>';
+
+      setupTabs('pdx-inv-tabs', 'pdx-inv-content', {
+        correlate: renderInvCorrelateTab,
+        timeline:  renderInvTimelineTab,
+        clusters:  renderInvClustersTab,
+        cases:     renderInvCasesTab,
+      });
+    }
+
+    function renderInvCorrelateTab() {
+      return '<div class="pdx-tab-pane">' +
+        '<div class="pdx-input-row">' +
+          '<input id="pdx-inv-input" class="pdx-input" placeholder="IP, domain, hash, email…" autocomplete="off"/>' +
+          '<select id="pdx-inv-type" class="pdx-select"><option value="">Auto-detect</option><option value="ip">IP</option><option value="domain">Domain</option><option value="hash">Hash</option><option value="email">Email</option></select>' +
+          '<button id="pdx-inv-btn" class="pdx-btn-primary">Correlate</button>' +
+        '</div>' +
+        '<div id="pdx-inv-result"></div>' +
+      '</div>';
+    }
+
+    function renderInvTimelineTab() {
+      return '<div class="pdx-tab-pane">' +
+        '<div class="pdx-input-row"><input id="pdx-tl-input" class="pdx-input" placeholder="Target to reconstruct timeline"/><button id="pdx-tl-btn" class="pdx-btn-primary">Build</button></div>' +
+        '<div id="pdx-tl-result"></div>' +
+      '</div>';
+    }
+
+    function renderInvClustersTab() {
+      var html = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading clusters…</div></div>';
+      setTimeout(function() {
+        var el = document.getElementById('pdx-inv-content');
+        if (!el) return;
+        apiFetch('GET', '/intel/clusters').then(function(data) {
+          var clusters = (data && data.clusters) || [];
+          var out = '<div class="pdx-tab-pane">';
+          if (!clusters.length) { out += '<div class="pdx-empty">No threat clusters found.</div>'; }
+          clusters.forEach(function(c) {
+            out += '<div class="pdx-cluster-card">' +
+              '<div class="pdx-cluster-hd"><span class="pdx-cluster-name">' + escHtml(c.name || 'Cluster') + '</span><span class="pdx-badge pdx-badge--' + (c.severity || 'low') + '">' + escHtml(c.severity || '') + '</span></div>' +
+              '<div class="pdx-cluster-iocs">' + (c.iocs || []).slice(0,5).map(function(i) { return '<span class="pdx-ioc-chip">' + escHtml(i) + '</span>'; }).join('') + '</div>' +
+              '<div class="pdx-cluster-meta">Confidence: ' + (c.confidence || 0) + '% · ' + (c.ioc_count || 0) + ' IOCs</div>' +
+            '</div>';
+          });
+          out += '</div>';
+          el.innerHTML = out;
+        });
+      }, 100);
+      return html;
+    }
+
+    function renderInvCasesTab() {
+      var html = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading cases…</div></div>';
+      setTimeout(function() {
+        var el = document.getElementById('pdx-inv-content');
+        if (!el || !state.activeTeam) { if (el) el.innerHTML = '<div class="pdx-tab-pane"><div class="pdx-empty">No team selected. Create a team first.</div></div>'; return; }
+        apiFetch('GET', '/teams/' + state.activeTeam + '/cases').then(function(data) {
+          var cases = (data && data.cases) || [];
+          var out = '<div class="pdx-tab-pane">';
+          out += '<button id="pdx-new-case-btn" class="pdx-btn-primary pdx-mb-sm">+ New Case</button>';
+          if (!cases.length) { out += '<div class="pdx-empty">No cases yet.</div>'; }
+          cases.forEach(function(c) {
+            out += '<div class="pdx-case-card" data-case-id="' + escHtml(c.case_id) + '">' +
+              '<div class="pdx-case-hd"><span class="pdx-case-title">' + escHtml(c.title) + '</span><span class="pdx-badge pdx-badge--' + (c.priority || 'medium') + '">' + escHtml(c.priority || '') + '</span></div>' +
+              '<div class="pdx-case-meta">Status: ' + escHtml(c.status || '') + ' · ' + (c.note_count || 0) + ' notes</div>' +
+            '</div>';
+          });
+          out += '</div>';
+          el.innerHTML = out;
+          var newBtn = document.getElementById('pdx-new-case-btn');
+          if (newBtn) newBtn.addEventListener('click', function() { showNewCaseForm(); });
+          el.querySelectorAll('.pdx-case-card').forEach(function(card) {
+            card.addEventListener('click', function() { openCase(card.dataset.caseId); });
+          });
+        });
+      }, 100);
+      return html;
+    }
+
+    function showNewCaseForm() {
+      var el = document.getElementById('pdx-inv-content');
+      if (!el) return;
+      el.innerHTML = '<div class="pdx-tab-pane">' +
+        '<div class="pdx-form-group"><label>Title</label><input id="pdx-case-title" class="pdx-input" placeholder="Case title"/></div>' +
+        '<div class="pdx-form-group"><label>Description</label><textarea id="pdx-case-desc" class="pdx-input" rows="3" placeholder="What are you investigating?"></textarea></div>' +
+        '<div class="pdx-form-group"><label>Priority</label><select id="pdx-case-prio" class="pdx-select"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="critical">Critical</option></select></div>' +
+        '<div class="pdx-btn-row"><button id="pdx-case-save" class="pdx-btn-primary">Create Case</button><button id="pdx-case-cancel" class="pdx-btn-ghost">Cancel</button></div>' +
+      '</div>';
+      document.getElementById('pdx-case-save').addEventListener('click', function() {
+        var title = document.getElementById('pdx-case-title').value.trim();
+        var desc  = document.getElementById('pdx-case-desc').value.trim();
+        var prio  = document.getElementById('pdx-case-prio').value;
+        if (!title) return;
+        apiFetch('POST', '/teams/' + state.activeTeam + '/cases', { title: title, description: desc, priority: prio }).then(function(data) {
+          if (data && data.case_id) { showNotif('Case created', 'success'); renderInvCasesTab(); }
+        });
+      });
+      document.getElementById('pdx-case-cancel').addEventListener('click', function() { renderInvCasesTab(); });
+    }
+
+    function openCase(caseId) {
+      state.activeCaseId = caseId;
+      var el = document.getElementById('pdx-inv-content');
+      if (!el) return;
+      el.innerHTML = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading case…</div></div>';
+      apiFetch('GET', '/cases/' + caseId + '/notes').then(function(data) {
+        var notes = (data && data.notes) || [];
+        var out = '<div class="pdx-tab-pane">' +
+          '<button id="pdx-back-cases" class="pdx-btn-ghost pdx-mb-sm">← Back to Cases</button>' +
+          '<div class="pdx-case-notes">';
+        if (!notes.length) out += '<div class="pdx-empty">No notes yet.</div>';
+        notes.forEach(function(n) {
+          out += '<div class="pdx-note pdx-note--' + (n.note_type || 'comment') + '">' +
+            '<div class="pdx-note-meta">' + escHtml(n.note_type || 'comment') + ' · ' + new Date(n.created_at * 1000).toLocaleString() + '</div>' +
+            '<div class="pdx-note-body">' + escHtml(n.content) + '</div>' +
+          '</div>';
+        });
+        out += '</div>' +
+          '<div class="pdx-note-input-row">' +
+            '<textarea id="pdx-note-input" class="pdx-input" rows="2" placeholder="Add a note…"></textarea>' +
+            '<button id="pdx-note-save" class="pdx-btn-primary">Add Note</button>' +
+          '</div>' +
+        '</div>';
+        el.innerHTML = out;
+        document.getElementById('pdx-back-cases').addEventListener('click', function() { renderInvCasesTab(); });
+        document.getElementById('pdx-note-save').addEventListener('click', function() {
+          var content = document.getElementById('pdx-note-input').value.trim();
+          if (!content) return;
+          apiFetch('POST', '/cases/' + caseId + '/notes', { content: content, type: 'comment' }).then(function() { openCase(caseId); });
+        });
+      });
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       v4: INFRASTRUCTURE GRAPH
+    ══════════════════════════════════════════════════════ */
+    function renderInfraGraph(mod, access, locked) {
+      if (locked) { renderPaywall(mod, access); return; }
+      inner.innerHTML =
+        '<div class="pdx-ph pdx-ph--graph">' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title">' + svgIcon('link') + '<span>Infrastructure Graph</span><span class="pdx-badge pdx-badge--new">v4</span></div>' +
+            '<div class="pdx-ph-sub">Visual IOC relationship mapping</div>' +
+          '</div>' +
+          '<div class="pdx-ph-body">' +
+            '<div class="pdx-input-row">' +
+              '<input id="pdx-graph-input" class="pdx-input" placeholder="Seed IOC: domain, IP, hash…" autocomplete="off"/>' +
+              '<button id="pdx-graph-btn" class="pdx-btn-primary">Build Graph</button>' +
+            '</div>' +
+            '<div id="pdx-graph-controls" class="pdx-graph-controls" style="display:none">' +
+              '<button class="pdx-graph-ctrl" id="pdx-graph-zoom-in" title="Zoom in">+</button>' +
+              '<button class="pdx-graph-ctrl" id="pdx-graph-zoom-out" title="Zoom out">−</button>' +
+              '<button class="pdx-graph-ctrl" id="pdx-graph-reset" title="Reset">⟳</button>' +
+              '<button class="pdx-graph-ctrl" id="pdx-graph-export" title="Export">↓</button>' +
+            '</div>' +
+            '<canvas id="pdx-graph-canvas" class="pdx-graph-canvas"></canvas>' +
+            '<div id="pdx-graph-legend" class="pdx-graph-legend"></div>' +
+            '<div id="pdx-graph-detail" class="pdx-graph-detail"></div>' +
+          '</div>' +
+        '</div>';
+
+      document.getElementById('pdx-graph-btn').addEventListener('click', buildGraph);
+      document.getElementById('pdx-graph-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') buildGraph(); });
+    }
+
+    function buildGraph() {
+      var input = document.getElementById('pdx-graph-input');
+      var canvas = document.getElementById('pdx-graph-canvas');
+      var detail = document.getElementById('pdx-graph-detail');
+      var controls = document.getElementById('pdx-graph-controls');
+      if (!input || !canvas) return;
+      var value = input.value.trim();
+      if (!value) return;
+
+      detail.innerHTML = '<div class="pdx-loading-sm">Correlating IOCs…</div>';
+      apiFetch('POST', '/intel/correlate', { value: value }).then(function(data) {
+        if (!data) { detail.innerHTML = '<div class="pdx-error">Correlation failed.</div>'; return; }
+        var nodes = data.nodes || [];
+        var edges = data.edges || [];
+        state.graphData = { nodes: nodes, edges: edges };
+        controls.style.display = 'flex';
+        drawGraph(canvas, nodes, edges, detail);
+        renderGraphLegend(document.getElementById('pdx-graph-legend'));
+        if (data.ai_summary) {
+          detail.innerHTML = '<div class="pdx-ai-summary"><div class="pdx-ai-label">AI Summary</div><div class="pdx-ai-text">' + escHtml(data.ai_summary) + '</div></div>';
+        }
+        setupGraphControls(canvas, nodes, edges, detail);
+      });
+    }
+
+    function drawGraph(canvas, nodes, edges, detail) {
+      var W = canvas.parentElement.clientWidth || 600;
+      var H = 340;
+      canvas.width  = W;
+      canvas.height = H;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Simple force-directed layout approximation
+      var positions = {};
+      var cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.35;
+      nodes.forEach(function(n, i) {
+        var angle = (2 * Math.PI * i) / nodes.length;
+        positions[n.id] = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+      });
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Draw edges
+      ctx.strokeStyle = 'rgba(99,102,241,0.35)';
+      ctx.lineWidth = 1.5;
+      edges.forEach(function(e) {
+        var a = positions[e.source], b = positions[e.target];
+        if (!a || !b) return;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        // Edge label
+        ctx.fillStyle = 'rgba(148,163,184,0.7)';
+        ctx.font = '9px monospace';
+        ctx.fillText(e.relation || '', (a.x + b.x) / 2, (a.y + b.y) / 2);
+      });
+
+      // Draw nodes
+      nodes.forEach(function(n) {
+        var p = positions[n.id];
+        if (!p) return;
+        var color = n.type === 'ip' ? '#f59e0b' : n.type === 'domain' ? '#6366f1' : n.type === 'hash' ? '#ef4444' : n.type === 'email' ? '#10b981' : '#94a3b8';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 10, 0, 2 * Math.PI);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#f1f5f9';
+        ctx.font = 'bold 9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(n.label ? n.label.slice(0, 12) : n.id.slice(0, 12), p.x, p.y + 22);
+      });
+
+      // Click to inspect node
+      canvas.onclick = function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        nodes.forEach(function(n) {
+          var p = positions[n.id];
+          if (!p) return;
+          var dx = mx - p.x, dy = my - p.y;
+          if (Math.sqrt(dx*dx + dy*dy) < 14) {
+            detail.innerHTML = '<div class="pdx-graph-node-detail">' +
+              '<div class="pdx-kv-grid">' +
+                kvRow('ID', n.id) + kvRow('Type', n.type) + kvRow('Source', n.source || '') +
+                kvRow('Confidence', (n.confidence || 0) + '%') + kvRow('First seen', n.first_seen || '') +
+              '</div>' +
+              '<button class="pdx-btn-ghost pdx-mt-sm" onclick="document.getElementById(\'pdx-graph-input\').value=\'' + n.id + '\';buildGraph && buildGraph()">Pivot on this IOC</button>' +
+            '</div>';
+          }
+        });
+      };
+    }
+
+    function renderGraphLegend(el) {
+      if (!el) return;
+      el.innerHTML = ['ip:#f59e0b', 'domain:#6366f1', 'hash:#ef4444', 'email:#10b981', 'other:#94a3b8'].map(function(s) {
+        var parts = s.split(':');
+        return '<span class="pdx-legend-item"><span class="pdx-legend-dot" style="background:' + parts[1] + '"></span>' + parts[0] + '</span>';
+      }).join('');
+    }
+
+    function setupGraphControls(canvas, nodes, edges, detail) {
+      var scale = 1;
+      document.getElementById('pdx-graph-zoom-in').onclick  = function() { scale = Math.min(scale + 0.2, 3); canvas.style.transform = 'scale(' + scale + ')'; };
+      document.getElementById('pdx-graph-zoom-out').onclick = function() { scale = Math.max(scale - 0.2, 0.4); canvas.style.transform = 'scale(' + scale + ')'; };
+      document.getElementById('pdx-graph-reset').onclick    = function() { scale = 1; canvas.style.transform = 'scale(1)'; };
+      document.getElementById('pdx-graph-export').onclick   = function() { exportJSON('graph-' + Date.now(), state.graphData); };
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       v4: TEAM MANAGEMENT
+    ══════════════════════════════════════════════════════ */
+    function renderTeam(mod, access, locked) {
+      if (locked) { renderPaywall(mod, access); return; }
+      inner.innerHTML =
+        '<div class="pdx-ph">' +
+          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('user') + '<span>Team</span><span class="pdx-badge pdx-badge--new">v4</span></div><div class="pdx-ph-sub">Manage team members and roles</div></div>' +
+          '<div class="pdx-ph-body">' +
+            '<div class="pdx-tabs" id="pdx-team-tabs">' +
+              '<button class="pdx-tab is-active" data-tab="members">Members</button>' +
+              '<button class="pdx-tab" data-tab="create">Create Team</button>' +
+            '</div>' +
+            '<div id="pdx-team-content">' + renderTeamMembersTab() + '</div>' +
+          '</div>' +
+        '</div>';
+
+      setupTabs('pdx-team-tabs', 'pdx-team-content', {
+        members: renderTeamMembersTab,
+        create:  renderTeamCreateTab,
+      });
+    }
+
+    function renderTeamMembersTab() {
+      var html = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading team…</div></div>';
+      setTimeout(function() {
+        var el = document.getElementById('pdx-team-content');
+        if (!el) return;
+        if (!state.activeTeam) {
+          el.innerHTML = '<div class="pdx-tab-pane"><div class="pdx-empty">No team yet. Create one first.</div></div>';
+          return;
+        }
+        apiFetch('GET', '/teams/' + state.activeTeam + '/members').then(function(data) {
+          var members = (data && data.members) || [];
+          var out = '<div class="pdx-tab-pane">';
+          out += '<div class="pdx-team-header"><span class="pdx-team-name">' + escHtml(state.teams[0] && state.teams[0].name || 'Team') + '</span></div>';
+          members.forEach(function(m) {
+            out += '<div class="pdx-member-row">' +
+              '<div class="pdx-member-avatar">' + escHtml((m.display_name || 'U').charAt(0).toUpperCase()) + '</div>' +
+              '<div class="pdx-member-info"><div class="pdx-member-name">' + escHtml(m.display_name || m.user_login || '') + '</div><div class="pdx-member-email">' + escHtml(m.user_email || '') + '</div></div>' +
+              '<span class="pdx-role-badge pdx-role-badge--' + (m.role || 'viewer') + '">' + escHtml(m.role || 'viewer') + '</span>' +
+            '</div>';
+          });
+          if (!members.length) out += '<div class="pdx-empty">No members yet.</div>';
+          out += '</div>';
+          el.innerHTML = out;
+        });
+      }, 100);
+      return html;
+    }
+
+    function renderTeamCreateTab() {
+      return '<div class="pdx-tab-pane">' +
+        '<div class="pdx-form-group"><label>Team Name</label><input id="pdx-team-name" class="pdx-input" placeholder="My Security Team"/></div>' +
+        '<button id="pdx-team-create-btn" class="pdx-btn-primary">Create Team</button>' +
+        '<div id="pdx-team-create-result"></div>' +
+      '</div>';
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: BILLING
+    ══════════════════════════════════════════════════════ */
+    function renderBilling(mod) {
+      inner.innerHTML =
+        '<div class="pdx-ph">' +
+          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('shield') + '<span>Billing & Plans</span></div><div class="pdx-ph-sub">Manage your subscription</div></div>' +
+          '<div class="pdx-ph-body"><div class="pdx-loading-sm">Loading plans…</div></div>' +
+        '</div>';
+
+      Promise.all([
+        apiFetch('GET', '/billing/plans'),
+        apiFetch('GET', '/billing/status'),
+        apiFetch('GET', '/billing/credits'),
+      ]).then(function(results) {
+        var plans   = (results[0] && results[0].plans) || {};
+        var status  = results[1] || {};
+        var credits = (results[2] && results[2].balance) || 0;
+        var body = inner.querySelector('.pdx-ph-body');
+        if (!body) return;
+
+        var currentPlanId = status.plan && status.plan.id || 'free';
+        var html = '<div class="pdx-billing-credits"><span class="pdx-credits-num">' + credits + '</span><span class="pdx-credits-label"> credits remaining</span></div>';
+        html += '<div class="pdx-plans-grid">';
+        Object.keys(plans).forEach(function(pid) {
+          var p = plans[pid];
+          var isCurrent = pid === currentPlanId;
+          html += '<div class="pdx-plan-card' + (isCurrent ? ' pdx-plan-card--current' : '') + '">' +
+            '<div class="pdx-plan-name">' + escHtml(p.name || pid) + (isCurrent ? ' <span class="pdx-plan-current-badge">Current</span>' : '') + '</div>' +
+            '<div class="pdx-plan-price">$' + (p.price_month || 0) + '<span>/mo</span></div>' +
+            '<ul class="pdx-plan-features">' +
+              Object.keys(p.quotas || {}).slice(0, 5).map(function(k) {
+                var v = p.quotas[k];
+                return '<li>' + escHtml(k.replace(/_/g,' ')) + ': ' + (v === -1 ? 'Unlimited' : v) + '</li>';
+              }).join('') +
+            '</ul>' +
+            (!isCurrent ? '<button class="pdx-btn-primary pdx-plan-upgrade-btn" data-plan="' + pid + '">Upgrade</button>' : '<div class="pdx-plan-active-label">Active Plan</div>') +
+          '</div>';
+        });
+        html += '</div>';
+        body.innerHTML = html;
+
+        body.querySelectorAll('.pdx-plan-upgrade-btn').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var planId = btn.dataset.plan;
+            btn.textContent = 'Redirecting…';
+            btn.disabled = true;
+            apiFetch('POST', '/billing/checkout', { plan_id: planId, cycle: 'month' }).then(function(data) {
+              if (data && data.url) { window.location.href = data.url; }
+              else { showNotif(data && data.error || 'Checkout failed', 'error'); btn.textContent = 'Upgrade'; btn.disabled = false; }
+            });
+          });
+        });
+      });
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: AI MEMORY
+    ══════════════════════════════════════════════════════ */
+    function renderMemory(mod, access, locked) {
+      if (locked) { renderPaywall(mod, access); return; }
+      inner.innerHTML =
+        '<div class="pdx-ph">' +
+          '<div class="pdx-ph-hd"><div class="pdx-ph-title">' + svgIcon('layers') + '<span>AI Memory</span><span class="pdx-badge pdx-badge--new">v4</span></div><div class="pdx-ph-sub">Long-term agent memory & semantic search</div></div>' +
+          '<div class="pdx-ph-body">' +
+            '<div class="pdx-tabs" id="pdx-mem-tabs">' +
+              '<button class="pdx-tab is-active" data-tab="search">Search</button>' +
+              '<button class="pdx-tab" data-tab="recent">Recent</button>' +
+              '<button class="pdx-tab" data-tab="store">Store</button>' +
+            '</div>' +
+            '<div id="pdx-mem-content">' + renderMemSearchTab() + '</div>' +
+          '</div>' +
+        '</div>';
+
+      setupTabs('pdx-mem-tabs', 'pdx-mem-content', {
+        search: renderMemSearchTab,
+        recent: renderMemRecentTab,
+        store:  renderMemStoreTab,
+      });
+    }
+
+    function renderMemSearchTab() {
+      return '<div class="pdx-tab-pane">' +
+        '<div class="pdx-input-row"><input id="pdx-mem-search" class="pdx-input" placeholder="Search memories…"/><button id="pdx-mem-search-btn" class="pdx-btn-primary">Search</button></div>' +
+        '<div id="pdx-mem-search-result"></div>' +
+      '</div>';
+    }
+
+    function renderMemRecentTab() {
+      var html = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading…</div></div>';
+      setTimeout(function() {
+        var el = document.getElementById('pdx-mem-content');
+        if (!el) return;
+        apiFetch('GET', '/memory/recent?agent=global&limit=20').then(function(data) {
+          var mems = (data && data.memories) || [];
+          var out = '<div class="pdx-tab-pane">';
+          if (!mems.length) out += '<div class="pdx-empty">No memories stored yet.</div>';
+          mems.forEach(function(m) {
+            out += '<div class="pdx-memory-item">' +
+              '<div class="pdx-memory-content">' + escHtml(m.content) + '</div>' +
+              '<div class="pdx-memory-meta">' + escHtml(m.mem_type || '') + ' · importance: ' + (m.importance || 0) + ' · ' + new Date((m.created_at || 0) * 1000).toLocaleDateString() + '</div>' +
+            '</div>';
+          });
+          out += '</div>';
+          el.innerHTML = out;
+        });
+      }, 100);
+      return html;
+    }
+
+    function renderMemStoreTab() {
+      return '<div class="pdx-tab-pane">' +
+        '<div class="pdx-form-group"><label>Content</label><textarea id="pdx-mem-content" class="pdx-input" rows="3" placeholder="What should the AI remember?"></textarea></div>' +
+        '<div class="pdx-form-row">' +
+          '<div class="pdx-form-group"><label>Type</label><select id="pdx-mem-type" class="pdx-select"><option value="fact">Fact</option><option value="preference">Preference</option><option value="context">Context</option><option value="finding">Finding</option></select></div>' +
+          '<div class="pdx-form-group"><label>Importance (0-100)</label><input id="pdx-mem-importance" class="pdx-input" type="number" min="0" max="100" value="50"/></div>' +
+        '</div>' +
+        '<button id="pdx-mem-store-btn" class="pdx-btn-primary">Store Memory</button>' +
+        '<div id="pdx-mem-store-result"></div>' +
+      '</div>';
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       v4: WORKSPACE — upgraded with live activity feed
+    ══════════════════════════════════════════════════════ */
+    function refreshActivityFeed() {
+      var feed = document.getElementById('pdx-activity-feed');
+      if (!feed) return;
+      var html = '';
+      state.liveActivity.slice(0, 30).forEach(function(evt) {
+        var cls = evt.severity === 'critical' ? 'pdx-activity--critical' : evt.severity === 'high' ? 'pdx-activity--high' : evt.severity === 'warn' ? 'pdx-activity--warn' : 'pdx-activity--info';
+        html += '<div class="pdx-activity-item ' + cls + '">' +
+          '<span class="pdx-activity-module">' + escHtml(evt.module || 'system') + '</span>' +
+          '<span class="pdx-activity-action">' + escHtml(evt.action || '') + '</span>' +
+          '<span class="pdx-activity-time">' + new Date((evt.ts || Date.now() / 1000) * 1000).toLocaleTimeString() + '</span>' +
+        '</div>';
+      });
+      feed.innerHTML = html || '<div class="pdx-empty">No activity yet.</div>';
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: INVESTIGATION — wire up tab event handlers
+    ══════════════════════════════════════════════════════ */
+    function wireInvCorrelate() {
+      var btn = document.getElementById('pdx-inv-btn');
+      var inp = document.getElementById('pdx-inv-input');
+      if (!btn || !inp) return;
+      btn.addEventListener('click', runCorrelate);
+      inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') runCorrelate(); });
+    }
+
+    function runCorrelate() {
+      var inp  = document.getElementById('pdx-inv-input');
+      var type = document.getElementById('pdx-inv-type');
+      var res  = document.getElementById('pdx-inv-result');
+      if (!inp || !res) return;
+      var value = inp.value.trim();
+      if (!value) return;
+      res.innerHTML = '<div class="pdx-loading-sm">Correlating…</div>';
+      apiFetch('POST', '/intel/correlate', { value: value, type: type ? type.value : '' }).then(function(data) {
+        if (!data) { res.innerHTML = '<div class="pdx-error">Correlation failed.</div>'; return; }
+        var html = '<div class="pdx-result">';
+        html += '<div class="pdx-section"><div class="pdx-section-title">Relationships (' + (data.edges || []).length + ')</div><div class="pdx-kv-grid">';
+        (data.edges || []).slice(0, 10).forEach(function(e) {
+          html += kvRow(escHtml(e.source) + ' → ' + escHtml(e.target), escHtml(e.relation || '') + ' (' + (e.confidence || 0) + '%)');
+        });
+        html += '</div></div>';
+        if (data.ai_summary) {
+          html += '<div class="pdx-section"><div class="pdx-section-title">AI Summary</div><div class="pdx-ai-text">' + escHtml(data.ai_summary) + '</div></div>';
+        }
+        html += '<button class="pdx-btn-ghost pdx-mt-sm" id="pdx-corr-graph-btn">View in Graph</button>';
+        html += '</div>';
+        res.innerHTML = html;
+        document.getElementById('pdx-corr-graph-btn').addEventListener('click', function() {
+          openPanel('graph');
+          setTimeout(function() {
+            var gi = document.getElementById('pdx-graph-input');
+            if (gi) { gi.value = value; buildGraph && buildGraph(); }
+          }, 200);
+        });
+      });
+    }
+
+    function wireInvTimeline() {
+      var btn = document.getElementById('pdx-tl-btn');
+      var inp = document.getElementById('pdx-tl-input');
+      if (!btn || !inp) return;
+      btn.addEventListener('click', function() {
+        var target = inp.value.trim();
+        var res = document.getElementById('pdx-tl-result');
+        if (!target || !res) return;
+        res.innerHTML = '<div class="pdx-loading-sm">Building timeline…</div>';
+        apiFetch('GET', '/intel/timeline?target=' + encodeURIComponent(target) + '&days=90').then(function(data) {
+          var events = (data && data.timeline) || [];
+          if (!events.length) { res.innerHTML = '<div class="pdx-empty">No timeline data found.</div>'; return; }
+          var html = '<div class="pdx-timeline">';
+          events.forEach(function(ev) {
+            html += '<div class="pdx-tl-event">' +
+              '<div class="pdx-tl-dot"></div>' +
+              '<div class="pdx-tl-body">' +
+                '<div class="pdx-tl-date">' + escHtml(ev.date || '') + '</div>' +
+                '<div class="pdx-tl-desc">' + escHtml(ev.description || '') + '</div>' +
+                '<div class="pdx-tl-source">' + escHtml(ev.source || '') + '</div>' +
+              '</div>' +
+            '</div>';
+          });
+          html += '</div>';
+          res.innerHTML = html;
+        });
+      });
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: MEMORY — wire up tab event handlers
+    ══════════════════════════════════════════════════════ */
+    function wireMemSearch() {
+      var btn = document.getElementById('pdx-mem-search-btn');
+      var inp = document.getElementById('pdx-mem-search');
+      var res = document.getElementById('pdx-mem-search-result');
+      if (!btn || !inp || !res) return;
+      btn.addEventListener('click', function() {
+        var q = inp.value.trim();
+        if (!q) return;
+        res.innerHTML = '<div class="pdx-loading-sm">Searching…</div>';
+        apiFetch('GET', '/memory/search?q=' + encodeURIComponent(q)).then(function(data) {
+          var mems = (data && data.results) || [];
+          if (!mems.length) { res.innerHTML = '<div class="pdx-empty">No results.</div>'; return; }
+          res.innerHTML = mems.map(function(m) {
+            return '<div class="pdx-memory-item">' +
+              '<div class="pdx-memory-content">' + escHtml(m.content) + '</div>' +
+              '<div class="pdx-memory-meta">' + escHtml(m.mem_type || '') + ' · score: ' + (m.score || 0).toFixed(2) + '</div>' +
+            '</div>';
+          }).join('');
+        });
+      });
+      inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') btn.click(); });
+    }
+
+    function wireMemStore() {
+      var btn = document.getElementById('pdx-mem-store-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function() {
+        var content    = document.getElementById('pdx-mem-content').value.trim();
+        var mem_type   = document.getElementById('pdx-mem-type').value;
+        var importance = parseInt(document.getElementById('pdx-mem-importance').value) || 50;
+        var res        = document.getElementById('pdx-mem-store-result');
+        if (!content) return;
+        apiFetch('POST', '/memory/store', { content: content, agent: 'global', type: mem_type, importance: importance }).then(function(data) {
+          if (data && data.mem_id) {
+            res.innerHTML = '<div class="pdx-success">Memory stored (ID: ' + escHtml(data.mem_id) + ')</div>';
+            document.getElementById('pdx-mem-content').value = '';
+          } else {
+            res.innerHTML = '<div class="pdx-error">Failed to store memory.</div>';
+          }
+        });
+      });
+    }
+
+    function wireTeamCreate() {
+      var btn = document.getElementById('pdx-team-create-btn');
+      if (!btn) return;
+      btn.addEventListener('click', function() {
+        var name = document.getElementById('pdx-team-name').value.trim();
+        var res  = document.getElementById('pdx-team-create-result');
+        if (!name) return;
+        apiFetch('POST', '/teams', { name: name }).then(function(data) {
+          if (data && data.team_id) {
+            state.activeTeam = data.team_id;
+            state.teams.push({ team_id: data.team_id, name: name });
+            res.innerHTML = '<div class="pdx-success">Team created!</div>';
+            showNotif('Team "' + name + '" created', 'success');
+          } else {
+            res.innerHTML = '<div class="pdx-error">Failed to create team.</div>';
+          }
+        });
+      });
+    }
+
+
+    /* ══════════════════════════════════════════════════════
+       v4: EXTENDED svgIcon + utility additions
+    ══════════════════════════════════════════════════════ */
+    function svgIconV4(name) {
+      var extra = {
+        cpu:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3"/></svg>',
+        clock:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+        check:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+        x:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+        zap:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+        globe:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+        server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>',
+        key:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3"/></svg>',
+      };
+      return extra[name] || '';
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: WORKER STATUS PANEL (embedded in workspace tab)
+    ══════════════════════════════════════════════════════ */
+    function renderWorkerStatus(container) {
+      if (!container) return;
+      apiFetch('GET', '/workers').then(function(data) {
+        var workers = (data && data.workers) || [];
+        var html = '<div class="pdx-section"><div class="pdx-section-title">Worker Nodes (' + workers.length + ')</div>';
+        if (!workers.length) {
+          html += '<div class="pdx-empty">No worker nodes registered.</div>';
+        } else {
+          workers.forEach(function(w) {
+            var statusCls = w.status === 'online' ? 'pdx-worker--online' : w.status === 'busy' ? 'pdx-worker--busy' : 'pdx-worker--offline';
+            html += '<div class="pdx-worker-row ' + statusCls + '">' +
+              '<div class="pdx-worker-dot"></div>' +
+              '<div class="pdx-worker-info">' +
+                '<div class="pdx-worker-label">' + escHtml(w.label || w.worker_id) + '</div>' +
+                '<div class="pdx-worker-caps">' + (w.capabilities || []).join(', ') + '</div>' +
+              '</div>' +
+              '<span class="pdx-worker-status">' + escHtml(w.status || 'unknown') + '</span>' +
+            '</div>';
+          });
+        }
+        html += '</div>';
+        container.innerHTML = html;
+      });
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: QUEUE STATS PANEL
+    ══════════════════════════════════════════════════════ */
+    function renderQueueStats(container) {
+      if (!container) return;
+      apiFetch('GET', '/queue/stats').then(function(data) {
+        if (!data) return;
+        var html = '<div class="pdx-section"><div class="pdx-section-title">Job Queue</div><div class="pdx-kv-grid">';
+        html += kvRow('Queued',    data.queued    || 0);
+        html += kvRow('Running',   data.running   || 0);
+        html += kvRow('Completed', data.completed || 0);
+        html += kvRow('Failed',    data.failed    || 0);
+        html += '</div></div>';
+        container.innerHTML = html;
+      });
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: HEATMAP RENDERER (activity by hour)
+    ══════════════════════════════════════════════════════ */
+    function renderHeatmap(container, hourlyData) {
+      if (!container || !hourlyData) return;
+      var max = Math.max.apply(null, hourlyData.map(function(d) { return d.count || 0; })) || 1;
+      var html = '<div class="pdx-heatmap">';
+      for (var h = 0; h < 24; h++) {
+        var entry = hourlyData.find(function(d) { return d.hour === h; }) || { count: 0 };
+        var intensity = Math.round((entry.count / max) * 100);
+        html += '<div class="pdx-heatmap-cell" style="--intensity:' + intensity + '%" title="' + h + ':00 — ' + entry.count + ' events"></div>';
+      }
+      html += '</div><div class="pdx-heatmap-labels">';
+      [0,6,12,18,23].forEach(function(h) { html += '<span>' + h + ':00</span>'; });
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       v4: WIRE UP DYNAMIC HANDLERS after tab render
+    ══════════════════════════════════════════════════════ */
+    var _origSetupTabs = setupTabs;
+    function setupTabs(tabsId, contentId, renderers) {
+      var tabsEl   = document.getElementById(tabsId);
+      var contentEl = document.getElementById(contentId);
+      if (!tabsEl || !contentEl) return;
+      tabsEl.querySelectorAll('.pdx-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          tabsEl.querySelectorAll('.pdx-tab').forEach(function(t) { t.classList.remove('is-active'); });
+          tab.classList.add('is-active');
+          var key = tab.dataset.tab;
+          if (renderers[key]) {
+            contentEl.innerHTML = renderers[key]();
+            wireTabHandlers(tabsId, key);
+          }
+        });
+      });
+      // Wire initial tab
+      var firstKey = tabsEl.querySelector('.pdx-tab.is-active');
+      if (firstKey) wireTabHandlers(tabsId, firstKey.dataset.tab);
+    }
+
+    function wireTabHandlers(tabsId, tabKey) {
+      // Investigation board
+      if (tabsId === 'pdx-inv-tabs') {
+        if (tabKey === 'correlate') wireInvCorrelate();
+        if (tabKey === 'timeline')  wireInvTimeline();
+      }
+      // Memory
+      if (tabsId === 'pdx-mem-tabs') {
+        if (tabKey === 'search') wireMemSearch();
+        if (tabKey === 'store')  wireMemStore();
+      }
+      // Team
+      if (tabsId === 'pdx-team-tabs') {
+        if (tabKey === 'create') wireTeamCreate();
+      }
+      // CVE lookup in threat tab
+      if (tabsId === 'pdx-threat-tabs' && tabKey === 'cve') {
+        var cveBtn = document.getElementById('pdx-cve-btn');
+        var cveInp = document.getElementById('pdx-cve-input');
+        if (cveBtn && cveInp) {
+          cveBtn.addEventListener('click', function() {
+            var q = cveInp.value.trim();
+            var res = document.getElementById('pdx-cve-result');
+            if (!q || !res) return;
+            res.innerHTML = '<div class="pdx-loading-sm">Looking up…</div>';
+            apiFetch('GET', '/threat/cve?q=' + encodeURIComponent(q)).then(function(data) {
+              if (!data || !data.cves) { res.innerHTML = '<div class="pdx-empty">No results.</div>'; return; }
+              res.innerHTML = data.cves.slice(0, 5).map(function(c) {
+                return '<div class="pdx-cve-card">' +
+                  '<div class="pdx-cve-id">' + escHtml(c.id || '') + '</div>' +
+                  '<div class="pdx-cve-desc">' + escHtml((c.description || '').slice(0, 200)) + '</div>' +
+                  '<div class="pdx-cve-meta">CVSS: ' + (c.cvss || 'N/A') + ' · ' + escHtml(c.published || '') + '</div>' +
+                '</div>';
+              }).join('');
+            });
+          });
+          cveInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') cveBtn.click(); });
+        }
+      }
+      // Attack surface
+      if (tabsId === 'pdx-threat-tabs' && tabKey === 'surface') {
+        var surfBtn = document.getElementById('pdx-surface-btn');
+        var surfInp = document.getElementById('pdx-surface-input');
+        if (surfBtn && surfInp) {
+          surfBtn.addEventListener('click', function() {
+            var domain = surfInp.value.trim();
+            var res = document.getElementById('pdx-surface-result');
+            if (!domain || !res) return;
+            res.innerHTML = '<div class="pdx-loading-sm">Mapping surface…</div>';
+            apiFetch('GET', '/threat/surface?domain=' + encodeURIComponent(domain)).then(function(data) {
+              if (!data) { res.innerHTML = '<div class="pdx-error">Failed.</div>'; return; }
+              var html = '<div class="pdx-kv-grid">';
+              html += kvRow('Open Ports', (data.ports || []).join(', ') || 'None');
+              html += kvRow('Subdomains', (data.subdomains || []).slice(0,5).join(', ') || 'None');
+              html += kvRow('Services', (data.services || []).join(', ') || 'None');
+              html += '</div>';
+              res.innerHTML = html;
+            });
+          });
+        }
+      }
     }
 
   } /* end init */
