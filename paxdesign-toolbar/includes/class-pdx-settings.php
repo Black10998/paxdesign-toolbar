@@ -71,8 +71,15 @@ class PDX_Settings {
 			'mobile_enabled'       => true,
 			'mobile_breakpoint'    => 680,
 			'mobile_dock_position' => 'under-header',  // under-header | bottom-center | bottom-left | bottom-right
+			'mobile_dock_height'   => 48,              // px — dock bar height in under-header mode
 			'mobile_panel_height'  => 90,              // % of viewport height (50–96)
-			'mobile_swipe_close'   => true,            // swipe-down to close panel
+			'mobile_icon_size'     => 0,               // px — 0 = CSS default
+			'mobile_btn_size'      => 0,               // px — 0 = CSS default
+			'mobile_spacing'       => 'default',       // default | compact | relaxed
+			'mobile_scale'         => 'auto',          // auto | fixed | fluid
+			'mobile_compact'       => false,           // compact mode
+			'mobile_safe_area'     => true,            // respect env(safe-area-inset-*)
+			'mobile_swipe_close'   => true,            // swipe to close panel
 			'mobile_hide_dock'     => true,            // hide dock when panel is open
 
 			// PayPal

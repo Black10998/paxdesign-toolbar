@@ -1,4 +1,4 @@
-/* PaxDesign Utility Dock — v3.0.0
+/* PaxDesign Utility Dock — v4.1.0
    Enterprise AI/Cyber SaaS dock styles.
    #pdx-dock stays inside #pdx-root (scoped variables, fixed position).
    #pdx-backdrop, #pdx-panel, #pdx-notif are appended to <body> by JS. */
@@ -691,273 +691,613 @@ body.pdx-no-scroll { overflow: hidden !important; }
 .pdx-notif-item--error   { background: rgba(248,81,73,.15); color: #f85149; border: 1px solid rgba(248,81,73,.3); }
 
 /* ═══════════════════════════════════════════════════════════
-   RESPONSIVE & MOBILE  — v5.0
-   Full mobile-first layout system. Panel becomes a bottom
-   sheet on small screens. Dock becomes a horizontal pill.
-   All grids, tables, and cards stack adaptively.
-═══════════════════════════════════════════════════════════ */
-
-/* ═══════════════════════════════════════════════════════════
-   RESPONSIVE — tablet → mobile → very small
-   Strategy:
-   • ≤ 860px  tablet      : wider panel, larger touch targets
-   • ≤ 680px  mobile      : two dock modes driven by data-mobile-dock
-       under-header        : full-width bar at top, panel slides down
-       bottom-*            : floating pill at bottom, panel slides up
-   • ≤ 380px  xs phone    : tighten spacing further
+   RESPONSIVE & MOBILE  — v6.0
+   Architecture:
+   • ≤ 860px  tablet   : wider panel, larger touch targets
+   • ≤ 680px  mobile   : dock mode driven by [data-mobile-dock]
+       under-header     : full-width bar pinned below header
+       bottom-*         : floating pill above safe area
+   • ≤ 380px  xs       : tighten further
+   CSS custom properties set by JS (setupMobile):
+     --pdx-vh           : 1% of real viewport height (svh fallback)
+     --pdx-dock-top     : top offset (admin bar height)
+     --pdx-dock-h       : dock bar height in px
+     --pdx-panel-top    : panel top = dock-top + dock-h
+     --pdx-panel-h-pct  : panel height % (admin setting, 50–96)
+     --pdx-icon-size    : icon size override
+     --pdx-btn-size     : button size override
+     --pdx-compact      : 1 when compact mode active
    ═══════════════════════════════════════════════════════════ */
 
 /* ─── Tablet (≤ 860px) ───────────────────────────────────── */
 @media (max-width: 860px) {
-  #pdx-panel { width: min(420px, 100vw); }
+  #pdx-panel       { width: min(420px, 100vw); }
   .pdx-tpl-grid    { grid-template-columns: 1fr; }
   .pdx-conn-grid   { grid-template-columns: 1fr; }
   .pdx-field-row   { grid-template-columns: 1fr; }
   .pdx-metric-grid { grid-template-columns: 1fr 1fr; }
-  .pdx-btn { width: 36px; height: 36px; }
-  .pdx-tab { padding: 7px 10px; }
+  .pdx-btn         { width: 36px; height: 36px; }
+  .pdx-tab         { padding: 7px 10px; }
 }
 
 /* ═══════════════════════════════════════════════════════════
    MOBILE (≤ 680px) — SHARED BASE (both dock modes)
    ═══════════════════════════════════════════════════════════ */
 @media (max-width: 680px) {
-  body.pdx-no-scroll { overflow: hidden !important; position: fixed; width: 100%; left: 0; }
-  #pdx-panel-inner { display: flex; flex-direction: column; min-height: 100%; }
-  .pdx-ph          { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+  /* Body scroll lock — iOS-safe fixed positioning */
+  body.pdx-no-scroll {
+    overflow: hidden !important;
+    position: fixed !important;
+    width: 100% !important;
+    left: 0 !important;
+  }
+
+  /* Panel: full-width, full-height, smooth scroll */
   #pdx-panel {
     position: fixed !important;
-    left: 0 !important; right: 0 !important;
-    width: 100% !important; max-width: 100% !important;
-    overflow-y: auto !important; overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
-    border-left: none !important; border-right: none !important;
-    transition: transform .26s cubic-bezier(.32,0,.67,0) !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    border-left: none !important;
+    border-right: none !important;
+    /* Transition set per-mode below */
   }
+
+  #pdx-panel-inner {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+
+  .pdx-ph {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Panel header: sticky, compact, with close button */
   .pdx-ph-hd {
-    padding: 13px 16px 11px;
-    position: sticky; top: 0; z-index: 10;
-    background: #161b22; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 16px 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--pdx-bg-el, #161b22);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid var(--pdx-border, rgba(255,255,255,.08));
   }
-  .pdx-ph-title { font-size: 14px; flex: 1; }
+
+  .pdx-ph-title {
+    font-size: 14px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Close button: small, round, accessible */
   .pdx-mobile-close {
-    display: flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border: none;
-    background: rgba(255,255,255,.07); border-radius: 50%;
-    color: #8b949e; cursor: pointer; flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: var(--pdx-bg-hov, rgba(255,255,255,.07));
+    border-radius: 50%;
+    color: var(--pdx-mid, #8b949e);
+    cursor: pointer;
+    flex-shrink: 0;
     transition: background .15s, color .15s;
+    -webkit-tap-highlight-color: transparent;
   }
-  .pdx-mobile-close:hover { background: rgba(255,255,255,.13); color: #e6edf3; }
-  .pdx-mobile-close svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+  .pdx-mobile-close:active {
+    background: var(--pdx-bg-el2, rgba(255,255,255,.12));
+    color: var(--pdx-hi, #e6edf3);
+  }
+  .pdx-mobile-close svg {
+    width: 13px;
+    height: 13px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    pointer-events: none;
+  }
+
+  /* Panel body: natural scroll, safe-area bottom padding */
   .pdx-ph-body {
-    padding: 14px 16px calc(28px + env(safe-area-inset-bottom, 0px));
-    gap: 10px; flex: 1;
-    overflow-y: auto; overflow-x: hidden;
-    -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
+    padding: 14px 16px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    gap: 10px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
   }
-  .pdx-btn { width: 44px; height: 44px; border-radius: 8px; flex-shrink: 0; }
-  .pdx-btn svg { width: 17px; height: 17px; }
+
+  /* Dock buttons: comfortable touch targets, no tooltips */
+  .pdx-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .pdx-btn svg {
+    width: 16px;
+    height: 16px;
+  }
   .pdx-btn::after { display: none !important; }
-  .pdx-sep { width: 1px; height: 20px; flex-shrink: 0; margin: 0 6px; }
+
+  /* Separator: vertical line between button groups */
+  .pdx-sep {
+    display: block;
+    width: 1px;
+    height: 18px;
+    background: var(--pdx-border, rgba(255,255,255,.08));
+    margin: 0 4px;
+    flex-shrink: 0;
+  }
+
+  /* Active indicator: bottom bar for horizontal dock */
+  .pdx-btn.is-active::before {
+    left: 50% !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: -1px !important;
+    transform: translateX(-50%) !important;
+    width: 18px;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+  }
+
+  /* Grids: single column on mobile */
   .pdx-tpl-grid    { grid-template-columns: 1fr; }
   .pdx-conn-grid   { grid-template-columns: 1fr; }
   .pdx-field-row   { grid-template-columns: 1fr; }
   .pdx-metric-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
-  .pdx-input-row   { flex-direction: column; gap: 8px; }
-  .pdx-input-row .pdx-btn-primary { width: 100%; padding: 12px 16px; font-size: 15px; }
-  .pdx-input, .pdx-textarea, .pdx-select, .pdx-chat-input { font-size: 16px !important; }
-  .pdx-module-caps { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 2px; margin-right: -16px; padding-right: 16px; }
+
+  /* Input row: stack vertically, full-width button */
+  .pdx-input-row { flex-direction: column; gap: 8px; }
+  .pdx-input-row .pdx-btn-primary {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 15px;
+  }
+
+  /* Prevent iOS zoom on focus — 16px minimum */
+  .pdx-input,
+  .pdx-textarea,
+  .pdx-select,
+  .pdx-chat-input { font-size: 16px !important; }
+
+  /* Capability tags: horizontal scroll, no scrollbar */
+  .pdx-module-caps {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+    margin-right: -16px;
+    padding-right: 16px;
+  }
   .pdx-module-caps::-webkit-scrollbar { display: none; }
   .pdx-cap-tag { flex-shrink: 0; }
-  .pdx-kv-row { flex-direction: column; align-items: flex-start; gap: 3px; }
+
+  /* KV rows: stack key/value vertically */
+  .pdx-kv-row { flex-direction: column; align-items: flex-start; gap: 2px; }
   .pdx-kv-val { text-align: left; }
-  .pdx-risk-header { padding: 12px; gap: 10px; }
-  .pdx-risk-num    { font-size: 24px; }
-  .pdx-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap; }
+
+  /* Risk header: tighter on small screens */
+  .pdx-risk-header { padding: 10px 12px; gap: 10px; }
+  .pdx-risk-num    { font-size: 22px; }
+  .pdx-risk-ring   { width: 60px; height: 60px; }
+
+  /* Tabs: horizontal scroll, no wrap */
+  .pdx-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
   .pdx-tabs::-webkit-scrollbar { display: none; }
-  .pdx-tab  { flex-shrink: 0; white-space: nowrap; }
-  .pdx-chat-messages { max-height: none; flex: 1; min-height: 160px; }
+  .pdx-tab { flex-shrink: 0; white-space: nowrap; }
+
+  /* Chat: fill available height */
+  .pdx-chat-messages { max-height: none; flex: 1; min-height: 140px; }
   .pdx-chat-footer   { padding: 10px 14px; }
-  .pdx-dp-header   { padding: 8px 12px; }
-  .pdx-dp-stages   { padding: 8px 12px; }
-  .pdx-dp-log      { margin: 0 12px 8px; max-height: 60px; }
-  .pdx-dp-findings { padding: 0 12px 8px; }
-  .pdx-dp-stage-detail { display: none; }
-  .pdx-graph-canvas { height: 200px !important; }
-  .pdx-paywall  { padding: 20px 16px; }
-  .pdx-hist-item { flex-wrap: wrap; gap: 4px; }
-  .pdx-ws-item  { padding: 10px; }
-  .pdx-result, .pdx-section { overflow-x: hidden; }
-  .pdx-code     { font-size: 10px; }
-  .pdx-agent-row, .pdx-step-inner { flex-wrap: wrap; }
-  .pdx-agent-row .pdx-select, .pdx-step-inner .pdx-select { width: 100%; }
+
+  /* Pipeline: compact on mobile */
+  .pdx-dp-header        { padding: 8px 12px; }
+  .pdx-dp-stages        { padding: 8px 12px; }
+  .pdx-dp-log           { margin: 0 12px 8px; max-height: 56px; }
+  .pdx-dp-findings      { padding: 0 12px 8px; }
+  .pdx-dp-stage-detail  { display: none; }
+
+  /* Graph: shorter canvas */
+  .pdx-graph-canvas { height: 180px !important; }
+
+  /* Misc component adjustments */
+  .pdx-paywall        { padding: 18px 14px; }
+  .pdx-hist-item      { flex-wrap: wrap; gap: 4px; }
+  .pdx-ws-item        { padding: 10px; }
+  .pdx-result,
+  .pdx-section        { overflow-x: hidden; }
+  .pdx-code           { font-size: 10px; }
+  .pdx-agent-row,
+  .pdx-step-inner     { flex-wrap: wrap; }
+  .pdx-agent-row .pdx-select,
+  .pdx-step-inner .pdx-select { width: 100%; }
   .pdx-evidence-section { margin-left: 0; margin-right: 0; }
   .pdx-metric-card    { padding: 10px; }
   .pdx-report-summary { padding: 12px; }
-  .pdx-risk-ring      { width: 64px; height: 64px; }
 }
 
 /* ═══════════════════════════════════════════════════════════
    MODE A — under-header  [data-mobile-dock="under-header"]
-   Full-width glass bar pinned under browser chrome.
-   Panel slides down from top, fills remaining screen.
+   Full-width glass bar pinned directly below the header/
+   admin bar. Panel slides down from it, fills remaining
+   screen height. This is the recommended phone layout.
    ═══════════════════════════════════════════════════════════ */
 @media (max-width: 680px) {
   #pdx-root[data-mobile-dock="under-header"] #pdx-dock {
+    /* Position */
     position: fixed !important;
     top: var(--pdx-dock-top, 0px) !important;
-    left: 0 !important; right: 0 !important; bottom: auto !important;
-    width: 100% !important; transform: none !important;
-    flex-direction: row; align-items: center; justify-content: center;
-    flex-wrap: nowrap; gap: 0;
-    overflow-x: auto; overflow-y: hidden;
-    -webkit-overflow-scrolling: touch; scrollbar-width: none;
-    height: var(--pdx-dock-h, 52px); padding: 0 8px;
-    border-radius: 0 !important;
-    border-top: none !important; border-left: none !important; border-right: none !important;
-    border-bottom: 1px solid rgba(255,255,255,.08) !important;
-    background: rgba(13,17,23,.92) !important;
-    backdrop-filter: blur(20px) saturate(1.4);
-    -webkit-backdrop-filter: blur(20px) saturate(1.4);
-    box-shadow: 0 1px 0 rgba(255,255,255,.05), 0 4px 20px rgba(0,0,0,.4);
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+    width: 100% !important;
+    transform: none !important;
     z-index: 99998 !important;
+
+    /* Layout: horizontal row of buttons */
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-wrap: nowrap !important;
+    gap: 0 !important;
+    height: var(--pdx-dock-h, 48px) !important;
+    padding: 0 max(8px, env(safe-area-inset-left, 8px)) !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+
+    /* Appearance */
+    border-radius: 0 !important;
+    border-top: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--pdx-border, rgba(255,255,255,.08)) !important;
+    background: rgba(13,17,23,.94) !important;
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    box-shadow: 0 1px 0 rgba(255,255,255,.04), 0 2px 16px rgba(0,0,0,.35);
+
+    /* Smooth hide when panel opens */
+    transition: transform .22s cubic-bezier(.4,0,.2,1),
+                opacity .18s ease !important;
   }
   #pdx-root[data-mobile-dock="under-header"] #pdx-dock::-webkit-scrollbar { display: none; }
+
+  /* Hide dock when panel is open (slides up) */
   #pdx-root[data-mobile-dock="under-header"] #pdx-dock.pdx-dock--panel-open {
-    transform: translateY(-110%) !important; pointer-events: none;
-    transition: transform .22s cubic-bezier(.4,0,1,1) !important;
+    transform: translateY(-110%) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
+
+  /* Active indicator: bottom edge bar */
   #pdx-root[data-mobile-dock="under-header"] .pdx-btn.is-active::before {
-    left: 50% !important; right: auto !important;
-    top: auto !important; bottom: 0px !important;
+    left: 50% !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: 0 !important;
     transform: translateX(-50%) !important;
-    width: 20px; height: 2px; border-radius: 2px 2px 0 0;
+    width: 18px !important;
+    height: 2px !important;
+    border-radius: 2px 2px 0 0 !important;
   }
+
+  /* Panel: fills screen below dock */
   #pdx-root[data-mobile-dock="under-header"] #pdx-panel {
-    top: var(--pdx-panel-top, 52px) !important;
-    bottom: 0 !important; height: auto !important; max-height: none !important;
+    top: var(--pdx-panel-top, 48px) !important;
+    bottom: 0 !important;
+    height: auto !important;
+    max-height: none !important;
     border-radius: 0 !important;
-    border-top: 1px solid rgba(255,255,255,.08) !important; border-bottom: none !important;
-    box-shadow: 0 6px 32px rgba(0,0,0,.5);
+    border-top: 1px solid var(--pdx-border, rgba(255,255,255,.08)) !important;
+    border-bottom: none !important;
+    box-shadow: 0 4px 24px rgba(0,0,0,.45);
+    transition: transform .26s cubic-bezier(.4,0,.2,1) !important;
   }
-  #pdx-root[data-mobile-dock="under-header"] #pdx-panel:not(.is-open) { transform: translateY(-102%) !important; }
-  #pdx-root[data-mobile-dock="under-header"] #pdx-panel.is-open       { transform: translateY(0)     !important; }
-  #pdx-root[data-mobile-dock="under-header"] #pdx-panel::before       { display: none !important; }
-  #pdx-root[data-mobile-dock="under-header"] #pdx-backdrop { top: var(--pdx-panel-top, 52px) !important; }
+  #pdx-root[data-mobile-dock="under-header"] #pdx-panel:not(.is-open) {
+    transform: translateY(-102%) !important;
+  }
+  #pdx-root[data-mobile-dock="under-header"] #pdx-panel.is-open {
+    transform: translateY(0) !important;
+  }
+  /* No drag handle for top-slide panel */
+  #pdx-root[data-mobile-dock="under-header"] #pdx-panel::before {
+    display: none !important;
+  }
+
+  /* Panel body: extra bottom padding for safe area */
+  #pdx-root[data-mobile-dock="under-header"] .pdx-ph-body {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Backdrop starts below dock */
+  #pdx-root[data-mobile-dock="under-header"] #pdx-backdrop {
+    top: var(--pdx-panel-top, 48px) !important;
+  }
+
+  /* Notifications: below dock, full width */
   #pdx-root[data-mobile-dock="under-header"] #pdx-notif {
-    top: calc(var(--pdx-panel-top, 52px) + 8px); bottom: auto; right: 12px; left: 12px;
+    top: calc(var(--pdx-panel-top, 48px) + 8px);
+    bottom: auto;
+    right: 12px;
+    left: 12px;
   }
+
+  /* Command palette: below dock */
   #pdx-root[data-mobile-dock="under-header"] .pdx-cmd-box {
-    top: calc(var(--pdx-panel-top, 52px) + 8px); width: 96vw; max-height: 70vh;
+    top: calc(var(--pdx-panel-top, 48px) + 8px);
+    width: 96vw;
+    max-height: 70vh;
   }
-  /* Light mode */
+
+  /* Light mode overrides */
   #pdx-root[data-mobile-dock="under-header"][data-theme="light"] #pdx-dock,
   #pdx-root[data-mobile-dock="under-header"][data-theme="auto"]  #pdx-dock {
-    background: rgba(255,255,255,.95) !important;
-    border-bottom-color: rgba(0,0,0,.09) !important;
-    box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 3px 14px rgba(0,0,0,.1);
+    background: rgba(255,255,255,.96) !important;
+    border-bottom-color: rgba(0,0,0,.08) !important;
+    box-shadow: 0 1px 0 rgba(0,0,0,.05), 0 2px 12px rgba(0,0,0,.08);
   }
 }
 @media (max-width: 680px) and (prefers-color-scheme: light) {
   #pdx-root[data-mobile-dock="under-header"][data-theme="auto"] #pdx-dock {
-    background: rgba(255,255,255,.95) !important;
-    border-bottom-color: rgba(0,0,0,.09) !important;
-    box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 3px 14px rgba(0,0,0,.1);
+    background: rgba(255,255,255,.96) !important;
+    border-bottom-color: rgba(0,0,0,.08) !important;
+    box-shadow: 0 1px 0 rgba(0,0,0,.05), 0 2px 12px rgba(0,0,0,.08);
   }
 }
 
 /* ═══════════════════════════════════════════════════════════
    MODE B — bottom pill  [data-mobile-dock="bottom-*"]
-   Floating pill above safe area. Panel is a bottom sheet.
+   Compact floating pill above the safe area. Panel is a
+   bottom sheet that slides up from the bottom edge.
    ═══════════════════════════════════════════════════════════ */
 @media (max-width: 680px) {
+
+  /* Shared pill base */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-dock {
     position: fixed !important;
     top: auto !important;
-    bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important;
-    height: auto; padding: 5px 8px;
-    flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 0;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
+    height: auto !important;
+    padding: 5px 6px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 0 !important;
+    z-index: 99998 !important;
+
+    /* Pill shape */
     border-radius: 40px !important;
     border: 1px solid rgba(255,255,255,.1) !important;
-    background: rgba(13,17,23,.88) !important;
-    backdrop-filter: blur(28px) saturate(1.4);
-    -webkit-backdrop-filter: blur(28px) saturate(1.4);
-    box-shadow: 0 4px 28px rgba(0,0,0,.55);
-    z-index: 99998 !important;
+    background: rgba(13,17,23,.90) !important;
+    backdrop-filter: blur(28px) saturate(1.5);
+    -webkit-backdrop-filter: blur(28px) saturate(1.5);
+    box-shadow: 0 4px 24px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.06) inset;
+
+    transition: transform .22s cubic-bezier(.4,0,.2,1),
+                opacity .18s ease !important;
   }
+
+  /* Horizontal positions */
   #pdx-root[data-mobile-dock="bottom-center"] #pdx-dock {
-    left: 50% !important; right: auto !important; transform: translateX(-50%) !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
   }
   #pdx-root[data-mobile-dock="bottom-left"] #pdx-dock {
-    left: 14px !important; right: auto !important; transform: none !important;
+    left: max(14px, env(safe-area-inset-left, 14px)) !important;
+    right: auto !important;
+    transform: none !important;
   }
   #pdx-root[data-mobile-dock="bottom-right"] #pdx-dock {
-    right: 14px !important; left: auto !important; transform: none !important;
+    right: max(14px, env(safe-area-inset-right, 14px)) !important;
+    left: auto !important;
+    transform: none !important;
   }
+
+  /* Hide dock when panel is open (slides down) */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-dock.pdx-dock--panel-open {
-    transform: translateY(calc(100% + 24px)) !important; pointer-events: none;
-    transition: transform .22s cubic-bezier(.4,0,1,1) !important;
+    transform: translateY(calc(100% + 20px)) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
   }
   #pdx-root[data-mobile-dock="bottom-center"] #pdx-dock.pdx-dock--panel-open {
-    transform: translateX(-50%) translateY(calc(100% + 24px)) !important;
+    transform: translateX(-50%) translateY(calc(100% + 20px)) !important;
   }
+
+  /* Active indicator: top edge bar on pill */
   #pdx-root[data-mobile-dock^="bottom"] .pdx-btn.is-active::before {
-    left: 50% !important; right: auto !important;
-    top: -4px !important; bottom: auto !important;
+    left: 50% !important;
+    right: auto !important;
+    top: 0 !important;
+    bottom: auto !important;
     transform: translateX(-50%) !important;
-    width: 16px; height: 3px; border-radius: 2px;
+    width: 14px !important;
+    height: 2px !important;
+    border-radius: 0 0 2px 2px !important;
   }
+
+  /* Bottom sheet panel */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-panel {
-    top: auto !important; bottom: 0 !important;
-    height: calc(var(--pdx-vh, 1svh) * 90) !important;
+    top: auto !important;
+    bottom: 0 !important;
+    /* Height driven by --pdx-panel-h-pct (admin setting, default 90) */
+    height: calc(var(--pdx-panel-h-pct, 90) * var(--pdx-vh, 1svh)) !important;
     max-height: 96svh !important;
-    border-radius: 18px 18px 0 0 !important;
-    border-top: 1px solid rgba(255,255,255,.1) !important; border-bottom: none !important;
-    box-shadow: 0 -8px 40px rgba(0,0,0,.6);
+    border-radius: 16px 16px 0 0 !important;
+    border-top: 1px solid var(--pdx-border, rgba(255,255,255,.1)) !important;
+    border-bottom: none !important;
+    box-shadow: 0 -6px 32px rgba(0,0,0,.55);
+    transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
   }
-  #pdx-root[data-mobile-dock^="bottom"] #pdx-panel:not(.is-open) { transform: translateY(102%)  !important; }
-  #pdx-root[data-mobile-dock^="bottom"] #pdx-panel.is-open       { transform: translateY(0)     !important; }
+  #pdx-root[data-mobile-dock^="bottom"] #pdx-panel:not(.is-open) {
+    transform: translateY(102%) !important;
+  }
+  #pdx-root[data-mobile-dock^="bottom"] #pdx-panel.is-open {
+    transform: translateY(0) !important;
+  }
+
+  /* Drag handle */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-panel::before {
-    content: ''; display: block;
-    width: 36px; height: 4px;
-    background: rgba(255,255,255,.18); border-radius: 2px;
-    margin: 10px auto 0;
-    position: sticky; top: 0; z-index: 20; pointer-events: none;
+    content: '';
+    display: block;
+    width: 32px;
+    height: 3px;
+    background: var(--pdx-border-mid, rgba(255,255,255,.16));
+    border-radius: 2px;
+    margin: 8px auto 0;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    pointer-events: none;
+    flex-shrink: 0;
   }
+
+  /* Panel body: extra bottom padding so content clears safe area */
   #pdx-root[data-mobile-dock^="bottom"] .pdx-ph-body {
-    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   }
-  #pdx-root[data-mobile-dock^="bottom"] #pdx-backdrop { top: 0 !important; }
+
+  /* Backdrop: full screen for bottom sheet */
+  #pdx-root[data-mobile-dock^="bottom"] #pdx-backdrop {
+    top: 0 !important;
+  }
+
+  /* Notifications: above dock pill */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-notif {
-    bottom: calc(80px + env(safe-area-inset-bottom, 0px)); top: auto; right: 12px; left: 12px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    top: auto;
+    right: 12px;
+    left: 12px;
   }
-  #pdx-root[data-mobile-dock^="bottom"] .pdx-cmd-box { top: 12px; width: 96vw; max-height: 70vh; }
-  /* Light mode */
+
+  /* Command palette: top of screen */
+  #pdx-root[data-mobile-dock^="bottom"] .pdx-cmd-box {
+    top: 12px;
+    width: 96vw;
+    max-height: 70vh;
+  }
+
+  /* Light mode overrides */
   #pdx-root[data-mobile-dock^="bottom"][data-theme="light"] #pdx-dock,
   #pdx-root[data-mobile-dock^="bottom"][data-theme="auto"]  #pdx-dock {
-    background: rgba(255,255,255,.95) !important;
-    border-color: rgba(0,0,0,.1) !important;
-    box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    background: rgba(255,255,255,.96) !important;
+    border-color: rgba(0,0,0,.09) !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,.12), 0 1px 0 rgba(255,255,255,.8) inset;
   }
 }
 @media (max-width: 680px) and (prefers-color-scheme: light) {
   #pdx-root[data-mobile-dock^="bottom"][data-theme="auto"] #pdx-dock {
-    background: rgba(255,255,255,.95) !important;
-    border-color: rgba(0,0,0,.1) !important;
-    box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    background: rgba(255,255,255,.96) !important;
+    border-color: rgba(0,0,0,.09) !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,.12), 0 1px 0 rgba(255,255,255,.8) inset;
   }
 }
 
-/* ─── Very small screens (≤ 380px) ──────────────────────── */
+/* ─── Extra-small screens (≤ 380px) ─────────────────────── */
 @media (max-width: 380px) {
-  #pdx-root[data-mobile-dock="under-header"] #pdx-dock { padding: 0 4px; }
-  #pdx-root[data-mobile-dock^="bottom"]      #pdx-dock { padding: 4px 6px; }
-  .pdx-btn     { width: 40px; height: 40px; }
-  .pdx-btn svg { width: 15px; height: 15px; }
+  /* Tighter dock padding */
+  #pdx-root[data-mobile-dock="under-header"] #pdx-dock {
+    padding: 0 4px !important;
+  }
+  #pdx-root[data-mobile-dock^="bottom"] #pdx-dock {
+    padding: 4px 5px !important;
+  }
+
+  /* Slightly smaller buttons */
+  .pdx-btn     { width: 36px; height: 36px; }
+  .pdx-btn svg { width: 14px; height: 14px; }
+
+  /* Single-column metrics */
   .pdx-metric-grid { grid-template-columns: 1fr; }
-  .pdx-ph-title    { font-size: 13px; }
-  .pdx-dp-log      { display: none; }
+
+  /* Tighter panel header */
+  .pdx-ph-title { font-size: 13px; }
+  .pdx-ph-hd    { padding: 10px 12px 8px; }
+  .pdx-ph-body  { padding: 12px 12px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Hide verbose pipeline log */
+  .pdx-dp-log { display: none; }
+
+  /* Tighter section spacing */
+  .pdx-section { gap: 4px; }
+  .pdx-result  { gap: 8px; }
+}
+
+/* ─── Mobile spacing modes ───────────────────────────────── */
+@media (max-width: 680px) {
+  /* Compact spacing */
+  #pdx-root[data-mobile-spacing="compact"] .pdx-ph-body {
+    padding: 10px 12px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    gap: 8px;
+  }
+  #pdx-root[data-mobile-spacing="compact"] .pdx-ph-hd {
+    padding: 9px 12px 8px;
+  }
+  #pdx-root[data-mobile-spacing="compact"] .pdx-section { gap: 4px; }
+  #pdx-root[data-mobile-spacing="compact"] .pdx-result  { gap: 8px; }
+
+  /* Relaxed spacing */
+  #pdx-root[data-mobile-spacing="relaxed"] .pdx-ph-body {
+    padding: 18px 20px;
+    padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+    gap: 14px;
+  }
+  #pdx-root[data-mobile-spacing="relaxed"] .pdx-ph-hd {
+    padding: 16px 20px 14px;
+  }
+
+  /* Compact mode: smaller buttons and icons */
+  #pdx-root[data-mobile-compact="1"] .pdx-btn {
+    width: 34px;
+    height: 34px;
+  }
+  #pdx-root[data-mobile-compact="1"] .pdx-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  /* Safe area disabled: remove env() padding */
+  #pdx-root[data-mobile-safe-area="0"] .pdx-ph-body {
+    padding-bottom: 20px;
+  }
+  #pdx-root[data-mobile-safe-area="0"][data-mobile-dock^="bottom"] .pdx-ph-body {
+    padding-bottom: 72px;
+  }
+  #pdx-root[data-mobile-safe-area="0"][data-mobile-dock^="bottom"] #pdx-dock {
+    bottom: 12px !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════

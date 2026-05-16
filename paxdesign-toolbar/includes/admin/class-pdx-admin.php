@@ -194,10 +194,18 @@ class PDX_Admin {
 					'dock_size'      => in_array( $post['dock_size']     ?? '', [ 'compact', 'default', 'large' ] ) ? $post['dock_size'] : 'default',
 					'accent_color'   => sanitize_hex_color( $post['accent_color'] ?? '#3fb950' ) ?: '#3fb950',
 					'custom_css'     => wp_strip_all_tags( $post['custom_css'] ?? '' ),
+					// Mobile
 					'mobile_enabled'       => isset( $post['mobile_enabled'] ),
 					'mobile_breakpoint'    => min( 1280, max( 320, absint( $post['mobile_breakpoint'] ?? 680 ) ) ),
 					'mobile_dock_position' => in_array( $post['mobile_dock_position'] ?? '', [ 'under-header', 'bottom-center', 'bottom-left', 'bottom-right' ] ) ? $post['mobile_dock_position'] : 'under-header',
+					'mobile_dock_height'   => min( 72, max( 36, absint( $post['mobile_dock_height'] ?? 48 ) ) ),
 					'mobile_panel_height'  => min( 96, max( 50, absint( $post['mobile_panel_height'] ?? 90 ) ) ),
+					'mobile_icon_size'     => min( 28, max( 0, absint( $post['mobile_icon_size'] ?? 0 ) ) ),
+					'mobile_btn_size'      => min( 60, max( 0, absint( $post['mobile_btn_size'] ?? 0 ) ) ),
+					'mobile_spacing'       => in_array( $post['mobile_spacing'] ?? '', [ 'default', 'compact', 'relaxed' ] ) ? $post['mobile_spacing'] : 'default',
+					'mobile_scale'         => in_array( $post['mobile_scale'] ?? '', [ 'auto', 'fixed', 'fluid' ] ) ? $post['mobile_scale'] : 'auto',
+					'mobile_compact'       => isset( $post['mobile_compact'] ),
+					'mobile_safe_area'     => isset( $post['mobile_safe_area'] ),
 					'mobile_swipe_close'   => isset( $post['mobile_swipe_close'] ),
 					'mobile_hide_dock'     => isset( $post['mobile_hide_dock'] ),
 				];
