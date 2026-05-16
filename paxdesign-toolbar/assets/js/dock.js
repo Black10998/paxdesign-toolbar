@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v5.0.0
+ * PaxDesign Utility Dock — v5.0.1
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.

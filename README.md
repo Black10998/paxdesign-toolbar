@@ -19,9 +19,20 @@ Enterprise-grade WordPress plugin providing a modular SaaS utility dock with AI 
 
 ## Installation
 
-1. Upload the `paxdesign-toolbar` folder to `/wp-content/plugins/`
+**Recommended:** download the latest ZIP from [GitHub Releases](https://github.com/Black10998/paxdesign-toolbar/releases) or use `releases/paxdesign-toolbar-<version>.zip` in this repo.
+
+1. **Plugins → Add New → Upload Plugin** and choose the ZIP (do not nest folders manually)
 2. Activate via **Plugins → Installed Plugins**
 3. Configure via **PaxDesign** in the WordPress admin menu
+4. After updates, open **PaxDesign → Cache** and click **Purge All Caches** if styles/scripts look stale
+
+### Build a release ZIP locally
+
+```powershell
+.\scripts\build-release.ps1
+```
+
+Output: `releases/paxdesign-toolbar-<version>.zip` (WordPress-ready: contains a single `paxdesign-toolbar/` folder).
 
 ## Requirements
 
