@@ -1,5 +1,27 @@
 # Changelog
 
+## 6.0.0 — 2026-05-17
+
+**Major UI/UX redesign** — GitHub-inspired design system, yellow brand accent (`#c2ff00`).
+
+### Design system
+- New `pdx-tokens.css` (dark/light, shared tokens)
+- New `pdx-dock-ui.css` (dock + panel + pipeline polish layer)
+- Rebuilt `admin.css` with sidebar navigation + top bar
+- Default accent color: `#c2ff00`
+
+### Admin
+- Sidebar navigation grouped by Core / Commerce / Platform / Compliance
+- Mobile collapsible sidebar, light/dark theme toggle
+- Consistent cards, tables, forms, stats
+
+### Frontend dock
+- Visible panel close (X) on all viewports
+- Refined dock rail, modals, command palette, notifications
+- Live pipeline running state (`pdx-dp--running`) + log highlights
+
+**Install:** `releases/paxdesign-toolbar-6.0.0.zip` — tag `v6.0.0`
+
 ## 5.0.1 — 2026-05-17
 
 **Install:** use `releases/paxdesign-toolbar-5.0.1.zip` or tag `v5.0.1`.

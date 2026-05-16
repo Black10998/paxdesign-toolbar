@@ -1,12 +1,54 @@
 /**
- * PaxDesign Admin Panel — v5.0.1
+ * PaxDesign Admin — v6
  */
 (function () {
   'use strict';
 
+  var wrap = document.querySelector('.pdx-admin-wrap');
+  var sidebar = document.getElementById('pdx-sidebar');
+  var menuBtn = document.getElementById('pdx-sidebar-toggle');
+  var themeBtn = document.getElementById('pdx-theme-toggle');
+
+  /* ── Sidebar (mobile) ─────────────────────────────────── */
+  if (wrap && menuBtn) {
+    menuBtn.addEventListener('click', function () {
+      var open = wrap.classList.toggle('is-sidebar-open');
+      menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function (e) {
+      if (!wrap.classList.contains('is-sidebar-open')) return;
+      if (sidebar && sidebar.contains(e.target)) return;
+      if (menuBtn.contains(e.target)) return;
+      wrap.classList.remove('is-sidebar-open');
+      menuBtn.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  /* ── Theme toggle ─────────────────────────────────────── */
+  var stored = null;
+  try { stored = localStorage.getItem('pdx_admin_theme'); } catch (e) {}
+
+  function applyTheme(mode) {
+    if (!wrap) return;
+    wrap.setAttribute('data-pdx-theme', mode);
+    if (themeBtn) themeBtn.textContent = mode === 'light' ? 'Dark' : 'Light';
+    try { localStorage.setItem('pdx_admin_theme', mode); } catch (e) {}
+  }
+
+  if (stored === 'light' || stored === 'dark') {
+    applyTheme(stored);
+  }
+
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function () {
+      var next = wrap.getAttribute('data-pdx-theme') === 'light' ? 'dark' : 'light';
+      applyTheme(next);
+    });
+  }
+
   /* ── Color picker sync ──────────────────────────────────── */
   var colorInput = document.getElementById('accent_color');
-  var hexInput   = document.getElementById('accent_color_hex');
+  var hexInput = document.getElementById('accent_color_hex');
 
   if (colorInput && hexInput) {
     colorInput.addEventListener('input', function () {
@@ -14,72 +56,43 @@
     });
     hexInput.addEventListener('input', function () {
       var val = hexInput.value.trim();
-      if (/^#[0-9a-f]{6}$/i.test(val)) {
-        colorInput.value = val;
-      }
+      if (/^#[0-9a-f]{6}$/i.test(val)) colorInput.value = val;
     });
   }
 
-  /* ── Password reveal toggles ────────────────────────────── */
+  /* ── Password reveal ──────────────────────────────────── */
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('.pdx-input-reveal');
     if (!btn) return;
-    var targetId = btn.getAttribute('data-target');
-    var field    = document.getElementById(targetId);
+    var field = document.getElementById(btn.getAttribute('data-target'));
     if (!field) return;
     field.type = field.type === 'password' ? 'text' : 'password';
   });
 
-  /* ── Radio group visual state ───────────────────────────── */
+  /* ── Radio / checkbox cards ───────────────────────────── */
   document.addEventListener('change', function (e) {
     var radio = e.target;
-    if (radio.type !== 'radio') return;
-    var group = radio.closest('.pdx-radio-group');
-    if (!group) return;
-    var labels = group.querySelectorAll('.pdx-radio');
-    for (var i = 0; i < labels.length; i++) {
-      labels[i].classList.remove('is-selected');
-    }
-    var parent = radio.closest('.pdx-radio');
-    if (parent) parent.classList.add('is-selected');
-  });
-
-  /* ── Checkbox card visual state (roles) ─────────────────── */
-  document.addEventListener('change', function (e) {
-    var cb = e.target;
-    if (cb.type !== 'checkbox') return;
-
-    /* Role cards */
-    var roleCard = cb.closest('.pdx-role-card');
-    if (roleCard) {
-      roleCard.classList.toggle('is-selected', cb.checked);
-    }
-
-    /* Module cards */
-    var moduleCard = cb.closest('.pdx-module-card');
-    if (moduleCard) {
-      moduleCard.classList.toggle('is-enabled', cb.checked);
-    }
-  });
-
-  /* ── Confirm dangerous actions ──────────────────────────── */
-  document.addEventListener('submit', function (e) {
-    var form = e.target;
-    if (form.querySelector('[name="action"][value="pdx_clear_log"]')) {
-      if (!confirm('Clear all event logs? This cannot be undone.')) {
-        e.preventDefault();
+    if (radio.type === 'radio') {
+      var group = radio.closest('.pdx-radio-group');
+      if (group) {
+        group.querySelectorAll('.pdx-radio').forEach(function (l) {
+          l.classList.remove('is-selected');
+        });
+        var parent = radio.closest('.pdx-radio');
+        if (parent) parent.classList.add('is-selected');
       }
     }
+    if (radio.type === 'checkbox') {
+      var roleCard = radio.closest('.pdx-role-card');
+      if (roleCard) roleCard.classList.toggle('is-selected', radio.checked);
+      var moduleCard = radio.closest('.pdx-module-card');
+      if (moduleCard) moduleCard.classList.toggle('is-enabled', radio.checked);
+    }
   });
 
-  /* ── Auto-dismiss notices ───────────────────────────────── */
-  var notices = document.querySelectorAll('.notice.is-dismissible');
-  notices.forEach(function (n) {
-    setTimeout(function () {
-      n.style.transition = 'opacity 0.4s';
-      n.style.opacity    = '0';
-      setTimeout(function () { n.remove(); }, 400);
-    }, 3500);
+  document.addEventListener('submit', function (e) {
+    if (e.target.querySelector('[name="action"][value="pdx_clear_log"]')) {
+      if (!confirm('Clear all event logs? This cannot be undone.')) e.preventDefault();
+    }
   });
-
-}());
+})();

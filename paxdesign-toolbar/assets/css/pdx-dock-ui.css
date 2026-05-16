@@ -1,0 +1,440 @@
+/**
+ * PaxDesign Dock UI v6 — GitHub-inspired surface layer
+ * Loaded after dock.css; maps legacy tokens and polishes all dock surfaces.
+ */
+
+#pdx-root {
+  --pdx-hi: var(--pdx-text, #e6edf3);
+  --pdx-mid: var(--pdx-text-muted, #8b949e);
+  --pdx-lo: var(--pdx-text-subtle, #6e7681);
+  --pdx-mute: var(--pdx-text-subtle, #6e7681);
+  --pdx-bg-el: var(--pdx-bg-elev, #161b22);
+  --pdx-bg-el2: var(--pdx-bg-muted, #21262d);
+  --pdx-bg-hov: var(--pdx-bg-hover, #30363d);
+  --pdx-border-mid: var(--pdx-border, #30363d);
+  --pdx-green: var(--pdx-accent, #c2ff00);
+  --pdx-green-dim: var(--pdx-accent-dim, rgba(194, 255, 0, 0.14));
+  --pdx-emerald: var(--pdx-accent, #c2ff00);
+  --pdx-r-sm: var(--pdx-radius, 6px);
+  --pdx-r: var(--pdx-radius, 6px);
+  --pdx-r-lg: var(--pdx-radius-lg, 10px);
+  font-family: var(--pdx-font);
+}
+
+/* ─── Dock rail ─────────────────────────────────────────── */
+#pdx-dock {
+  background: var(--pdx-bg-elev);
+  border-color: var(--pdx-border);
+  box-shadow: var(--pdx-shadow);
+  gap: 2px;
+  padding: 6px 8px;
+}
+
+#pdx-dock .pdx-btn {
+  border-radius: var(--pdx-radius);
+  color: var(--pdx-text-muted);
+  transition: background var(--pdx-ease), color var(--pdx-ease), box-shadow var(--pdx-ease);
+}
+
+#pdx-dock .pdx-btn:hover {
+  background: var(--pdx-bg-hover);
+  color: var(--pdx-text);
+}
+
+#pdx-dock .pdx-btn.is-active {
+  background: var(--pdx-accent-dim);
+  color: var(--pdx-accent);
+  box-shadow: inset 0 0 0 1px var(--pdx-accent-border);
+}
+
+#pdx-dock .pdx-btn svg {
+  stroke: currentColor;
+  opacity: 0.92;
+}
+
+#pdx-dock .pdx-sep {
+  background: var(--pdx-border);
+  opacity: 1;
+}
+
+/* ─── Panel shell ───────────────────────────────────────── */
+#pdx-panel {
+  background: var(--pdx-bg);
+  border-color: var(--pdx-border);
+  box-shadow: var(--pdx-shadow);
+  font-family: var(--pdx-font);
+  color: var(--pdx-text);
+}
+
+#pdx-panel-inner {
+  position: relative;
+}
+
+#pdx-backdrop.is-open {
+  background: rgba(1, 4, 9, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+/* Close — always visible, all viewports */
+.pdx-panel-close,
+.pdx-mobile-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 30;
+  width: 32px;
+  height: 32px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius);
+  background: var(--pdx-bg-elev);
+  color: var(--pdx-text-muted);
+  cursor: pointer;
+  transition: background var(--pdx-ease), color var(--pdx-ease), border-color var(--pdx-ease);
+}
+
+.pdx-panel-close:hover,
+.pdx-mobile-close:hover {
+  background: var(--pdx-bg-hover);
+  color: var(--pdx-text);
+  border-color: var(--pdx-text-subtle);
+}
+
+.pdx-panel-close svg,
+.pdx-mobile-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Panel header */
+.pdx-ph-hd {
+  padding: 14px 48px 12px 16px;
+  border-bottom: 1px solid var(--pdx-border);
+  background: var(--pdx-bg-elev);
+}
+
+.pdx-ph-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--pdx-text);
+  gap: 8px;
+}
+
+.pdx-ph-title svg {
+  stroke: var(--pdx-accent) !important;
+}
+
+.pdx-ph-desc {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--pdx-text-muted);
+  margin-top: 6px;
+}
+
+.pdx-ph-body {
+  padding: 14px 16px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--pdx-border) transparent;
+}
+
+/* ─── Typography & sections ───────────────────────────── */
+.pdx-section-title,
+.pdx-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pdx-text-muted);
+}
+
+.pdx-cap-tag {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--pdx-border);
+  background: var(--pdx-bg-muted);
+  color: var(--pdx-text-muted);
+}
+
+/* ─── Forms ─────────────────────────────────────────────── */
+.pdx-input,
+.pdx-textarea,
+.pdx-select,
+.pdx-cmd-input {
+  background: var(--pdx-bg);
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius);
+  color: var(--pdx-text);
+  font-size: 13px;
+  transition: border-color var(--pdx-ease), box-shadow var(--pdx-ease);
+}
+
+.pdx-input:focus,
+.pdx-textarea:focus,
+.pdx-select:focus,
+.pdx-cmd-input:focus {
+  outline: none;
+  border-color: var(--pdx-accent);
+  box-shadow: 0 0 0 3px var(--pdx-accent-dim);
+}
+
+.pdx-btn-primary {
+  background: var(--pdx-accent);
+  color: var(--pdx-on-accent);
+  border: 1px solid transparent;
+  border-radius: var(--pdx-radius);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: filter var(--pdx-ease), transform 0.1s ease;
+}
+
+.pdx-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.pdx-btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.pdx-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pdx-btn-ghost,
+.pdx-btn-icon {
+  background: transparent;
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius);
+  color: var(--pdx-text);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background var(--pdx-ease), border-color var(--pdx-ease);
+}
+
+.pdx-btn-ghost:hover,
+.pdx-btn-icon:hover {
+  background: var(--pdx-bg-hover);
+  border-color: var(--pdx-text-subtle);
+}
+
+/* ─── Tabs ──────────────────────────────────────────────── */
+.pdx-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px;
+  background: var(--pdx-bg-muted);
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius);
+  margin-bottom: 12px;
+}
+
+.pdx-tab {
+  border: none;
+  background: transparent;
+  color: var(--pdx-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pdx-tab.is-active {
+  background: var(--pdx-bg-elev);
+  color: var(--pdx-text);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* ─── Pipeline / investigation UX ───────────────────────── */
+.pdx-deep-pipeline {
+  background: var(--pdx-bg-elev) !important;
+  border: 1px solid var(--pdx-border) !important;
+  border-radius: var(--pdx-radius-lg) !important;
+  overflow: hidden;
+}
+
+.pdx-dp-header {
+  background: var(--pdx-bg-muted) !important;
+  border-bottom: 1px solid var(--pdx-border) !important;
+}
+
+.pdx-dp-title {
+  color: var(--pdx-text) !important;
+  text-transform: none !important;
+  font-family: var(--pdx-font) !important;
+  font-size: 12px !important;
+}
+
+.pdx-dp-pulse-ring {
+  box-shadow: 0 0 0 0 var(--pdx-accent-dim);
+  animation: pdx-pulse 1.6s ease infinite;
+}
+
+.pdx-dp--running .pdx-dp-pulse-ring {
+  background: var(--pdx-accent);
+}
+
+@keyframes pdx-pulse {
+  0% { box-shadow: 0 0 0 0 var(--pdx-accent-dim); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.pdx-dp-stage.is-active {
+  opacity: 1 !important;
+}
+
+.pdx-dp-stage.is-active .pdx-dp-stage-label {
+  color: var(--pdx-text);
+}
+
+.pdx-dp-log {
+  background: #010409;
+  border-top: 1px solid var(--pdx-border);
+  font-family: var(--pdx-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.pdx-dp-log-line {
+  padding: 2px 12px;
+  color: var(--pdx-text-muted);
+}
+
+.pdx-dp-log-line.is-new {
+  color: var(--pdx-accent);
+}
+
+.pdx-stage.is-active .pdx-stage-dot,
+.pdx-dp-stage.is-active .pdx-dp-stage-dot {
+  background: var(--pdx-accent);
+  box-shadow: 0 0 8px var(--pdx-accent-dim);
+}
+
+.pdx-stage.is-done,
+.pdx-dp-stage.is-done {
+  color: var(--pdx-accent) !important;
+}
+
+/* ─── Cards & results ─────────────────────────────────── */
+.pdx-result,
+.pdx-ws-item,
+.pdx-worker-row,
+.pdx-activity-item,
+.pdx-cmd-item,
+.pdx-case-card,
+.pdx-conn-card {
+  background: var(--pdx-bg-elev);
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius);
+}
+
+.pdx-empty,
+.pdx-loading {
+  font-size: 12px;
+  color: var(--pdx-text-muted);
+  padding: 16px;
+  text-align: center;
+}
+
+.pdx-loading::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+  border: 2px solid var(--pdx-border);
+  border-top-color: var(--pdx-accent);
+  border-radius: 50%;
+  animation: pdx-spin 0.65s linear infinite;
+}
+
+@keyframes pdx-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Command palette ─────────────────────────────────── */
+.pdx-cmd-overlay {
+  backdrop-filter: blur(4px);
+}
+
+.pdx-cmd-box {
+  background: var(--pdx-bg-elev);
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius-lg);
+  box-shadow: var(--pdx-shadow);
+  max-width: 560px;
+  width: calc(100% - 32px);
+}
+
+.pdx-cmd-item.is-selected {
+  background: var(--pdx-accent-dim);
+  border-left: 2px solid var(--pdx-accent);
+}
+
+/* ─── Notifications ───────────────────────────────────── */
+.pdx-notif-item {
+  border-radius: var(--pdx-radius);
+  font-size: 13px;
+  border: 1px solid var(--pdx-border);
+}
+
+.pdx-notif-item--success {
+  background: var(--pdx-accent-dim);
+  color: var(--pdx-accent);
+  border-color: var(--pdx-accent-border);
+}
+
+/* ─── Queue badge ───────────────────────────────────────── */
+.pdx-dock-queue-badge {
+  background: var(--pdx-accent);
+  color: var(--pdx-on-accent);
+  font-weight: 700;
+  border: 1px solid var(--pdx-bg);
+}
+
+/* ─── Desktop dock pill ─────────────────────────────────── */
+@media (min-width: 681px) {
+  #pdx-dock {
+    padding: 8px 6px;
+    border-radius: var(--pdx-radius-lg);
+    border: 1px solid var(--pdx-border);
+  }
+
+  #pdx-panel {
+    border-radius: var(--pdx-radius-lg);
+  }
+
+  #pdx-root[data-position="left"] #pdx-panel {
+    border-radius: 0 var(--pdx-radius-lg) var(--pdx-radius-lg) 0;
+  }
+
+  #pdx-root[data-position="right"] #pdx-panel {
+    border-radius: var(--pdx-radius-lg) 0 0 var(--pdx-radius-lg);
+  }
+}
+
+@media (max-width: 680px) {
+  .pdx-ph-hd {
+    padding-top: 12px;
+  }
+
+  #pdx-dock.pdx-dock--panel-open {
+    opacity: 0;
+    pointer-events: none;
+  }
+}

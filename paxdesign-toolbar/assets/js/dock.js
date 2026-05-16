@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v5.0.1
+ * PaxDesign Utility Dock — v6.0.0
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.
@@ -374,7 +374,7 @@
       if (!inner.querySelector('.pdx-ph')) return;
 
       var btn = document.createElement('button');
-      btn.className = 'pdx-mobile-close';
+      btn.className = 'pdx-panel-close';
       btn.type = 'button';
       btn.setAttribute('aria-label', 'Close panel');
       btn.innerHTML = _closeSvg;
@@ -2445,6 +2445,9 @@
       var findingsEl = document.getElementById(pipelineId + '-findings');
       var stageEls  = container.querySelectorAll('.pdx-dp-stage');
 
+      container.classList.add('pdx-dp--running');
+      container.classList.remove('pdx-dp--complete');
+
       var startTime = Date.now();
       var timerInterval = setInterval(function() {
         if (!document.body.contains(container)) { clearInterval(timerInterval); return; }
@@ -2468,9 +2471,10 @@
         if (!logEl) return;
         var ts = ((Date.now() - startTime) / 1000).toFixed(2);
         var line = document.createElement('div');
-        line.className = 'pdx-dp-log-line';
+        line.className = 'pdx-dp-log-line is-new';
         line.innerHTML = '<span class="pdx-dp-log-ts">[' + ts + 's]</span> ' + escHtml(msg);
         logEl.appendChild(line);
+        setTimeout(function() { line.classList.remove('is-new'); }, 400);
         logEl.scrollTop = logEl.scrollHeight;
       }
 
@@ -2508,6 +2512,7 @@
           if (i >= stageEls.length) {
             clearInterval(timerInterval);
             if (timerEl) timerEl.classList.add('pdx-dp-timer--done');
+            container.classList.remove('pdx-dp--running');
             container.classList.add('pdx-dp--complete');
             resolve();
             return;

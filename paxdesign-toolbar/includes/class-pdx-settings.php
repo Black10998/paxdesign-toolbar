@@ -23,7 +23,7 @@ class PDX_Settings {
 			'dock_position'        => 'left',      // left | right
 			'dock_theme'           => 'dark',      // dark | light | auto
 			'dock_size'            => 'default',   // compact | default | large
-			'accent_color'         => '#3fb950',
+			'accent_color'         => '#c2ff00',
 			'custom_css'           => '',
 
 			// Modules enabled

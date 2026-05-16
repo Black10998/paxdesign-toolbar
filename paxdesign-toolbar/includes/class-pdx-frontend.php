@@ -30,9 +30,23 @@ class PDX_Frontend {
 		if ( ! defined( 'DONOTCACHEDB' )   ) define( 'DONOTCACHEDB',   true );
 
 		wp_enqueue_style(
+			'pdx-tokens',
+			PDX_URL . 'assets/css/pdx-tokens.css',
+			[],
+			PDX_VERSION
+		);
+
+		wp_enqueue_style(
 			'pdx-dock',
 			PDX_URL . 'assets/css/dock.css',
-			[],
+			[ 'pdx-tokens' ],
+			PDX_VERSION
+		);
+
+		wp_enqueue_style(
+			'pdx-dock-ui',
+			PDX_URL . 'assets/css/pdx-dock-ui.css',
+			[ 'pdx-dock', 'pdx-tokens' ],
 			PDX_VERSION
 		);
 
@@ -53,7 +67,7 @@ class PDX_Frontend {
 
 		// Sync mobile breakpoint with admin (CSS defaults to 680/681).
 		$bp     = min( 1280, max( 320, (int) $this->settings->get( 'mobile_breakpoint', 680 ) ) );
-		$accent = sanitize_hex_color( $this->settings->get( 'accent_color', '#3fb950' ) ) ?: '#3fb950';
+		$accent = sanitize_hex_color( $this->settings->get( 'accent_color', '#c2ff00' ) ) ?: '#c2ff00';
 		wp_add_inline_style(
 			'pdx-dock',
 			sprintf(
@@ -98,7 +112,7 @@ class PDX_Frontend {
 			'position'         => esc_attr( $this->settings->get( 'dock_position', 'left' ) ),
 			'theme'            => esc_attr( $this->settings->get( 'dock_theme', 'dark' ) ),
 			'size'             => esc_attr( $this->settings->get( 'dock_size', 'default' ) ),
-			'accentColor'      => esc_attr( $this->settings->get( 'accent_color', '#3fb950' ) ),
+			'accentColor'      => esc_attr( $this->settings->get( 'accent_color', '#c2ff00' ) ),
 			'mobileEnabled'      => (bool)   $this->settings->get( 'mobile_enabled',       true ),
 			'mobileBreakpoint'   => (int)    $this->settings->get( 'mobile_breakpoint',    680 ),
 			'mobileDockPosition' => (string) $this->settings->get( 'mobile_dock_position', 'under-header' ),
