@@ -167,8 +167,10 @@
       startSSE('activity', function(evt) {
         try {
           var d = JSON.parse(evt.data);
+          if (!d || typeof d !== 'object') return;
+          if (!Array.isArray(state.liveActivity)) state.liveActivity = [];
           state.liveActivity.unshift(d);
-          if (state.liveActivity.length > 100) state.liveActivity.pop();
+          if (state.liveActivity.length > 100) state.liveActivity.length = 100;
           if (d.severity === 'critical' || d.severity === 'high') {
             showNotif('[' + (d.module || 'system') + '] ' + (d.action || ''), 'warn');
           }
@@ -178,6 +180,7 @@
       startSSE('queue', function(evt) {
         try {
           var d = JSON.parse(evt.data);
+          if (!d || typeof d !== 'object') return;
           state.queueStats = d;
           updateQueueBadge(d);
         } catch(e) {}
@@ -195,9 +198,10 @@
 
     /* ── Panel renderer ───────────────────────────────────── */
     function renderPanel(moduleId) {
-      var mod = C.modules[moduleId];
+      if (!moduleId) return;
+      var mod = (C.modules && C.modules[moduleId]) || null;
       if (!mod) { inner.innerHTML = '<div class="pdx-empty">Module not found.</div>'; return; }
-      var access = state.accessStatus[moduleId] || {};
+      var access = (state.accessStatus && state.accessStatus[moduleId]) || {};
       var locked = access.status === 'locked';
 
       switch (moduleId) {
@@ -1217,7 +1221,7 @@
     }
 
     function setupTabs(tabsId, contentId, renderers) {
-      var tabsEl   = document.getElementById(tabsId);
+      var tabsEl    = document.getElementById(tabsId);
       var contentEl = document.getElementById(contentId);
       if (!tabsEl || !contentEl) return;
       tabsEl.addEventListener('click', function(e) {
@@ -1226,15 +1230,20 @@
         tabsEl.querySelectorAll('.pdx-tab').forEach(function(t) { t.classList.remove('is-active'); });
         tab.classList.add('is-active');
         var key = tab.dataset.tab;
-        if (renderers[key]) contentEl.innerHTML = renderers[key]();
-        // Re-bind after render
-        if (key === 'build' && tabsId === 'pdx-builder-tabs') bindBuilderBuild();
-        if (key === 'run'   && tabsId === 'pdx-pipeline-tabs') bindPipelineRun();
-        if (key === 'test'  && tabsId === 'pdx-conn-tabs') bindConnectorTest();
-        if (key === 'templates' && tabsId === 'pdx-builder-tabs') loadBuilderTemplates();
+        if (renderers && renderers[key]) contentEl.innerHTML = renderers[key]();
+        // v3 re-bind hooks
+        if (key === 'build'     && tabsId === 'pdx-builder-tabs')  bindBuilderBuild();
+        if (key === 'run'       && tabsId === 'pdx-pipeline-tabs') bindPipelineRun();
+        if (key === 'test'      && tabsId === 'pdx-conn-tabs')     bindConnectorTest();
+        if (key === 'templates' && tabsId === 'pdx-builder-tabs')  loadBuilderTemplates();
         if (key === 'templates' && tabsId === 'pdx-pipeline-tabs') loadPipelineTemplates();
-        if (key === 'library' && tabsId === 'pdx-conn-tabs') loadConnectorLibrary();
+        if (key === 'library'   && tabsId === 'pdx-conn-tabs')     loadConnectorLibrary();
+        // v4 re-bind hooks
+        wireTabHandlers(tabsId, key);
       });
+      // Wire the initially-active tab
+      var activeTab = tabsEl.querySelector('.pdx-tab.is-active');
+      if (activeTab) wireTabHandlers(tabsId, activeTab.dataset.tab);
     }
 
     function loadBuilderTemplates() {
@@ -1333,14 +1342,18 @@
 
     /* ── API helper ───────────────────────────────────────── */
     function apiFetch(method, path, body) {
+      if (!C.restUrl) return Promise.resolve(null);
       var opts = {
         method: method,
-        headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': C.nonce },
+        headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': C.nonce || '' },
         credentials: 'same-origin',
       };
       if (body && method !== 'GET') opts.body = JSON.stringify(body);
       return fetch(C.restUrl + path, opts)
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+          if (!r.ok) return null;
+          return r.json().catch(function() { return null; });
+        })
         .catch(function() { return null; });
     }
 
@@ -1390,26 +1403,75 @@
 
     /* ── Mobile ───────────────────────────────────────────── */
     function setupMobile(C, panel, dock) {
+      var bp = C.mobileBreakpoint || 680;
+
       function check() {
-        var mobile = window.innerWidth < (C.mobileBreakpoint || 680);
+        var mobile = window.innerWidth < bp;
         panel.classList.toggle('pdx-panel--mobile', mobile);
         dock.classList.toggle('pdx-dock--mobile', mobile);
+        // Fix iOS viewport height (100vh includes browser chrome)
+        var vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--pdx-vh', vh + 'px');
       }
       check();
-      window.addEventListener('resize', check);
+
+      var resizeTimer;
+      window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(check, 100);
+      });
+
+      // Touch: swipe to close panel
+      var touchStartX = 0;
+      var touchStartY = 0;
+      panel.addEventListener('touchstart', function(e) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      }, { passive: true });
+      panel.addEventListener('touchend', function(e) {
+        if (!e.changedTouches.length) return;
+        var dx = e.changedTouches[0].clientX - touchStartX;
+        var dy = Math.abs(e.changedTouches[0].clientY - touchStartY);
+        var pos = C.position || 'left';
+        // Swipe left to close (left dock) or right to close (right dock)
+        var swipeClose = pos === 'left' ? dx < -60 : dx > 60;
+        if (swipeClose && dy < 80) closePanel();
+      }, { passive: true });
+
+      // Prevent body scroll when panel is open on mobile
+      panel.addEventListener('touchmove', function(e) {
+        var el = e.target;
+        // Allow scroll inside scrollable children
+        while (el && el !== panel) {
+          if (el.scrollHeight > el.clientHeight) return;
+          el = el.parentElement;
+        }
+        e.preventDefault();
+      }, { passive: false });
     }
 
 
     /* ══════════════════════════════════════════════════════
        v4: SSE INFRASTRUCTURE
     ══════════════════════════════════════════════════════ */
-    function startSSE(channel, onMessage) {
-      if (!window.EventSource) return;
-      var url = C.restUrl.replace('/wp-json/pdx/v1', '') + '/wp-json/pdx/v1/sse?channel=' + channel + '&nonce=' + (C.nonce || '');
-      var es = new EventSource(url);
+    function startSSE(channel, onMessage, _retries) {
+      if (!window.EventSource || !C.restUrl) return;
+      var retries = _retries || 0;
+      if (retries > 5) return; // stop after 5 consecutive failures
+      var base = C.restUrl.replace(/\/wp-json\/pdx\/v1\/?$/, '');
+      var url  = base + '/wp-json/pdx/v1/sse?channel=' + encodeURIComponent(channel) + '&nonce=' + encodeURIComponent(C.nonce || '');
+      var es   = new EventSource(url);
       es.onmessage = onMessage;
-      es.onerror = function() { setTimeout(function() { startSSE(channel, onMessage); }, 5000); };
-      state.sseConnections[channel] = es;
+      es.onopen    = function() { retries = 0; }; // reset on successful connect
+      es.onerror   = function() {
+        es.close();
+        if (state.sseConnections && state.sseConnections[channel] === es) {
+          delete state.sseConnections[channel];
+        }
+        var delay = Math.min(30000, 3000 * Math.pow(2, retries)); // exponential backoff, max 30s
+        setTimeout(function() { startSSE(channel, onMessage, retries + 1); }, delay);
+      };
+      if (state.sseConnections) state.sseConnections[channel] = es;
       return es;
     }
 
@@ -1591,7 +1653,7 @@
       var html = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading clusters…</div></div>';
       setTimeout(function() {
         var el = document.getElementById('pdx-inv-content');
-        if (!el) return;
+        if (!el || state.activeModule !== 'investigation') return;
         apiFetch('GET', '/intel/clusters').then(function(data) {
           var clusters = (data && data.clusters) || [];
           var out = '<div class="pdx-tab-pane">';
@@ -1614,7 +1676,8 @@
       var html = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading cases…</div></div>';
       setTimeout(function() {
         var el = document.getElementById('pdx-inv-content');
-        if (!el || !state.activeTeam) { if (el) el.innerHTML = '<div class="pdx-tab-pane"><div class="pdx-empty">No team selected. Create a team first.</div></div>'; return; }
+        if (!el || state.activeModule !== 'investigation') return;
+        if (!state.activeTeam) { el.innerHTML = '<div class="pdx-tab-pane"><div class="pdx-empty">No team selected. Create a team first.</div></div>'; return; }
         apiFetch('GET', '/teams/' + state.activeTeam + '/cases').then(function(data) {
           var cases = (data && data.cases) || [];
           var out = '<div class="pdx-tab-pane">';
@@ -1805,7 +1868,8 @@
       // Click to inspect node
       canvas.onclick = function(e) {
         var rect = canvas.getBoundingClientRect();
-        var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        var mx = (e.clientX - rect.left) / (canvas.style.transform ? 1 : 1);
+        var my = (e.clientY - rect.top);
         nodes.forEach(function(n) {
           var p = positions[n.id];
           if (!p) return;
@@ -1816,8 +1880,16 @@
                 kvRow('ID', n.id) + kvRow('Type', n.type) + kvRow('Source', n.source || '') +
                 kvRow('Confidence', (n.confidence || 0) + '%') + kvRow('First seen', n.first_seen || '') +
               '</div>' +
-              '<button class="pdx-btn-ghost pdx-mt-sm" onclick="document.getElementById(\'pdx-graph-input\').value=\'' + n.id + '\';buildGraph && buildGraph()">Pivot on this IOC</button>' +
+              '<button class="pdx-btn-ghost pdx-mt-sm pdx-graph-pivot-btn" data-ioc="' + escHtml(n.id) + '">Pivot on this IOC</button>' +
             '</div>';
+            // Wire pivot button immediately after injecting HTML
+            var pivotBtn = detail.querySelector('.pdx-graph-pivot-btn');
+            if (pivotBtn) {
+              pivotBtn.addEventListener('click', function() {
+                var gi = document.getElementById('pdx-graph-input');
+                if (gi) { gi.value = pivotBtn.dataset.ioc; buildGraph(); }
+              });
+            }
           }
         });
       };
@@ -1867,7 +1939,7 @@
       var html = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading team…</div></div>';
       setTimeout(function() {
         var el = document.getElementById('pdx-team-content');
-        if (!el) return;
+        if (!el || state.activeModule !== 'team') return;
         if (!state.activeTeam) {
           el.innerHTML = '<div class="pdx-tab-pane"><div class="pdx-empty">No team yet. Create one first.</div></div>';
           return;
@@ -1991,7 +2063,7 @@
       var html = '<div class="pdx-tab-pane"><div class="pdx-loading-sm">Loading…</div></div>';
       setTimeout(function() {
         var el = document.getElementById('pdx-mem-content');
-        if (!el) return;
+        if (!el || state.activeModule !== 'memory') return;
         apiFetch('GET', '/memory/recent?agent=global&limit=20').then(function(data) {
           var mems = (data && data.memories) || [];
           var out = '<div class="pdx-tab-pane">';
@@ -2073,12 +2145,13 @@
         html += '<button class="pdx-btn-ghost pdx-mt-sm" id="pdx-corr-graph-btn">View in Graph</button>';
         html += '</div>';
         res.innerHTML = html;
-        document.getElementById('pdx-corr-graph-btn').addEventListener('click', function() {
+        var graphBtn = document.getElementById('pdx-corr-graph-btn');
+        if (graphBtn) graphBtn.addEventListener('click', function() {
           openPanel('graph');
           setTimeout(function() {
             var gi = document.getElementById('pdx-graph-input');
-            if (gi) { gi.value = value; buildGraph && buildGraph(); }
-          }, 200);
+            if (gi) { gi.value = value; buildGraph(); }
+          }, 250);
         });
       });
     }
@@ -2142,10 +2215,14 @@
       var btn = document.getElementById('pdx-mem-store-btn');
       if (!btn) return;
       btn.addEventListener('click', function() {
-        var content    = document.getElementById('pdx-mem-content').value.trim();
-        var mem_type   = document.getElementById('pdx-mem-type').value;
-        var importance = parseInt(document.getElementById('pdx-mem-importance').value) || 50;
-        var res        = document.getElementById('pdx-mem-store-result');
+        var contentEl    = document.getElementById('pdx-mem-content');
+        var typeEl       = document.getElementById('pdx-mem-type');
+        var importanceEl = document.getElementById('pdx-mem-importance');
+        var res          = document.getElementById('pdx-mem-store-result');
+        if (!contentEl || !typeEl || !importanceEl || !res) return;
+        var content    = contentEl.value.trim();
+        var mem_type   = typeEl.value;
+        var importance = parseInt(importanceEl.value) || 50;
         if (!content) return;
         apiFetch('POST', '/memory/store', { content: content, agent: 'global', type: mem_type, importance: importance }).then(function(data) {
           if (data && data.mem_id) {
@@ -2262,26 +2339,6 @@
     /* ══════════════════════════════════════════════════════
        v4: WIRE UP DYNAMIC HANDLERS after tab render
     ══════════════════════════════════════════════════════ */
-    var _origSetupTabs = setupTabs;
-    function setupTabs(tabsId, contentId, renderers) {
-      var tabsEl   = document.getElementById(tabsId);
-      var contentEl = document.getElementById(contentId);
-      if (!tabsEl || !contentEl) return;
-      tabsEl.querySelectorAll('.pdx-tab').forEach(function(tab) {
-        tab.addEventListener('click', function() {
-          tabsEl.querySelectorAll('.pdx-tab').forEach(function(t) { t.classList.remove('is-active'); });
-          tab.classList.add('is-active');
-          var key = tab.dataset.tab;
-          if (renderers[key]) {
-            contentEl.innerHTML = renderers[key]();
-            wireTabHandlers(tabsId, key);
-          }
-        });
-      });
-      // Wire initial tab
-      var firstKey = tabsEl.querySelector('.pdx-tab.is-active');
-      if (firstKey) wireTabHandlers(tabsId, firstKey.dataset.tab);
-    }
 
     function wireTabHandlers(tabsId, tabKey) {
       // Investigation board

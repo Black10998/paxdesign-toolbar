@@ -645,13 +645,41 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
 /* ─── Mobile ─────────────────────────────────────────────── */
 @media (max-width: 680px) {
-  #pdx-panel { width: 100vw !important; top: auto; bottom: 0; height: 85vh; border-radius: 16px 16px 0 0 !important; border-left: none !important; border-right: none !important; }
+  /* Use JS-set --pdx-vh to avoid iOS browser-chrome 100vh bug */
+  #pdx-panel {
+    width: 100vw !important;
+    top: auto; bottom: 0;
+    height: calc(var(--pdx-vh, 1vh) * 85);
+    max-height: calc(var(--pdx-vh, 1vh) * 92);
+    border-radius: 16px 16px 0 0 !important;
+    border-left: none !important; border-right: none !important;
+    /* Drag handle hint */
+    padding-top: 8px;
+  }
+  #pdx-panel::before {
+    content: ''; display: block; width: 36px; height: 4px;
+    background: rgba(255,255,255,.2); border-radius: 2px;
+    margin: 0 auto 8px; flex-shrink: 0;
+  }
   #pdx-panel:not(.is-open) { transform: translateY(110%) !important; }
   #pdx-panel.is-open       { transform: translateY(0) !important; }
-  #pdx-dock { top: auto; bottom: 12px; transform: none; flex-direction: row; left: 50% !important; right: auto !important; transform: translateX(-50%); border-radius: 40px; padding: 5px 8px; }
+  #pdx-dock {
+    top: auto; bottom: 12px;
+    flex-direction: row;
+    left: 50% !important; right: auto !important;
+    transform: translateX(-50%);
+    border-radius: 40px; padding: 5px 8px;
+  }
   .pdx-sep { width: 1px; height: 18px; margin: 0 3px; }
   .pdx-btn.is-active::before { left: 50%; top: -5px; transform: translateX(-50%); width: 16px; height: 2px; }
   #pdx-notif { bottom: 100px; right: 12px; left: 12px; }
+  /* Graph canvas: constrain on mobile */
+  .pdx-graph-canvas { height: 220px !important; }
+  /* Command palette: full width on mobile */
+  .pdx-cmd-box { width: 96vw; }
+  /* Prevent horizontal overflow in panels */
+  .pdx-ph-body { overflow-x: hidden; }
+  .pdx-kv-grid { grid-template-columns: 1fr; }
 }
 
 
