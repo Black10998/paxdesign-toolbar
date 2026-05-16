@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v4.3.0
+ * PaxDesign Utility Dock — v4.3.1
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.
@@ -133,11 +133,12 @@
         b.classList.toggle('is-active', b.dataset.module === moduleId);
         b.setAttribute('aria-expanded', b.dataset.module === moduleId ? 'true' : 'false');
       });
-      // Refresh access status before rendering so the panel always reflects
-      // the current module lock state — catches admin changes since last load.
+      // Refresh access status then render. apiFetch never rejects (returns null
+      // on error), so renderPanel always runs regardless of network state.
       apiFetch('GET', '/pay/status').then(function(s) {
         if (s) state.accessStatus = s;
         renderPanel(moduleId);
+        injectCloseBtnGlobal();
         var _body = panel.querySelector('.pdx-ph-body');
         if (_body) _body.scrollTop = 0;
       });
@@ -217,9 +218,8 @@
             // Re-render the active panel so lock/unlock state updates live.
             if (state.activeModule && panel.classList.contains('is-open')) {
               renderPanel(state.activeModule);
+              injectCloseBtnGlobal();
             }
-            // Re-render active panel to reflect any module enable/disable changes.
-            // Full dock rebuild requires a page reload (modules list is in PDX_CONFIG).
           });
         }
       });
@@ -293,26 +293,32 @@
     var _closeSvg = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>';
 
     function injectCloseBtnGlobal() {
-      // Remove any stale button first (panel content was replaced).
-      var existing = inner.querySelector('.pdx-mobile-close');
-      if (existing) existing.remove();
-      // Only inject when a panel module is rendered (.pdx-ph exists).
-      if (!inner.querySelector('.pdx-ph')) return;
-      var btn = document.createElement('button');
-      btn.className = 'pdx-mobile-close';
-      btn.type = 'button';
-      btn.setAttribute('aria-label', 'Close panel');
-      btn.innerHTML = _closeSvg;
-      btn.addEventListener('click', closePanel);
-      // Append to inner (not .pdx-ph-hd) — avoids overflow:hidden clipping.
-      inner.appendChild(btn);
+      // Guard: never run while already injecting (prevents re-entrancy).
+      if (injectCloseBtnGlobal._running) return;
+      injectCloseBtnGlobal._running = true;
+      try {
+        // Remove stale button — panel content was replaced.
+        var existing = inner.querySelector('.pdx-mobile-close');
+        if (existing) existing.remove();
+        // Only inject when a panel module is rendered (.pdx-ph exists).
+        if (!inner.querySelector('.pdx-ph')) return;
+        var btn = document.createElement('button');
+        btn.className = 'pdx-mobile-close';
+        btn.type = 'button';
+        btn.setAttribute('aria-label', 'Close panel');
+        btn.innerHTML = _closeSvg;
+        btn.addEventListener('click', closePanel);
+        // Append to inner (not .pdx-ph-hd) — avoids overflow:hidden clipping.
+        inner.appendChild(btn);
+      } finally {
+        injectCloseBtnGlobal._running = false;
+      }
     }
+    injectCloseBtnGlobal._running = false;
 
-    // Re-inject after every renderPanel() call via MutationObserver.
-    var _closeBtnObserver = new MutationObserver(function() {
-      injectCloseBtnGlobal();
-    });
-    _closeBtnObserver.observe(inner, { childList: true });
+    // Called explicitly after every renderPanel() — no MutationObserver needed.
+    // MutationObserver caused an infinite loop: renderPanel mutates inner →
+    // observer fires injectCloseBtnGlobal → appendChild mutates inner → repeat.
 
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
