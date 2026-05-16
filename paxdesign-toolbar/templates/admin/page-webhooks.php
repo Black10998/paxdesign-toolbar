@@ -1,5 +1,6 @@
-<?php if ( ! defined( 'ABSPATH' ) ) exit; ?>
-<?php
+<?php if ( ! defined( 'ABSPATH' ) ) exit;
+include __DIR__ . '/partials/header.php';
+
 $webhooks = PDX_Webhook::all();
 $events   = PDX_Webhook::available_events();
 $log      = PDX_Webhook::get_log( '', 20 );
@@ -127,3 +128,4 @@ document.getElementById('pdx-wh-cancel') && document.getElementById('pdx-wh-canc
   document.getElementById('pdx-wh-add-btn').style.display = '';
 });
 </script>
+<?php include __DIR__ . '/partials/footer.php'; ?>

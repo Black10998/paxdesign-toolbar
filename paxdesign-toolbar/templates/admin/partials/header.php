@@ -25,6 +25,7 @@
         PDX_SLUG . '-teams'       => [ 'label' => 'Teams',     'icon' => 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' ],
         PDX_SLUG . '-workers'     => [ 'label' => 'Workers',   'icon' => 'M5 12h14M12 5l7 7-7 7' ],
         PDX_SLUG . '-platform'    => [ 'label' => 'Platform',  'icon' => 'M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z' ],
+        PDX_SLUG . '-dev-tokens'  => [ 'label' => 'Dev Tokens', 'icon' => 'M15 7h3a5 5 0 0 1 0 10h-3m-6 0H6A5 5 0 0 1 6 7h3' ],
         PDX_SLUG . '-cache'       => [ 'label' => 'Cache',     'icon' => 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' ],
       ];
       $current = sanitize_key( $_GET['page'] ?? PDX_SLUG );

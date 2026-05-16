@@ -1,6 +1,10 @@
-<?php defined( 'ABSPATH' ) || exit; ?>
-<div class="wrap pdx-admin-wrap">
-<h1 class="pdx-admin-title">Developer API Tokens</h1>
+<?php if ( ! defined( 'ABSPATH' ) ) exit;
+include __DIR__ . '/partials/header.php';
+?>
+<div class="pdx-page-header">
+  <h1>Dev Tokens</h1>
+  <p>API tokens for development and automation.</p>
+</div>
 
 <p>Users manage their own tokens from the dock interface (<strong>Cmd+K → Developer Tokens</strong>). This page shows a platform-level overview.</p>
 
@@ -71,4 +75,6 @@ $users_with_tokens = $wpdb->get_results(
 
 <h2 style="margin-top:24px">Authentication</h2>
 <p>All endpoints accept WordPress cookie auth (nonce) or a developer token via <code>Authorization: Bearer pdx_&lt;token&gt;</code> header.</p>
-</div>
+
+
+<?php include __DIR__ . '/partials/footer.php'; ?>

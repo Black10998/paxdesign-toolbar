@@ -51,6 +51,19 @@ class PDX_Frontend {
 		// Pass config to JS
 		wp_localize_script( 'pdx-dock', 'PDX_CONFIG', $this->js_config() );
 
+		// Sync mobile breakpoint with admin (CSS defaults to 680/681).
+		$bp     = min( 1280, max( 320, (int) $this->settings->get( 'mobile_breakpoint', 680 ) ) );
+		$accent = sanitize_hex_color( $this->settings->get( 'accent_color', '#3fb950' ) ) ?: '#3fb950';
+		wp_add_inline_style(
+			'pdx-dock',
+			sprintf(
+				':root{--pdx-mobile-max:%1$dpx;--pdx-mobile-min:%2$dpx;}#pdx-root{--pdx-accent:%3$s;--pdx-green:%3$s;--pdx-emerald:%3$s;}',
+				$bp,
+				$bp + 1,
+				$accent
+			)
+		);
+
 		// Custom CSS from admin
 		$custom = $this->settings->get( 'custom_css' );
 		if ( $custom ) {

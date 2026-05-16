@@ -30,7 +30,7 @@ $cf = PDX_CachePurge::get_cloudflare();
     <h2>Purge All Caches Now</h2>
   </div>
   <div class="pdx-card__body">
-    <p style="margin:0 0 16px;color:var(--pdx-a-mid,#8b949e)">
+    <p style="margin:0 0 16px;color:var(--pa-text-mid,#8b949e)">
       Clears every layer: PDX transients, WordPress object cache, rewrite rules,
       all detected caching plugins (W3TC, WP Rocket, LiteSpeed, Autoptimize, etc.),
       minification caches, and Cloudflare (if configured below).
@@ -51,16 +51,16 @@ $cf = PDX_CachePurge::get_cloudflare();
   <div class="pdx-card__body">
     <div class="pdx-grid-2">
       <div>
-        <h4 style="margin:0 0 8px;font-size:13px;color:var(--pdx-a-hi,#e6edf3)">WordPress Core</h4>
-        <ul style="margin:0;padding-left:16px;color:var(--pdx-a-mid,#8b949e);font-size:13px;line-height:1.8">
+        <h4 style="margin:0 0 8px;font-size:13px;color:var(--pa-text-hi,#e6edf3)">WordPress Core</h4>
+        <ul style="margin:0;padding-left:16px;color:var(--pa-text-mid,#8b949e);font-size:13px;line-height:1.8">
           <li>All <code>pdx_*</code> transients</li>
           <li>WP object cache (<code>wp_cache_flush</code>)</li>
           <li>Rewrite rules</li>
         </ul>
       </div>
       <div>
-        <h4 style="margin:0 0 8px;font-size:13px;color:var(--pdx-a-hi,#e6edf3)">Caching Plugins</h4>
-        <ul style="margin:0;padding-left:16px;color:var(--pdx-a-mid,#8b949e);font-size:13px;line-height:1.8">
+        <h4 style="margin:0 0 8px;font-size:13px;color:var(--pa-text-hi,#e6edf3)">Caching Plugins</h4>
+        <ul style="margin:0;padding-left:16px;color:var(--pa-text-mid,#8b949e);font-size:13px;line-height:1.8">
           <li>W3 Total Cache</li>
           <li>WP Super Cache</li>
           <li>WP Rocket (pages + minify)</li>
@@ -75,16 +75,16 @@ $cf = PDX_CachePurge::get_cloudflare();
         </ul>
       </div>
       <div>
-        <h4 style="margin:0 0 8px;font-size:13px;color:var(--pdx-a-hi,#e6edf3)">Asset Minification</h4>
-        <ul style="margin:0;padding-left:16px;color:var(--pdx-a-mid,#8b949e);font-size:13px;line-height:1.8">
+        <h4 style="margin:0 0 8px;font-size:13px;color:var(--pa-text-hi,#e6edf3)">Asset Minification</h4>
+        <ul style="margin:0;padding-left:16px;color:var(--pa-text-mid,#8b949e);font-size:13px;line-height:1.8">
           <li>Autoptimize CSS/JS cache</li>
           <li>WP Rocket minify cache</li>
           <li>Cached copies of <code>paxdesign-*</code> assets</li>
         </ul>
       </div>
       <div>
-        <h4 style="margin:0 0 8px;font-size:13px;color:var(--pdx-a-hi,#e6edf3)">Auto-Purge Triggers</h4>
-        <ul style="margin:0;padding-left:16px;color:var(--pdx-a-mid,#8b949e);font-size:13px;line-height:1.8">
+        <h4 style="margin:0 0 8px;font-size:13px;color:var(--pa-text-hi,#e6edf3)">Auto-Purge Triggers</h4>
+        <ul style="margin:0;padding-left:16px;color:var(--pa-text-mid,#8b949e);font-size:13px;line-height:1.8">
           <li>Plugin version change (on update)</li>
           <li>Any settings save in this admin panel</li>
           <li>Manual button above</li>
@@ -99,7 +99,7 @@ $cf = PDX_CachePurge::get_cloudflare();
 <div class="pdx-card" style="margin-bottom:24px">
   <div class="pdx-card__header"><h2>Cloudflare</h2></div>
   <div class="pdx-card__body">
-    <p style="margin:0 0 16px;color:var(--pdx-a-mid,#8b949e)">
+    <p style="margin:0 0 16px;color:var(--pa-text-mid,#8b949e)">
       Optional. When configured, every cache purge also calls the Cloudflare
       API to purge your zone. Use an API Token with <strong>Cache Purge</strong>
       permission scoped to your zone.
@@ -138,20 +138,20 @@ $cf = PDX_CachePurge::get_cloudflare();
 <div class="pdx-card">
   <div class="pdx-card__header"><h2>Browser Cache</h2></div>
   <div class="pdx-card__body">
-    <p style="margin:0 0 12px;color:var(--pdx-a-mid,#8b949e)">
+    <p style="margin:0 0 12px;color:var(--pa-text-mid,#8b949e)">
       Plugin assets are versioned with <code>PDX_VERSION</code> (currently <strong><?php echo esc_html( PDX_VERSION ); ?></strong>).
       Every time the version number changes, WordPress appends a new <code>?ver=</code> query string,
       forcing browsers and CDNs to fetch the new file.
     </p>
-    <p style="margin:0 0 12px;color:var(--pdx-a-mid,#8b949e)">
+    <p style="margin:0 0 12px;color:var(--pa-text-mid,#8b949e)">
       If you still see old assets after an update, do a hard refresh:
     </p>
-    <ul style="margin:0 0 16px;padding-left:16px;color:var(--pdx-a-mid,#8b949e);font-size:13px;line-height:2">
+    <ul style="margin:0 0 16px;padding-left:16px;color:var(--pa-text-mid,#8b949e);font-size:13px;line-height:2">
       <li><strong>Chrome / Edge / Firefox:</strong> <kbd>Ctrl+Shift+R</kbd> (Windows/Linux) or <kbd>Cmd+Shift+R</kbd> (Mac)</li>
       <li><strong>Safari:</strong> <kbd>Cmd+Option+R</kbd> or empty cache via Develop menu</li>
       <li><strong>Mobile:</strong> Clear browser data in Settings → Privacy → Clear browsing data</li>
     </ul>
-    <p style="margin:0;color:var(--pdx-a-mid,#8b949e);font-size:12px">
+    <p style="margin:0;color:var(--pa-text-mid,#8b949e);font-size:12px">
       If a caching plugin is serving a minified/combined bundle that includes old plugin assets,
       use the <strong>Purge All Caches</strong> button above — it clears minification caches too.
     </p>

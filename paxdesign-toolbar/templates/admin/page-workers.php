@@ -1,6 +1,10 @@
-<?php defined( 'ABSPATH' ) || exit; ?>
-<div class="wrap pdx-admin-wrap">
-<h1 class="pdx-admin-title">Worker Nodes</h1>
+<?php if ( ! defined( 'ABSPATH' ) ) exit;
+include __DIR__ . '/partials/header.php';
+?>
+<div class="pdx-page-header">
+  <h1>Worker Nodes</h1>
+  <p>Distributed worker nodes and queue health.</p>
+</div>
 
 <?php
 PDX_Worker::check_heartbeats();
@@ -83,4 +87,6 @@ $stats   = PDX_Queue::queue_stats();
     <tr><td>Expired</td><td><?php echo (int) ( $stats['expired'] ?? 0 ); ?></td></tr>
   </tbody>
 </table>
-</div>
+
+
+<?php include __DIR__ . '/partials/footer.php'; ?>

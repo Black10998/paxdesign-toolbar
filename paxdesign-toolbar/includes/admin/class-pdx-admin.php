@@ -251,6 +251,18 @@ class PDX_Admin {
 					'hide_for_logged_in'  => isset( $post['hide_for_logged_in'] ),
 				];
 
+			case 'billing':
+				return [
+					'stripe' => [
+						'secret_key'     => sanitize_text_field( $post['stripe']['secret_key']     ?? '' ),
+						'pub_key'        => sanitize_text_field( $post['stripe']['pub_key']        ?? '' ),
+						'webhook_secret' => sanitize_text_field( $post['stripe']['webhook_secret'] ?? '' ),
+						'mode'           => in_array( $post['stripe']['mode'] ?? '', [ 'test', 'live' ], true )
+							? $post['stripe']['mode']
+							: 'test',
+					],
+				];
+
 			default:
 				return [];
 		}

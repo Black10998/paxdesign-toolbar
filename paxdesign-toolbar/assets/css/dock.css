@@ -117,7 +117,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
 /* ─── Desktop layout — vertical pill ────────────────────── */
 /* Overrides the mobile base above. Completely separate layout. */
-@media (min-width: 681px) {
+@media (min-width: var(--pdx-mobile-min, 681px)) {
   #pdx-dock {
     /* Reset mobile geometry */
     top: 50%;
@@ -174,7 +174,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
   border-radius: 2px 2px 0 0;
 }
 /* Desktop: left/right edge indicator */
-@media (min-width: 681px) {
+@media (min-width: var(--pdx-mobile-min, 681px)) {
   .pdx-btn.is-active::before {
     left: -5px;
     bottom: auto;
@@ -202,7 +202,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
   color: #e6edf3; font: 11px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   white-space: nowrap; padding: 5px 9px; border-radius: 6px;
   pointer-events: none; opacity: 0; transition: opacity .1s;
-  z-index: 99999; box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  z-index: 99998; box-shadow: 0 4px 12px rgba(0,0,0,.3);
 }
 #pdx-root[data-position="left"]  .pdx-btn::after { left: calc(100% + 10px); }
 #pdx-root[data-position="right"] .pdx-btn::after { right: calc(100% + 10px); left: auto; }
@@ -218,7 +218,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
   flex-shrink: 0;
 }
 /* Desktop: horizontal divider */
-@media (min-width: 681px) {
+@media (min-width: var(--pdx-mobile-min, 681px)) {
   .pdx-sep {
     width: 18px;
     height: 1px;
@@ -278,7 +278,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 #pdx-panel.is-open       { transform: translateY(0); }
 
 /* ─── Desktop panel — side-slide ────────────────────────── */
-@media (min-width: 681px) {
+@media (min-width: var(--pdx-mobile-min, 681px)) {
   #pdx-panel {
     top: 0;
     bottom: 0;
@@ -921,7 +921,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 /* ─── Notifications ──────────────────────────────────────── */
 #pdx-notif {
   position: fixed; bottom: 20px; right: 20px;
-  z-index: 99999; display: flex; flex-direction: column; gap: 8px;
+  z-index: 99998; display: flex; flex-direction: column; gap: 8px;
   pointer-events: none;
 }
 .pdx-notif-item {
@@ -960,7 +960,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 /* ─── Small tablet (681px – 860px) ──────────────────────── */
 /* Desktop layout (side-slide panel) but narrower viewport.
    Panel fills more of the screen; grids collapse to single column. */
-@media (min-width: 681px) and (max-width: 860px) {
+@media (min-width: var(--pdx-mobile-min, 681px)) and (max-width: 860px) {
   /* Panel: wider relative to viewport on small tablets */
   #pdx-panel       { width: min(380px, calc(100vw - 60px)); }
 
@@ -993,7 +993,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 /* ═══════════════════════════════════════════════════════════
    MOBILE (≤ 680px) — SHARED BASE (both dock modes)
    ═══════════════════════════════════════════════════════════ */
-@media (max-width: 680px) {
+@media (max-width: var(--pdx-mobile-max, 680px)) {
 
   /* Body scroll lock — iOS-safe fixed positioning */
   body.pdx-no-scroll {
@@ -1192,7 +1192,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     border-bottom-color: rgba(0,0,0,.08);
   }
 }
-@media (max-width: 680px) and (prefers-color-scheme: light) {
+@media (max-width: var(--pdx-mobile-max, 680px)) and (prefers-color-scheme: light) {
   #pdx-root[data-theme="auto"] #pdx-dock {
     background: #ffffff;
     border-bottom-color: rgba(0,0,0,.08);
@@ -1204,7 +1204,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
    Overrides the base mobile dock layout. Dock becomes a
    compact floating pill; panel becomes a bottom sheet.
    ═══════════════════════════════════════════════════════════ */
-@media (max-width: 680px) {
+@media (max-width: var(--pdx-mobile-max, 680px)) {
 
   /* Override base dock geometry for pill mode */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-dock {
@@ -1321,7 +1321,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     box-shadow: 0 -1px 0 rgba(0,0,0,.1);
   }
 }
-@media (max-width: 680px) and (prefers-color-scheme: light) {
+@media (max-width: var(--pdx-mobile-max, 680px)) and (prefers-color-scheme: light) {
   #pdx-root[data-mobile-dock^="bottom"][data-theme="auto"] #pdx-dock {
     background: rgba(255,255,255,.96);
     border-color: rgba(0,0,0,.09);
@@ -1393,7 +1393,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
      --pdx-cbtn-fs   : 13px
      --pdx-cbtn-pad  : 0 14px
 ═══════════════════════════════════════════════════════════ */
-@media (max-width: 680px) {
+@media (max-width: var(--pdx-mobile-max, 680px)) {
   #pdx-root {
     /* Typography */
     --pdx-t-xs:   10px;
@@ -1946,6 +1946,24 @@ body.pdx-no-scroll { overflow: hidden !important; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .pdx-dock-plan-badge:not(:empty) { display: block; }
+
+.pdx-dock-queue-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  font: 700 9px/14px var(--pdx-font, sans-serif);
+  color: #0d1117;
+  background: var(--pdx-accent);
+  border-radius: 7px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.pdx-dock-queue-badge:not(:empty) { display: inline-flex; }
 
 /* ─── Command palette ────────────────────────────────────── */
 .pdx-cmd-overlay {

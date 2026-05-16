@@ -1,5 +1,6 @@
-<?php if ( ! defined( 'ABSPATH' ) ) exit; ?>
-<?php
+<?php if ( ! defined( 'ABSPATH' ) ) exit;
+include __DIR__ . '/partials/header.php';
+
 $page     = max( 1, (int) ( $_GET['paged'] ?? 1 ) );
 $limit    = 50;
 $offset   = ( $page - 1 ) * $limit;
@@ -114,3 +115,4 @@ $severity_colors = [ 'info' => 'blue', 'warn' => 'yellow', 'error' => 'red', 'cr
     </div>
   </div>
 </div>
+<?php include __DIR__ . '/partials/footer.php'; ?>

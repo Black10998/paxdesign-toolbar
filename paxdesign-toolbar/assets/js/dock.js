@@ -92,6 +92,7 @@
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-label', 'Tool panel');
+    panel.setAttribute('aria-hidden', 'true');
     var inner = document.createElement('div');
     inner.id = 'pdx-panel-inner';
     panel.appendChild(inner);
@@ -110,19 +111,45 @@
     /* ── Open/close ───────────────────────────────────────── */
     // Track scroll position so iOS body-lock doesn't jump the page.
     var _scrollY = 0;
+    var _bodyScrollLocked = false;
+    var _panelFocusReturn = null;
+
+    function isMobileViewport() {
+      return window.innerWidth <= (C.mobileBreakpoint || 680);
+    }
+
+    function lockBodyScroll() {
+      if (_bodyScrollLocked || !isMobileViewport()) return;
+      _scrollY = window.scrollY || window.pageYOffset;
+      document.body.style.top   = '-' + _scrollY + 'px';
+      document.body.style.width = '100%';
+      document.body.classList.add('pdx-no-scroll');
+      _bodyScrollLocked = true;
+    }
+
+    function unlockBodyScroll() {
+      if (!_bodyScrollLocked) return;
+      document.body.classList.remove('pdx-no-scroll');
+      document.body.style.top   = '';
+      document.body.style.width = '';
+      window.scrollTo(0, _scrollY);
+      _bodyScrollLocked = false;
+    }
+
+    function focusPanel() {
+      panel.setAttribute('tabindex', '-1');
+      var target = panel.querySelector('#pdx-panel-close') ||
+        panel.querySelector('input, button, [href], textarea, select');
+      if (target && target.focus) target.focus();
+    }
 
     function openPanel(moduleId) {
       state.activeModule = moduleId;
+      _panelFocusReturn = document.activeElement;
       backdrop.classList.add('is-open');
       panel.classList.add('is-open');
-
-      // iOS body-lock: save scroll, fix body so page doesn't jump.
-      // CSS .pdx-no-scroll adds overflow:hidden + position:fixed on mobile.
-      // We set body.style.top so the page stays at the same visual position.
-      _scrollY = window.scrollY || window.pageYOffset;
-      document.body.style.top    = '-' + _scrollY + 'px';
-      document.body.style.width  = '100%';
-      document.body.classList.add('pdx-no-scroll');
+      panel.setAttribute('aria-hidden', 'false');
+      lockBodyScroll();
 
       // Hide dock on mobile so it doesn't overlap the panel (unless admin disabled it).
       if (dock.dataset.pdxHideDock !== 'false') {
@@ -142,6 +169,7 @@
         if (state.activeModule !== moduleId || !panel.classList.contains('is-open')) return;
         renderPanel(moduleId);
         injectCloseBtnGlobal();
+        focusPanel();
         var _body = panel.querySelector('.pdx-ph-body');
         if (_body) _body.scrollTop = 0;
       }).catch(function() {
@@ -149,6 +177,7 @@
         if (state.activeModule !== moduleId || !panel.classList.contains('is-open')) return;
         renderPanel(moduleId);
         injectCloseBtnGlobal();
+        focusPanel();
       });
       if (C.analytics) logEvent(moduleId, 'panel_open');
     }
@@ -157,12 +186,13 @@
       state.activeModule = null;
       backdrop.classList.remove('is-open');
       panel.classList.remove('is-open');
+      panel.setAttribute('aria-hidden', 'true');
+      unlockBodyScroll();
 
-      // Restore body and scroll position.
-      document.body.classList.remove('pdx-no-scroll');
-      document.body.style.top   = '';
-      document.body.style.width = '';
-      window.scrollTo(0, _scrollY);
+      if (_panelFocusReturn && _panelFocusReturn.focus) {
+        try { _panelFocusReturn.focus(); } catch (e) {}
+        _panelFocusReturn = null;
+      }
 
       // Restore dock visibility.
       if (dock.dataset.pdxHideDock !== 'false') {
@@ -270,6 +300,21 @@
 
     /* ── v4: Billing badge in dock ────────────────────────── */
     buildBillingBadge();
+    buildQueueBadge();
+
+    /* Accent + breakpoint tokens from admin settings */
+    if (C.accentColor) {
+      var accent = C.accentColor;
+      document.documentElement.style.setProperty('--pdx-accent', accent);
+      if (pdxRoot) pdxRoot.style.setProperty('--pdx-accent', accent);
+    }
+    var mobileBp = C.mobileBreakpoint || 680;
+    document.documentElement.style.setProperty('--pdx-mobile-max', mobileBp + 'px');
+    document.documentElement.style.setProperty('--pdx-mobile-min', (mobileBp + 1) + 'px');
+
+    window.addEventListener('pagehide', function() {
+      Object.keys(state.sseConnections || {}).forEach(function(ch) { stopSSE(ch); });
+    });
 
     /* ── Close button ─────────────────────────────────────────────
        Injected into #pdx-panel-inner (NOT .pdx-ph-hd) so it is never
@@ -702,6 +747,7 @@
        OSINT AGENTS
     ══════════════════════════════════════════════════════ */
     function renderOsint(mod, access, locked) {
+      if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
@@ -1311,7 +1357,7 @@
           pipelineDone = true;
           if (apiDone) {
             if (!apiData) { result.innerHTML = '<div class="pdx-error">Flow failed.</div>'; return; }
-            if (apiData.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'AI Builder', price: apiData.price, currency: apiData.currency }, {}); return; }
+            if (apiData.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'builder', 'AI Builder', apiData); return; }
             renderBuilderResult(result, apiData); showNotif('Flow "' + name + '" completed', 'success');
           }
         });
@@ -1319,7 +1365,7 @@
           apiData = data; apiDone = true;
           if (pipelineDone) {
             if (!data) { result.innerHTML = '<div class="pdx-error">Flow failed.</div>'; return; }
-            if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'AI Builder', price: data.price, currency: data.currency }, {}); return; }
+            if (data.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'builder', 'AI Builder', data); return; }
             renderBuilderResult(result, data); showNotif('Flow "' + name + '" completed', 'success');
           }
         });
@@ -1525,7 +1571,7 @@
           pipelineDone = true;
           if (apiDone) {
             if (!apiData) { result.innerHTML = '<div class="pdx-error">Pipeline failed.</div>'; return; }
-            if (apiData.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Agent Pipeline', price: apiData.price, currency: apiData.currency }, {}); return; }
+            if (apiData.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'pipeline', 'Agent Pipeline', apiData); return; }
             state.pipelineTrace = (apiData.result && apiData.result.trace) || [];
             renderPipelineResult(result, apiData); showNotif('Pipeline "' + name + '" completed — ' + agents.length + ' agents', 'success');
           }
@@ -1534,7 +1580,7 @@
           apiData = data; apiDone = true;
           if (pipelineDone) {
             if (!data) { result.innerHTML = '<div class="pdx-error">Pipeline failed.</div>'; return; }
-            if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Agent Pipeline', price: data.price, currency: data.currency }, {}); return; }
+            if (data.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'pipeline', 'Agent Pipeline', data); return; }
             state.pipelineTrace = (data.result && data.result.trace) || [];
             renderPipelineResult(result, data); showNotif('Pipeline "' + name + '" completed — ' + agents.length + ' agents', 'success');
           }
@@ -1686,7 +1732,7 @@
           pipelineDone = true;
           if (apiDone) {
             if (!apiData) { result.innerHTML = '<div class="pdx-error">Analysis failed.</div>'; return; }
-            if (apiData.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Browser Automation', price: apiData.price, currency: apiData.currency }, {}); return; }
+            if (apiData.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'automation', 'Browser Automation', apiData); return; }
             renderAutomationResult(result, apiData); loadJobHistory('automation', 'pdx-auto-jobs'); showNotif('Task analyzed — Job ' + (apiData.job_id || ''), 'success');
           }
         });
@@ -1694,7 +1740,7 @@
           apiData = data; apiDone = true;
           if (pipelineDone) {
             if (!data) { result.innerHTML = '<div class="pdx-error">Analysis failed.</div>'; return; }
-            if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Browser Automation', price: data.price, currency: data.currency }, {}); return; }
+            if (data.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'automation', 'Browser Automation', data); return; }
             renderAutomationResult(result, data); loadJobHistory('automation', 'pdx-auto-jobs'); showNotif('Task analyzed — Job ' + (data.job_id || ''), 'success');
           }
         });
@@ -1870,7 +1916,7 @@
           pipelineDone = true;
           if (apiDone) {
             if (!apiData) { result.innerHTML = '<div class="pdx-error">Test failed.</div>'; return; }
-            if (apiData.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Connectors', price: apiData.price, currency: apiData.currency }, {}); return; }
+            if (apiData.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'connectors', 'Connectors', apiData); return; }
             renderConnectorResult(result, apiData);
           }
         });
@@ -1878,7 +1924,7 @@
           apiData = data; apiDone = true;
           if (pipelineDone) {
             if (!data) { result.innerHTML = '<div class="pdx-error">Test failed.</div>'; return; }
-            if (data.error === 'payment_required') { result.innerHTML = ''; renderPaywall({ label: 'Connectors', price: data.price, currency: data.currency }, {}); return; }
+            if (data.error === 'payment_required') { result.innerHTML = ''; showPaymentRequiredResult(result, 'connectors', 'Connectors', data); return; }
             renderConnectorResult(result, data);
           }
         });
@@ -2044,10 +2090,12 @@
               '<button class="pdx-tab" data-tab="pinned">Pinned</button>' +
             '</div>' +
             '<div id="pdx-ws-list"><div class="pdx-loading">Loading workspaces...</div></div>' +
+            '<div class="pdx-section-sm"><div class="pdx-section-label">Live Activity</div><div id="pdx-activity-feed" class="pdx-activity-feed"><div class="pdx-empty">Waiting for events...</div></div></div>' +
           '</div>' +
         '</div>';
 
       loadWorkspaces('');
+      refreshActivityFeed();
 
       setupTabs('pdx-ws-tabs', 'pdx-ws-list', {
         all:      function() { loadWorkspaces(''); return '<div class="pdx-loading">Loading...</div>'; },
@@ -2608,8 +2656,12 @@
       if (body && method !== 'GET') opts.body = JSON.stringify(body);
       return fetch(C.restUrl + path, opts)
         .then(function(r) {
-          if (!r.ok) return null;
-          return r.json().catch(function() { return null; });
+          return r.json().catch(function() { return {}; }).then(function(data) {
+            if (!data || typeof data !== 'object') data = {};
+            data._httpStatus = r.status;
+            data._ok = r.ok;
+            return data;
+          });
         })
         .catch(function() { return null; });
     }
@@ -2892,7 +2944,7 @@
         }
 
         applyLayout();
-        injectCloseBtn();
+        injectCloseBtnGlobal();
 
         // Strip any leftover inline styles — CSS owns all geometry.
         ['top','bottom','left','right','transform','height','max-height','width'].forEach(function(p) {
@@ -2994,14 +3046,18 @@
       var url  = base + '/wp-json/pdx/v1/sse?channel=' + encodeURIComponent(channel) + '&nonce=' + encodeURIComponent(C.nonce || '');
       var es   = new EventSource(url);
       es.onmessage = onMessage;
-      es.onopen    = function() { retries = 0; }; // reset on successful connect
+      if (!state.sseRetries) state.sseRetries = {};
+      es.onopen    = function() { state.sseRetries[channel] = 0; };
       es.onerror   = function() {
         es.close();
         if (state.sseConnections && state.sseConnections[channel] === es) {
           delete state.sseConnections[channel];
         }
-        var delay = Math.min(30000, 3000 * Math.pow(2, retries)); // exponential backoff, max 30s
-        setTimeout(function() { startSSE(channel, onMessage, retries + 1); }, delay);
+        var next = (state.sseRetries[channel] || retries) + 1;
+        if (next > 5) return;
+        state.sseRetries[channel] = next;
+        var delay = Math.min(30000, 3000 * Math.pow(2, next - 1));
+        setTimeout(function() { startSSE(channel, onMessage, next); }, delay);
       };
       if (state.sseConnections) state.sseConnections[channel] = es;
       return es;
@@ -3027,6 +3083,45 @@
       if (!el || !state.billingPlan) return;
       var plan = state.billingPlan;
       el.textContent = typeof plan === 'object' ? (plan.name || 'Free') : plan;
+    }
+
+
+    function wireUnlockButtons(container) {
+      if (!container) return;
+      container.querySelectorAll('.pdx-unlock-btn').forEach(function(b) {
+        if (b.dataset.pdxWired) return;
+        b.dataset.pdxWired = '1';
+        b.addEventListener('click', function(e) {
+          var btn = e.currentTarget;
+          initiatePayment(btn.dataset.module, parseFloat(btn.dataset.price), btn.dataset.currency);
+        });
+      });
+    }
+
+    function showPaymentRequiredResult(container, moduleId, label, data) {
+      var mod = Object.assign({}, (C.modules && C.modules[moduleId]) || {}, {
+        id: moduleId,
+        label: label || moduleId
+      });
+      container.innerHTML = renderPaywallInline(mod, { price: data.price, currency: data.currency });
+      wireUnlockButtons(container);
+    }
+
+    function buildQueueBadge() {
+      var badge = document.createElement('span');
+      badge.id = 'pdx-queue-badge';
+      badge.className = 'pdx-dock-queue-badge';
+      badge.setAttribute('aria-label', 'Running jobs');
+      dock.appendChild(badge);
+    }
+
+    function debounce(fn, wait) {
+      var timer;
+      return function() {
+        var ctx = this, args = arguments;
+        clearTimeout(timer);
+        timer = setTimeout(function() { fn.apply(ctx, args); }, wait);
+      };
     }
 
     function buildBillingBadge() {
@@ -3065,14 +3160,14 @@
       var selectedIdx = 0;
       var currentResults = [];
 
-      input.addEventListener('input', function() {
+      input.addEventListener('input', debounce(function() {
         var q = input.value.trim();
         apiFetch('GET', '/command/search?q=' + encodeURIComponent(q)).then(function(data) {
           currentResults = (data && data.results) || [];
           selectedIdx = 0;
           renderCmdResults(results, currentResults, selectedIdx, handleCmdSelect);
         });
-      });
+      }, 300));
 
       input.addEventListener('keydown', function(e) {
         if (e.key === 'ArrowDown') { e.preventDefault(); selectedIdx = Math.min(selectedIdx + 1, currentResults.length - 1); renderCmdResults(results, currentResults, selectedIdx, handleCmdSelect); }
