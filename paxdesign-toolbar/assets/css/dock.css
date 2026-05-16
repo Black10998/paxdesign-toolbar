@@ -1,4 +1,4 @@
-/* PaxDesign Utility Dock — v4.1.0
+/* PaxDesign Utility Dock — v4.1.1
    Enterprise AI/Cyber SaaS dock styles.
    #pdx-dock stays inside #pdx-root (scoped variables, fixed position).
    #pdx-backdrop, #pdx-panel, #pdx-notif are appended to <body> by JS. */
@@ -73,6 +73,10 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
 /* ─── Dock rail ──────────────────────────────────────────── */
 /* Dock base — shared properties (all screen sizes) */
+/* ─── Dock base — MOBILE FIRST ───────────────────────────── */
+/* Default (mobile ≤ 680px): full-width horizontal bar under header.
+   No JS dependency — layout is correct from first paint.
+   JS only adds --pdx-dock-top / --pdx-dock-h for dynamic offset. */
 #pdx-dock {
   position: fixed;
   z-index: 99990;
@@ -83,17 +87,50 @@ body.pdx-no-scroll { overflow: hidden !important; }
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   box-shadow: var(--pdx-shadow);
-}
 
-/* Desktop layout: vertical pill on left/right side */
+  /* Mobile layout — horizontal bar */
+  top: var(--pdx-dock-top, 0px);
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: var(--pdx-dock-h, 48px);
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 0;
+  padding: 0 max(8px, env(safe-area-inset-left, 8px));
+  border-radius: 0;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  border-bottom: 1px solid var(--pdx-border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+#pdx-dock::-webkit-scrollbar { display: none; }
+
+/* ─── Desktop layout — vertical pill ────────────────────── */
+/* Overrides the mobile base above. Completely separate layout. */
 @media (min-width: 681px) {
   #pdx-dock {
+    /* Reset mobile geometry */
     top: 50%;
+    left: auto;
+    right: auto;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    /* Desktop pill */
     transform: translateY(-50%);
     flex-direction: column;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
     gap: 2px;
     border-radius: var(--pdx-r-lg);
     padding: 6px 5px;
+    border: 1px solid var(--pdx-border);
   }
   #pdx-root[data-position="left"]  #pdx-dock { left: 12px; }
   #pdx-root[data-position="right"] #pdx-dock { right: 12px; }
@@ -119,16 +156,35 @@ body.pdx-no-scroll { overflow: hidden !important; }
 .pdx-btn:hover         { background: var(--pdx-bg-hov); color: var(--pdx-hi); }
 .pdx-btn:focus-visible { outline: 2px solid var(--pdx-accent); outline-offset: 1px; }
 .pdx-btn.is-active     { background: var(--pdx-bg-hov); color: var(--pdx-hi); }
+/* Mobile default: bottom edge indicator */
 .pdx-btn.is-active::before {
   content: '';
   position: absolute;
-  left: -5px; top: 50%;
-  transform: translateY(-50%);
-  width: 2px; height: 16px;
+  left: 50%;
+  bottom: 0;
+  top: auto;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 2px;
   background: var(--pdx-accent);
-  border-radius: 2px;
+  border-radius: 2px 2px 0 0;
 }
-#pdx-root[data-position="right"] .pdx-btn.is-active::before { left: auto; right: -5px; }
+/* Desktop: left/right edge indicator */
+@media (min-width: 681px) {
+  .pdx-btn.is-active::before {
+    left: -5px;
+    bottom: auto;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 16px;
+    border-radius: 2px;
+  }
+  #pdx-root[data-position="right"] .pdx-btn.is-active::before {
+    left: auto;
+    right: -5px;
+  }
+}
 .pdx-btn svg {
   width: var(--pdx-icon); height: var(--pdx-icon);
   stroke: currentColor; fill: none;
@@ -148,9 +204,22 @@ body.pdx-no-scroll { overflow: hidden !important; }
 #pdx-root[data-position="right"] .pdx-btn::after { right: calc(100% + 10px); left: auto; }
 .pdx-btn:hover::after { opacity: 1; }
 
+/* Mobile default: vertical divider between button groups */
 .pdx-sep {
-  display: block; width: 18px; height: 1px;
-  background: var(--pdx-border); margin: 3px 0; flex-shrink: 0;
+  display: block;
+  width: 1px;
+  height: 18px;
+  background: var(--pdx-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+/* Desktop: horizontal divider */
+@media (min-width: 681px) {
+  .pdx-sep {
+    width: 18px;
+    height: 1px;
+    margin: 3px 0;
+  }
 }
 
 
@@ -169,24 +238,65 @@ body.pdx-no-scroll { overflow: hidden !important; }
    PANEL
    ═══════════════════════════════════════════════════════════ */
 /* Panel base — shared (all screen sizes) */
+/* ─── Panel base — MOBILE FIRST ──────────────────────────── */
+/* Default (mobile): full-width, slides down from under the dock.
+   Top = --pdx-panel-top (dock-top + dock-h), set by JS.
+   Falls back to 48px (dock height default) if JS hasn't run yet. */
 #pdx-panel {
   position: fixed;
-  z-index: 99995; background: #0d1117;
-  overflow-y: auto; overflow-x: hidden;
-  will-change: transform; font-family: -apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
-  border: 1px solid rgba(255,255,255,.08);
-}
+  z-index: 99995;
+  background: var(--pdx-bg, #0d1117);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  will-change: transform;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  border: 1px solid var(--pdx-border, rgba(255,255,255,.08));
 
-/* Desktop panel: side-slide from left/right */
+  /* Mobile geometry: full-width, fills screen below dock */
+  top: var(--pdx-panel-top, 48px);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+
+  /* Slide down from top (under-header mode default) */
+  transition: transform .26s cubic-bezier(.4,0,.2,1);
+}
+#pdx-panel:not(.is-open) { transform: translateY(-102%); }
+#pdx-panel.is-open       { transform: translateY(0); }
+
+/* ─── Desktop panel — side-slide ────────────────────────── */
 @media (min-width: 681px) {
   #pdx-panel {
-    top: 0; bottom: 0; width: 420px; max-width: 100vw;
+    /* Reset mobile geometry */
+    top: 0;
+    bottom: 0;
+    left: auto;
+    right: auto;
+    width: 420px;
+    max-width: 100vw;
+    height: auto;
+    border: 1px solid var(--pdx-border, rgba(255,255,255,.08));
+    border-radius: 0;
     transition: transform .26s cubic-bezier(.4,0,.2,1);
   }
-  #pdx-panel:not(.is-open) { transform: translateX(-110%); }
-  #pdx-panel.is-open       { transform: translateX(0); }
-  #pdx-panel[style*="right: 0"]:not(.is-open) { transform: translateX(110%); }
-  #pdx-panel[style*="right: 0"].is-open       { transform: translateX(0); }
+  /* Left panel (default) */
+  #pdx-root[data-position="left"]  #pdx-panel { left: 0; right: auto; border-radius: 0 12px 12px 0; }
+  #pdx-root[data-position="right"] #pdx-panel { right: 0; left: auto; border-radius: 12px 0 0 12px; }
+  /* Slide from left */
+  #pdx-root[data-position="left"]  #pdx-panel:not(.is-open) { transform: translateX(-110%); }
+  #pdx-root[data-position="left"]  #pdx-panel.is-open       { transform: translateX(0); }
+  /* Slide from right */
+  #pdx-root[data-position="right"] #pdx-panel:not(.is-open) { transform: translateX(110%); }
+  #pdx-root[data-position="right"] #pdx-panel.is-open       { transform: translateX(0); }
 }
 
 #pdx-panel-inner { min-height: 100%; display: flex; flex-direction: column; }
@@ -709,8 +819,9 @@ body.pdx-no-scroll { overflow: hidden !important; }
      --pdx-compact      : 1 when compact mode active
    ═══════════════════════════════════════════════════════════ */
 
-/* ─── Tablet (≤ 860px) ───────────────────────────────────── */
-@media (max-width: 860px) {
+/* ─── Tablet (681px – 860px) ─────────────────────────────── */
+/* Only applies to desktop layout range — panel is side-slide here */
+@media (min-width: 681px) and (max-width: 860px) {
   #pdx-panel       { width: min(420px, 100vw); }
   .pdx-tpl-grid    { grid-template-columns: 1fr; }
   .pdx-conn-grid   { grid-template-columns: 1fr; }
@@ -733,21 +844,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
     left: 0 !important;
   }
 
-  /* Panel: full-width, full-height, smooth scroll */
-  #pdx-panel {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
-    border-left: none !important;
-    border-right: none !important;
-    /* Transition set per-mode below */
-  }
+  /* Panel: mobile geometry already set in base rule above.
+     Only override what differs from the base here. */
 
   #pdx-panel-inner {
     display: flex;
@@ -945,107 +1043,43 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
 /* ═══════════════════════════════════════════════════════════
    MODE A — under-header  [data-mobile-dock="under-header"]
-   Full-width glass bar pinned directly below the header/
-   admin bar. Panel slides down from it, fills remaining
-   screen height. This is the recommended phone layout.
+   This is the DEFAULT mobile mode. The base #pdx-dock and
+   #pdx-panel rules already handle the geometry. This block
+   only adds: hide-on-open animation, backdrop offset,
+   notification placement, and light-mode appearance.
    ═══════════════════════════════════════════════════════════ */
 @media (max-width: 680px) {
-  #pdx-root[data-mobile-dock="under-header"] #pdx-dock {
-    /* Position */
-    position: fixed !important;
-    top: var(--pdx-dock-top, 0px) !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: auto !important;
-    width: 100% !important;
-    transform: none !important;
-    z-index: 99998 !important;
 
-    /* Layout: horizontal row of buttons */
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-wrap: nowrap !important;
-    gap: 0 !important;
-    height: var(--pdx-dock-h, 48px) !important;
-    padding: 0 max(8px, env(safe-area-inset-left, 8px)) !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-
-    /* Appearance */
-    border-radius: 0 !important;
-    border-top: none !important;
-    border-left: none !important;
-    border-right: none !important;
-    border-bottom: 1px solid var(--pdx-border, rgba(255,255,255,.08)) !important;
-    background: rgba(13,17,23,.94) !important;
+  /* Dock: enhanced appearance for under-header mode */
+  #pdx-root[data-mobile-dock="under-header"] #pdx-dock,
+  #pdx-dock {
+    background: rgba(13,17,23,.94);
     backdrop-filter: blur(24px) saturate(1.5);
     -webkit-backdrop-filter: blur(24px) saturate(1.5);
     box-shadow: 0 1px 0 rgba(255,255,255,.04), 0 2px 16px rgba(0,0,0,.35);
-
-    /* Smooth hide when panel opens */
-    transition: transform .22s cubic-bezier(.4,0,.2,1),
-                opacity .18s ease !important;
-  }
-  #pdx-root[data-mobile-dock="under-header"] #pdx-dock::-webkit-scrollbar { display: none; }
-
-  /* Hide dock when panel is open (slides up) */
-  #pdx-root[data-mobile-dock="under-header"] #pdx-dock.pdx-dock--panel-open {
-    transform: translateY(-110%) !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
+    transition: transform .22s cubic-bezier(.4,0,.2,1), opacity .18s ease;
   }
 
-  /* Active indicator: bottom edge bar */
-  #pdx-root[data-mobile-dock="under-header"] .pdx-btn.is-active::before {
-    left: 50% !important;
-    right: auto !important;
-    top: auto !important;
-    bottom: 0 !important;
-    transform: translateX(-50%) !important;
-    width: 18px !important;
-    height: 2px !important;
-    border-radius: 2px 2px 0 0 !important;
+  /* Hide dock when panel is open */
+  #pdx-dock.pdx-dock--panel-open {
+    transform: translateY(-110%);
+    opacity: 0;
+    pointer-events: none;
   }
 
-  /* Panel: fills screen below dock */
-  #pdx-root[data-mobile-dock="under-header"] #pdx-panel {
-    top: var(--pdx-panel-top, 48px) !important;
-    bottom: 0 !important;
-    height: auto !important;
-    max-height: none !important;
-    border-radius: 0 !important;
-    border-top: 1px solid var(--pdx-border, rgba(255,255,255,.08)) !important;
-    border-bottom: none !important;
+  /* Panel: enhanced appearance */
+  #pdx-panel {
+    border-top: 1px solid var(--pdx-border, rgba(255,255,255,.08));
     box-shadow: 0 4px 24px rgba(0,0,0,.45);
-    transition: transform .26s cubic-bezier(.4,0,.2,1) !important;
-  }
-  #pdx-root[data-mobile-dock="under-header"] #pdx-panel:not(.is-open) {
-    transform: translateY(-102%) !important;
-  }
-  #pdx-root[data-mobile-dock="under-header"] #pdx-panel.is-open {
-    transform: translateY(0) !important;
-  }
-  /* No drag handle for top-slide panel */
-  #pdx-root[data-mobile-dock="under-header"] #pdx-panel::before {
-    display: none !important;
   }
 
-  /* Panel body: extra bottom padding for safe area */
-  #pdx-root[data-mobile-dock="under-header"] .pdx-ph-body {
-    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  /* Backdrop: starts below dock */
+  #pdx-backdrop {
+    top: var(--pdx-panel-top, 48px);
   }
 
-  /* Backdrop starts below dock */
-  #pdx-root[data-mobile-dock="under-header"] #pdx-backdrop {
-    top: var(--pdx-panel-top, 48px) !important;
-  }
-
-  /* Notifications: below dock, full width */
-  #pdx-root[data-mobile-dock="under-header"] #pdx-notif {
+  /* Notifications: below dock */
+  #pdx-notif {
     top: calc(var(--pdx-panel-top, 48px) + 8px);
     bottom: auto;
     right: 12px;
@@ -1053,118 +1087,105 @@ body.pdx-no-scroll { overflow: hidden !important; }
   }
 
   /* Command palette: below dock */
-  #pdx-root[data-mobile-dock="under-header"] .pdx-cmd-box {
+  .pdx-cmd-box {
     top: calc(var(--pdx-panel-top, 48px) + 8px);
     width: 96vw;
     max-height: 70vh;
   }
 
-  /* Light mode overrides */
-  #pdx-root[data-mobile-dock="under-header"][data-theme="light"] #pdx-dock,
-  #pdx-root[data-mobile-dock="under-header"][data-theme="auto"]  #pdx-dock {
-    background: rgba(255,255,255,.96) !important;
-    border-bottom-color: rgba(0,0,0,.08) !important;
+  /* Light mode */
+  #pdx-root[data-theme="light"] #pdx-dock,
+  #pdx-root[data-theme="auto"]  #pdx-dock {
+    background: rgba(255,255,255,.96);
+    border-bottom-color: rgba(0,0,0,.08);
     box-shadow: 0 1px 0 rgba(0,0,0,.05), 0 2px 12px rgba(0,0,0,.08);
   }
 }
 @media (max-width: 680px) and (prefers-color-scheme: light) {
-  #pdx-root[data-mobile-dock="under-header"][data-theme="auto"] #pdx-dock {
-    background: rgba(255,255,255,.96) !important;
-    border-bottom-color: rgba(0,0,0,.08) !important;
+  #pdx-root[data-theme="auto"] #pdx-dock {
+    background: rgba(255,255,255,.96);
+    border-bottom-color: rgba(0,0,0,.08);
     box-shadow: 0 1px 0 rgba(0,0,0,.05), 0 2px 12px rgba(0,0,0,.08);
   }
 }
 
 /* ═══════════════════════════════════════════════════════════
    MODE B — bottom pill  [data-mobile-dock="bottom-*"]
-   Compact floating pill above the safe area. Panel is a
-   bottom sheet that slides up from the bottom edge.
+   Overrides the base mobile dock layout. Dock becomes a
+   compact floating pill; panel becomes a bottom sheet.
    ═══════════════════════════════════════════════════════════ */
 @media (max-width: 680px) {
 
-  /* Shared pill base */
+  /* Override base dock geometry for pill mode */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-dock {
-    position: fixed !important;
-    top: auto !important;
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px)) !important;
-    height: auto !important;
-    padding: 5px 6px !important;
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    flex-wrap: nowrap !important;
-    gap: 0 !important;
-    z-index: 99998 !important;
-
-    /* Pill shape */
-    border-radius: 40px !important;
-    border: 1px solid rgba(255,255,255,.1) !important;
-    background: rgba(13,17,23,.90) !important;
+    top: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    left: auto;
+    right: auto;
+    width: auto;
+    height: auto;
+    padding: 5px 6px;
+    border-radius: 40px;
+    border: 1px solid rgba(255,255,255,.1);
+    background: rgba(13,17,23,.90);
     backdrop-filter: blur(28px) saturate(1.5);
     -webkit-backdrop-filter: blur(28px) saturate(1.5);
     box-shadow: 0 4px 24px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.06) inset;
-
-    transition: transform .22s cubic-bezier(.4,0,.2,1),
-                opacity .18s ease !important;
+    transition: transform .22s cubic-bezier(.4,0,.2,1), opacity .18s ease;
+    overflow: visible;
   }
 
   /* Horizontal positions */
   #pdx-root[data-mobile-dock="bottom-center"] #pdx-dock {
-    left: 50% !important;
-    right: auto !important;
-    transform: translateX(-50%) !important;
+    left: 50%;
+    transform: translateX(-50%);
   }
   #pdx-root[data-mobile-dock="bottom-left"] #pdx-dock {
-    left: max(14px, env(safe-area-inset-left, 14px)) !important;
-    right: auto !important;
-    transform: none !important;
+    left: max(14px, env(safe-area-inset-left, 14px));
   }
   #pdx-root[data-mobile-dock="bottom-right"] #pdx-dock {
-    right: max(14px, env(safe-area-inset-right, 14px)) !important;
-    left: auto !important;
-    transform: none !important;
+    right: max(14px, env(safe-area-inset-right, 14px));
   }
 
-  /* Hide dock when panel is open (slides down) */
+  /* Hide dock when panel is open */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-dock.pdx-dock--panel-open {
-    transform: translateY(calc(100% + 20px)) !important;
-    opacity: 0 !important;
-    pointer-events: none !important;
+    transform: translateY(calc(100% + 20px));
+    opacity: 0;
+    pointer-events: none;
   }
   #pdx-root[data-mobile-dock="bottom-center"] #pdx-dock.pdx-dock--panel-open {
-    transform: translateX(-50%) translateY(calc(100% + 20px)) !important;
+    transform: translateX(-50%) translateY(calc(100% + 20px));
   }
 
-  /* Active indicator: top edge bar on pill */
+  /* Active indicator: top edge on pill */
   #pdx-root[data-mobile-dock^="bottom"] .pdx-btn.is-active::before {
-    left: 50% !important;
-    right: auto !important;
-    top: 0 !important;
-    bottom: auto !important;
-    transform: translateX(-50%) !important;
-    width: 14px !important;
-    height: 2px !important;
-    border-radius: 0 0 2px 2px !important;
+    left: 50%;
+    right: auto;
+    top: 0;
+    bottom: auto;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 2px;
+    border-radius: 0 0 2px 2px;
   }
 
-  /* Bottom sheet panel */
+  /* Override base panel geometry for bottom sheet */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-panel {
-    top: auto !important;
-    bottom: 0 !important;
-    /* Height driven by --pdx-panel-h-pct (admin setting, default 90) */
-    height: calc(var(--pdx-panel-h-pct, 90) * var(--pdx-vh, 1svh)) !important;
-    max-height: 96svh !important;
-    border-radius: 16px 16px 0 0 !important;
-    border-top: 1px solid var(--pdx-border, rgba(255,255,255,.1)) !important;
-    border-bottom: none !important;
+    top: auto;
+    bottom: 0;
+    height: calc(var(--pdx-panel-h-pct, 90) * var(--pdx-vh, 1svh));
+    max-height: 96svh;
+    border-radius: 16px 16px 0 0;
+    border-top: 1px solid var(--pdx-border, rgba(255,255,255,.1));
+    border-bottom: none;
     box-shadow: 0 -6px 32px rgba(0,0,0,.55);
-    transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
   }
   #pdx-root[data-mobile-dock^="bottom"] #pdx-panel:not(.is-open) {
-    transform: translateY(102%) !important;
+    transform: translateY(102%);
   }
   #pdx-root[data-mobile-dock^="bottom"] #pdx-panel.is-open {
-    transform: translateY(0) !important;
+    transform: translateY(0);
   }
 
   /* Drag handle */
@@ -1180,20 +1201,17 @@ body.pdx-no-scroll { overflow: hidden !important; }
     top: 0;
     z-index: 20;
     pointer-events: none;
-    flex-shrink: 0;
   }
 
-  /* Panel body: extra bottom padding so content clears safe area */
+  /* Panel body: clear home indicator */
   #pdx-root[data-mobile-dock^="bottom"] .pdx-ph-body {
     padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Backdrop: full screen for bottom sheet */
-  #pdx-root[data-mobile-dock^="bottom"] #pdx-backdrop {
-    top: 0 !important;
-  }
+  /* Backdrop: full screen */
+  #pdx-root[data-mobile-dock^="bottom"] #pdx-backdrop { top: 0; }
 
-  /* Notifications: above dock pill */
+  /* Notifications: above pill */
   #pdx-root[data-mobile-dock^="bottom"] #pdx-notif {
     bottom: calc(72px + env(safe-area-inset-bottom, 0px));
     top: auto;
@@ -1208,18 +1226,18 @@ body.pdx-no-scroll { overflow: hidden !important; }
     max-height: 70vh;
   }
 
-  /* Light mode overrides */
+  /* Light mode */
   #pdx-root[data-mobile-dock^="bottom"][data-theme="light"] #pdx-dock,
   #pdx-root[data-mobile-dock^="bottom"][data-theme="auto"]  #pdx-dock {
-    background: rgba(255,255,255,.96) !important;
-    border-color: rgba(0,0,0,.09) !important;
+    background: rgba(255,255,255,.96);
+    border-color: rgba(0,0,0,.09);
     box-shadow: 0 4px 20px rgba(0,0,0,.12), 0 1px 0 rgba(255,255,255,.8) inset;
   }
 }
 @media (max-width: 680px) and (prefers-color-scheme: light) {
   #pdx-root[data-mobile-dock^="bottom"][data-theme="auto"] #pdx-dock {
-    background: rgba(255,255,255,.96) !important;
-    border-color: rgba(0,0,0,.09) !important;
+    background: rgba(255,255,255,.96);
+    border-color: rgba(0,0,0,.09);
     box-shadow: 0 4px 20px rgba(0,0,0,.12), 0 1px 0 rgba(255,255,255,.8) inset;
   }
 }

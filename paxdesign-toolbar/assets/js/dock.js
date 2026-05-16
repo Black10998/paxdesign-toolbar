@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v4.1.0
+ * PaxDesign Utility Dock — v4.1.1
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.
@@ -49,6 +49,39 @@
     var dock = document.getElementById('pdx-dock');
     if (!dock) return;
 
+    /* ── Stamp mobile layout immediately — before any async work ── */
+    // The base CSS already handles mobile layout without JS.
+    // We stamp CSS custom properties here so --pdx-dock-top and
+    // --pdx-panel-top are correct from the very first paint.
+    // This runs synchronously so there is zero flash of wrong layout.
+    var pdxRoot = document.getElementById('pdx-root');
+    var bp      = C.mobileBreakpoint || 680;
+    var dockH   = Math.min(72, Math.max(36, parseInt(C.mobileDockHeight, 10) || 48));
+
+    function getAdminBarH() {
+      var bar = document.getElementById('wpadminbar');
+      return bar ? Math.round(bar.getBoundingClientRect().height) : 0;
+    }
+
+    function stampLayoutVars() {
+      var abH      = getAdminBarH();
+      var dockTop  = abH;
+      var panelTop = dockTop + dockH;
+      var vh       = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--pdx-dock-top',  dockTop  + 'px');
+      document.documentElement.style.setProperty('--pdx-dock-h',    dockH    + 'px');
+      document.documentElement.style.setProperty('--pdx-panel-top', panelTop + 'px');
+      document.documentElement.style.setProperty('--pdx-vh',        vh       + 'px');
+    }
+
+    // Run immediately — synchronous, no RAF needed here.
+    if (window.innerWidth <= bp) {
+      stampLayoutVars();
+      // Stamp data-mobile-dock so Mode B CSS fires if configured.
+      var dockPos = C.mobileDockPosition || 'under-header';
+      if (pdxRoot) pdxRoot.dataset.mobileDock = dockPos;
+    }
+
     /* ── Panel + backdrop ─────────────────────────────────── */
     var backdrop = document.createElement('div');
     backdrop.id = 'pdx-backdrop';
@@ -69,11 +102,10 @@
     notifContainer.id = 'pdx-notif';
     document.body.appendChild(notifContainer);
 
-    /* ── Position panel ───────────────────────────────────── */
-    var pos = C.position || 'left';
-    panel.style[pos === 'left' ? 'left' : 'right'] = '0';
-    panel.style[pos === 'left' ? 'right' : 'left'] = 'auto';
-    panel.style.borderRadius = pos === 'left' ? '0 12px 12px 0' : '12px 0 0 12px';
+    /* ── Panel position — CSS-driven, no inline styles ────── */
+    // Desktop: #pdx-root[data-position] selectors in CSS handle left/right.
+    // Mobile:  base #pdx-panel rule is full-width, top = --pdx-panel-top.
+    // No inline left/right/borderRadius set here — CSS owns all geometry.
 
     /* ── Open/close ───────────────────────────────────────── */
     // Track scroll position so iOS body-lock doesn't jump the page.
@@ -2671,76 +2703,51 @@
 
     /* ── Mobile ───────────────────────────────────────────── */
     function setupMobile(C, panel, dock) {
-      var bp           = C.mobileBreakpoint   || 680;
-      var dockPos      = C.mobileDockPosition || 'under-header';
-      var swipeClose   = C.mobileSwipeClose   !== false;
-      var hideDock     = C.mobileHideDock     !== false;
-      var safeArea     = C.mobileSafeArea     !== false;
-      var panelHPct    = Math.min(96, Math.max(50, parseInt(C.mobilePanelHeight, 10) || 90));
-      var compactMode  = C.mobileCompact      === true;
-      var iconSize     = parseInt(C.mobileIconSize, 10)   || 0; // 0 = use CSS default
-      var btnSize      = parseInt(C.mobileBtnSize, 10)    || 0;
-      var dockHeight   = parseInt(C.mobileDockHeight, 10) || 48;
-      var spacing      = C.mobileSpacing || 'default';   // default | compact | relaxed
-      var scale        = C.mobileScale   || 'auto';      // auto | fixed | fluid
-      var root         = document.documentElement;
-      var pdxRoot      = document.getElementById('pdx-root');
-      var isMobile     = false;
+      var bp          = C.mobileBreakpoint   || 680;
+      var dockPos     = C.mobileDockPosition || 'under-header';
+      var swipeClose  = C.mobileSwipeClose   !== false;
+      var hideDock    = C.mobileHideDock     !== false;
+      var safeArea    = C.mobileSafeArea     !== false;
+      var panelHPct   = Math.min(96, Math.max(50, parseInt(C.mobilePanelHeight, 10) || 90));
+      var compactMode = C.mobileCompact      === true;
+      var iconSize    = parseInt(C.mobileIconSize, 10)   || 0;
+      var btnSize     = parseInt(C.mobileBtnSize, 10)    || 0;
+      var dockHeight  = Math.min(72, Math.max(36, parseInt(C.mobileDockHeight, 10) || 48));
+      var spacing     = C.mobileSpacing || 'default';
+      var scale       = C.mobileScale   || 'auto';
+      var root        = document.documentElement;
+      var isMobile    = false;
 
-      // Expose hideDock flag so openPanel/closePanel can read it.
       if (!hideDock) dock.dataset.pdxHideDock = 'false';
 
-      // ── CSS custom property helper ───────────────────────
+      // ── CSS var helpers ──────────────────────────────────
       function setProp(n, v) { root.style.setProperty(n, v); }
       function removeProp(n) { root.style.removeProperty(n); }
 
-      // ── Real viewport height (avoids iOS URL-bar jump) ───
-      // Uses svh when available, falls back to window.innerHeight.
-      function realVH() {
-        // svh = small viewport height (excludes browser chrome)
-        // We compute 1% of it for use as --pdx-vh.
-        if (CSS && CSS.supports && CSS.supports('height', '1svh')) {
-          // Let CSS handle it natively — just set a fallback.
-          return window.innerHeight * 0.01;
-        }
-        return window.innerHeight * 0.01;
-      }
-
-      // ── WP admin bar height ──────────────────────────────
-      function adminBarH() {
-        var bar = document.getElementById('wpadminbar');
-        if (!bar) return 0;
-        // getBoundingClientRect is accurate even when bar is sticky.
-        return Math.round(bar.getBoundingClientRect().height);
-      }
-
-      // ── Apply all layout CSS variables ──────────────────
+      // ── Layout vars (dock-top, panel-top, vh) ────────────
+      // stampLayoutVars() was already called synchronously in init()
+      // for the initial paint. We call it again on resize/orientation.
       function applyLayout() {
-        var vh      = realVH();
-        var abH     = adminBarH();
-        var dockTop = abH;
-        var dockH   = dockHeight;
-        var panelTop = dockTop + dockH;
-
-        setProp('--pdx-vh',           vh          + 'px');
-        setProp('--pdx-dock-top',     dockTop     + 'px');
-        setProp('--pdx-dock-h',       dockH       + 'px');
-        setProp('--pdx-panel-top',    panelTop    + 'px');
-        setProp('--pdx-panel-h-pct',  panelHPct   + '');
-
+        var abH      = getAdminBarH();
+        var dockTop  = abH;
+        var panelTop = dockTop + dockHeight;
+        var vh       = window.innerHeight * 0.01;
+        setProp('--pdx-vh',          vh          + 'px');
+        setProp('--pdx-dock-top',    dockTop     + 'px');
+        setProp('--pdx-dock-h',      dockHeight  + 'px');
+        setProp('--pdx-panel-top',   panelTop    + 'px');
+        setProp('--pdx-panel-h-pct', panelHPct   + '');
         if (iconSize > 0) setProp('--pdx-icon', iconSize + 'px');
         if (btnSize  > 0) setProp('--pdx-btn',  btnSize  + 'px');
-        if (compactMode)  setProp('--pdx-compact', '1');
       }
 
-      // ── Remove all mobile CSS variables ─────────────────
       function clearLayout() {
         ['--pdx-vh','--pdx-dock-top','--pdx-dock-h','--pdx-panel-top',
-         '--pdx-panel-h-pct','--pdx-icon','--pdx-btn','--pdx-compact'
+         '--pdx-panel-h-pct','--pdx-icon','--pdx-btn'
         ].forEach(removeProp);
       }
 
-      // ── Close button injected into .pdx-ph-hd ───────────
+      // ── Close button ─────────────────────────────────────
       var closeSvg = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>';
 
       function injectCloseBtn() {
@@ -2756,7 +2763,7 @@
         hd.appendChild(btn);
       }
 
-      // Re-inject after every renderPanel() call (panel innerHTML replaced).
+      // Re-inject after every renderPanel() call.
       var panelObserver = new MutationObserver(function() {
         if (isMobile) injectCloseBtn();
       });
@@ -2768,21 +2775,19 @@
         panel.classList.add('pdx-panel--mobile');
         dock.classList.add('pdx-dock--mobile');
 
-        // Stamp data attributes so CSS attribute selectors activate.
         if (pdxRoot) {
           pdxRoot.dataset.mobileDock    = dockPos;
           pdxRoot.dataset.mobileSpacing = spacing;
           pdxRoot.dataset.mobileScale   = scale;
-          if (compactMode) pdxRoot.dataset.mobileCompact = '1';
+          if (compactMode) pdxRoot.dataset.mobileCompact  = '1';
           if (!safeArea)   pdxRoot.dataset.mobileSafeArea = '0';
         }
 
         applyLayout();
         injectCloseBtn();
 
-        // Strip any leftover inline styles — CSS drives everything.
-        var inlineProps = ['top','bottom','left','right','transform','height','max-height','width'];
-        inlineProps.forEach(function(p) {
+        // Strip any leftover inline styles — CSS owns all geometry.
+        ['top','bottom','left','right','transform','height','max-height','width'].forEach(function(p) {
           dock.style.removeProperty(p);
           panel.style.removeProperty(p);
         });
@@ -2793,7 +2798,6 @@
         panel.classList.remove('pdx-panel--mobile');
         dock.classList.remove('pdx-dock--mobile');
 
-        // Remove all mobile data attributes so desktop CSS takes over.
         if (pdxRoot) {
           delete pdxRoot.dataset.mobileDock;
           delete pdxRoot.dataset.mobileSpacing;
@@ -2803,8 +2807,6 @@
         }
 
         clearLayout();
-
-        // Restore desktop inline styles (position driven by data-position).
         dock.style.removeProperty('transform');
         dock.style.removeProperty('opacity');
       }
@@ -2812,69 +2814,52 @@
       // ── Responsive check ─────────────────────────────────
       function check() {
         var nowMobile = window.innerWidth <= bp;
-        if (nowMobile && !isMobile) {
-          enterMobile();
-        } else if (!nowMobile && isMobile) {
-          exitMobile();
-        } else if (nowMobile) {
-          // Already mobile — re-apply layout in case viewport changed.
-          applyLayout();
-        }
+        if (nowMobile && !isMobile)  { enterMobile(); }
+        else if (!nowMobile && isMobile) { exitMobile(); }
+        else if (nowMobile)          { applyLayout(); }
       }
 
-      // Run immediately.
+      // Already stamped in init() — just sync the full state.
       check();
 
-      // Debounced resize listener.
       var resizeRaf;
       window.addEventListener('resize', function() {
         if (resizeRaf) cancelAnimationFrame(resizeRaf);
-        resizeRaf = requestAnimationFrame(function() {
-          check();
-        });
+        resizeRaf = requestAnimationFrame(check);
       });
 
-      // Orientation change: wait for browser to settle, then re-measure.
       window.addEventListener('orientationchange', function() {
-        setTimeout(function() {
-          applyLayout();
-          check();
-        }, 400);
+        setTimeout(function() { applyLayout(); check(); }, 400);
       });
 
-      // ── Touch: swipe to close panel ──────────────────────
-      // under-header → swipe UP   (panel slides from top)
-      // bottom-*     → swipe DOWN (panel slides from bottom)
+      // ── Swipe to close ───────────────────────────────────
       if (!swipeClose) return;
 
-      var tsX = 0, tsY = 0, tsScrollTop = 0, tsMoved = false;
+      var tsX = 0, tsY = 0, tsMoved = false;
       var isUnderHeader = (dockPos === 'under-header');
 
       panel.addEventListener('touchstart', function(e) {
         if (!e.touches.length) return;
         tsX = e.touches[0].clientX;
         tsY = e.touches[0].clientY;
-        tsScrollTop = panel.scrollTop;
         tsMoved = false;
       }, { passive: true });
 
       panel.addEventListener('touchmove', function(e) {
         tsMoved = true;
-        // Allow scroll inside any scrollable descendant.
+        // Let inner scrollable children scroll naturally.
         var el = e.target;
         while (el && el !== panel) {
           var ov = window.getComputedStyle(el).overflowY;
-          if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) {
-            return; // let the child scroll naturally
-          }
+          if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) return;
           el = el.parentElement;
         }
-        // At panel root level — only prevent default if panel itself is at scroll boundary.
+        // At panel root — only block if at scroll boundary in dismiss direction.
+        var dy = e.touches[0].clientY - tsY;
         var atTop    = panel.scrollTop <= 0;
         var atBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 1;
-        var dy = e.touches[0].clientY - tsY;
-        if (isUnderHeader && atTop    && dy < 0) e.preventDefault(); // swipe up at top
-        if (!isUnderHeader && atBottom && dy > 0) e.preventDefault(); // swipe down at bottom
+        if (isUnderHeader && atTop    && dy < 0) e.preventDefault();
+        if (!isUnderHeader && atBottom && dy > 0) e.preventDefault();
       }, { passive: false });
 
       panel.addEventListener('touchend', function(e) {
@@ -2882,8 +2867,7 @@
         var endX = e.changedTouches[0].clientX;
         var endY = e.changedTouches[0].clientY;
         var dx   = Math.abs(endX - tsX);
-        var dy   = isUnderHeader ? (tsY - endY) : (endY - tsY); // positive = dismiss direction
-        // Require: 60px in dismiss direction, more vertical than horizontal.
+        var dy   = isUnderHeader ? (tsY - endY) : (endY - tsY);
         if (dy > 60 && dx < dy * 0.6) closePanel();
       }, { passive: true });
     }
