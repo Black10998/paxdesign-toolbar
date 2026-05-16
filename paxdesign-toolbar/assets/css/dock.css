@@ -1633,6 +1633,58 @@ body.pdx-no-scroll { overflow: hidden !important; }
 }
 .pdx-ioc-chip-v5:hover { background: rgba(99,102,241,.2); }
 
+/* ═══════════════════════════════════════════════════════════
+   v5.2 — RICH RESULT RENDERER COMPONENTS
+═══════════════════════════════════════════════════════════ */
+
+/* Risk ring — SVG score circle */
+.pdx-risk-ring {
+  position: relative; width: 64px; height: 64px; flex-shrink: 0;
+}
+.pdx-risk-ring svg { width: 64px; height: 64px; transform: rotate(-90deg); display: block; }
+.pdx-risk-ring-track { fill: none; stroke: rgba(255,255,255,.08); stroke-width: 5; }
+.pdx-risk-ring-fill  { fill: none; stroke-width: 5; stroke-linecap: round;
+  transition: stroke-dashoffset .8s cubic-bezier(.4,0,.2,1); }
+.pdx-risk-ring-label {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.pdx-risk-ring-num  { font: 700 16px/1 var(--pdx-mono, monospace); color: var(--pdx-hi, #e6edf3); }
+.pdx-risk-ring-text { font: 500 8px/1 var(--pdx-font, sans-serif); color: var(--pdx-mid, #8b949e);
+  text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+/* Connector status icon alignment */
+.pdx-conn-status svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* Evidence section open by default for first item */
+.pdx-evidence-section:first-of-type { }
+
+/* Scan complete banner animation */
+.pdx-scan-complete { animation: pdx-dp-finding-in .4s ease forwards; }
+
+/* Prose text */
+.pdx-prose { font: 12px/1.65 var(--pdx-font, sans-serif); color: var(--pdx-hi, #e6edf3); }
+
+/* Step result body scrollbar */
+.pdx-step-result-body::-webkit-scrollbar,
+.pdx-trace-output::-webkit-scrollbar,
+.pdx-output-body::-webkit-scrollbar { width: 4px; }
+.pdx-step-result-body::-webkit-scrollbar-thumb,
+.pdx-trace-output::-webkit-scrollbar-thumb,
+.pdx-output-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 2px; }
+
+/* Metric card hover */
+.pdx-metric-card { transition: border-color .15s; }
+.pdx-metric-card:hover { border-color: rgba(255,255,255,.14); }
+
+/* IOC chip hover */
+.pdx-ioc-chip-v5 { transition: background .15s; }
+
+/* Timeline dot pulse on latest event */
+.pdx-tl-event-v5:first-child .pdx-tl-dot-v5 {
+  animation: pdx-status-blink 2s ease infinite;
+}
+
 /* ─── Light mode overrides ───────────────────────────────── */
 @media (prefers-color-scheme: light) {
   .pdx-deep-pipeline { background: #f6f8fa; border-color: rgba(99,102,241,.2); }

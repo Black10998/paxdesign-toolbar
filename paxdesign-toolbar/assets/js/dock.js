@@ -322,88 +322,199 @@
     }
 
     function renderTrustResult(container, data, domain) {
-      var risk = data.risk || {};
-      var score = risk.score || 0;
-      var verdict = risk.verdict || 'unknown';
-      var rdap = data.sources && data.sources.rdap || {};
-      var ssl  = data.sources && data.sources.ssl  || {};
-      var anomalies = data.anomalies || [];
-      var behavioral = data.behavioral || [];
+      var risk      = data.risk      || {};
+      var score     = risk.score     || 0;
+      var verdict   = risk.verdict   || 'unknown';
+      var rdap      = (data.sources && data.sources.rdap) || {};
+      var ssl       = (data.sources && data.sources.ssl)  || {};
+      var dns       = (data.sources && data.sources.dns)  || {};
+      var threat    = (data.sources && data.sources.threat) || {};
+      var anomalies = data.anomalies  || [];
+      var behavioral= data.behavioral || [];
+      var confidence= data.confidence || risk.confidence || 0;
 
-      var scoreColor = verdict === 'clean' ? 'var(--pdx-green)' : verdict === 'low' ? 'var(--pdx-green)' : verdict === 'medium' ? 'var(--pdx-yellow)' : 'var(--pdx-red)';
+      var scoreColor = (verdict === 'clean' || verdict === 'low') ? 'var(--pdx-green)' : verdict === 'medium' ? 'var(--pdx-yellow)' : 'var(--pdx-red)';
+      var verdictLabel = verdict === 'clean' ? 'Clean' : verdict === 'low' ? 'Low Risk' : verdict === 'medium' ? 'Medium Risk' : verdict === 'high' ? 'High Risk' : 'Critical';
 
       var html = '<div class="pdx-result">';
 
-      // Risk header
+      /* ── Scan complete banner ── */
+      html += '<div class="pdx-scan-complete">' +
+        '<div class="pdx-scan-complete-dot"></div>' +
+        '<span>Analysis complete — ' + escHtml(domain) + '</span>' +
+        '<span class="pdx-scan-complete-time">' + (data.duration ? data.duration + 's' : '') + '</span>' +
+      '</div>';
+
+      /* ── Risk header with score ring ── */
+      var circumference = 2 * Math.PI * 26; // r=26
+      var dashOffset = circumference - (score / 100) * circumference;
+      var ringStroke = (verdict === 'clean' || verdict === 'low') ? '#c2ff00' : verdict === 'medium' ? '#d29922' : '#f85149';
       html += '<div class="pdx-risk-header">' +
-        '<div class="pdx-risk-score" style="--score-color:' + scoreColor + '">' +
-          '<div class="pdx-risk-num">' + score + '</div>' +
-          '<div class="pdx-risk-label">' + (risk.label || 'Unknown') + '</div>' +
+        '<div class="pdx-risk-ring">' +
+          '<svg viewBox="0 0 64 64"><circle class="pdx-risk-ring-track" cx="32" cy="32" r="26"/>' +
+          '<circle class="pdx-risk-ring-fill" cx="32" cy="32" r="26" stroke="' + ringStroke + '" stroke-dasharray="' + circumference.toFixed(1) + '" stroke-dashoffset="' + dashOffset.toFixed(1) + '"/></svg>' +
+          '<div class="pdx-risk-ring-label"><div class="pdx-risk-ring-num">' + score + '</div><div class="pdx-risk-ring-text">Risk</div></div>' +
         '</div>' +
         '<div class="pdx-risk-meta">' +
           '<div class="pdx-risk-domain">' + escHtml(domain) + '</div>' +
-          '<div class="pdx-risk-scan-id">Scan ID: ' + escHtml(data.scan_id || '') + '</div>' +
-          '<div class="pdx-risk-time">' + (data.duration ? data.duration + 's' : '') + '</div>' +
+          '<div style="margin-top:4px"><span class="pdx-tag" style="background:' + ringStroke + '22;color:' + ringStroke + ';border-color:' + ringStroke + '44">' + verdictLabel + '</span></div>' +
+          (data.scan_id ? '<div class="pdx-risk-scan-id" style="margin-top:6px">Scan ID: ' + escHtml(data.scan_id) + '</div>' : '') +
         '</div>' +
-        '<button class="pdx-btn-ghost pdx-export-btn" data-export="trust">Export</button>' +
+        '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn">Export</button>' +
       '</div>';
 
-      // Risk factors
+      /* ── Confidence bar ── */
+      if (confidence) {
+        html += '<div class="pdx-confidence-bar">' +
+          '<span class="pdx-confidence-label">Confidence</span>' +
+          '<div class="pdx-confidence-track"><div class="pdx-confidence-fill" style="width:' + confidence + '%"></div></div>' +
+          '<span class="pdx-confidence-pct">' + confidence + '%</span>' +
+        '</div>';
+      }
+
+      /* ── Risk factors ── */
       if (risk.factors && risk.factors.length) {
-        html += '<div class="pdx-section"><div class="pdx-section-title">Risk Factors</div><div class="pdx-factors">';
+        html += '<div class="pdx-section"><div class="pdx-section-title">Risk Factors (' + risk.factors.length + ')</div><div class="pdx-factors">';
         risk.factors.forEach(function(f) {
           var cls = f.weight === 'critical' ? 'pdx-factor--critical' : f.weight === 'high' ? 'pdx-factor--high' : f.weight === 'medium' ? 'pdx-factor--medium' : 'pdx-factor--low';
-          html += '<div class="pdx-factor ' + cls + '"><span class="pdx-factor-name">' + escHtml(f.factor) + '</span><span class="pdx-factor-val">' + escHtml(String(f.value)) + '</span><span class="pdx-factor-risk">+' + f.risk + '</span></div>';
+          html += '<div class="pdx-factor ' + cls + '">' +
+            '<span class="pdx-factor-name">' + escHtml(f.factor) + '</span>' +
+            '<span class="pdx-factor-val">' + escHtml(safeStr(f.value)) + '</span>' +
+            '<span class="pdx-factor-risk">+' + (f.risk || 0) + '</span>' +
+          '</div>';
         });
         html += '</div></div>';
       }
 
-      // RDAP
-      if (rdap.registrar) {
-        html += '<div class="pdx-section"><div class="pdx-section-title">Registration</div><div class="pdx-kv-grid">';
-        html += kvRow('Registrar', rdap.registrar);
-        html += kvRow('Registered', rdap.registered || 'Unknown');
-        html += kvRow('Expires', rdap.expires || 'Unknown');
-        html += kvRow('Age', rdap.age_days ? rdap.age_days + ' days' : 'Unknown');
-        if (rdap.nameservers && rdap.nameservers.length) html += kvRow('Nameservers', rdap.nameservers.slice(0,3).join(', '));
-        html += '</div></div>';
-      }
-
-      // SSL
-      if (ssl.grade) {
-        var gradeClass = ssl.grade === 'A+' || ssl.grade === 'A' ? 'pdx-grade--good' : ssl.grade === 'B' ? 'pdx-grade--warn' : 'pdx-grade--bad';
-        html += '<div class="pdx-section"><div class="pdx-section-title">SSL / TLS</div><div class="pdx-kv-grid">';
-        html += '<div class="pdx-kv-row"><span class="pdx-kv-key">Grade</span><span class="pdx-ssl-grade ' + gradeClass + '">' + escHtml(ssl.grade) + '</span></div>';
-        html += kvRow('Status', ssl.status || 'Unknown');
-        if (ssl.endpoints && ssl.endpoints.length) html += kvRow('IP', ssl.endpoints[0].ip || 'N/A');
-        html += '</div></div>';
-      }
-
-      // Anomalies
+      /* ── Anomalies ── */
       if (anomalies.length) {
-        html += '<div class="pdx-section"><div class="pdx-section-title pdx-section-title--warn">Anomalies Detected</div>';
+        html += '<div class="pdx-section"><div class="pdx-section-title pdx-section-title--warn">⚠ Anomalies Detected (' + anomalies.length + ')</div>';
         anomalies.forEach(function(a) {
-          html += '<div class="pdx-anomaly"><span class="pdx-anomaly-icon">' + svgIcon('alert') + '</span><span>' + escHtml(a.message) + '</span></div>';
+          html += '<div class="pdx-anomaly">' + svgIcon('alert') + '<span>' + escHtml(a.message || safeStr(a)) + '</span></div>';
         });
         html += '</div>';
       }
 
-      // Behavioral signals
+      /* ── RDAP / Registration ── */
+      if (rdap.registrar || rdap.registered) {
+        html += '<div class="pdx-evidence-section" id="pdx-trust-rdap">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            'Registration & WHOIS <span class="pdx-evidence-toggle-arrow">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        if (rdap.registrar)   html += kvRow('Registrar',    rdap.registrar);
+        if (rdap.registered)  html += kvRow('Registered',   rdap.registered);
+        if (rdap.expires)     html += kvRow('Expires',      rdap.expires);
+        if (rdap.age_days !== undefined) html += kvRow('Domain Age', rdap.age_days + ' days' + (rdap.age_days < 30 ? ' ⚠ Very new' : rdap.age_days < 180 ? ' ⚠ Recent' : ''));
+        if (rdap.registrant)  html += kvRow('Registrant',   rdap.registrant);
+        if (rdap.country)     html += kvRow('Country',      rdap.country);
+        if (rdap.nameservers && rdap.nameservers.length) html += kvRow('Nameservers', rdap.nameservers.slice(0,4).join('<br>'));
+        if (rdap.status)      html += kvRow('Status',       Array.isArray(rdap.status) ? rdap.status.join(', ') : rdap.status);
+        html += '</div></div></div>';
+      }
+
+      /* ── SSL / TLS ── */
+      if (ssl.grade || ssl.issuer || ssl.subject) {
+        var gradeClass = (ssl.grade === 'A+' || ssl.grade === 'A') ? 'pdx-grade--good' : ssl.grade === 'B' ? 'pdx-grade--warn' : 'pdx-grade--bad';
+        html += '<div class="pdx-evidence-section" id="pdx-trust-ssl">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            'SSL / TLS Certificate <span class="pdx-evidence-toggle-arrow">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        if (ssl.grade)   html += '<div class="pdx-kv-row"><span class="pdx-kv-key">Grade</span><span class="pdx-ssl-grade ' + gradeClass + '">' + escHtml(ssl.grade) + '</span></div>';
+        if (ssl.status)  html += kvRow('Status',  ssl.status);
+        if (ssl.issuer)  html += kvRow('Issuer',  ssl.issuer);
+        if (ssl.subject) html += kvRow('Subject', ssl.subject);
+        if (ssl.valid_from) html += kvRow('Valid From', ssl.valid_from);
+        if (ssl.valid_to)   html += kvRow('Valid To',   ssl.valid_to + (ssl.days_remaining !== undefined ? ' (' + ssl.days_remaining + ' days)' : ''));
+        if (ssl.protocol)   html += kvRow('Protocol',  ssl.protocol);
+        if (ssl.cipher)     html += kvRow('Cipher',    ssl.cipher);
+        if (ssl.endpoints && ssl.endpoints.length) {
+          ssl.endpoints.slice(0,3).forEach(function(ep, i) {
+            html += kvRow('Endpoint ' + (i+1), (ep.ip || '') + (ep.grade ? ' — Grade ' + ep.grade : ''));
+          });
+        }
+        html += '</div></div></div>';
+      }
+
+      /* ── DNS Infrastructure ── */
+      if (dns.a || dns.mx || dns.ns || dns.txt) {
+        html += '<div class="pdx-evidence-section" id="pdx-trust-dns">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            'DNS Infrastructure <span class="pdx-evidence-toggle-arrow">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        if (dns.a  && dns.a.length)  html += kvRow('A Records',  dns.a.slice(0,4).join(', '));
+        if (dns.mx && dns.mx.length) html += kvRow('MX Records', dns.mx.slice(0,3).join(', '));
+        if (dns.ns && dns.ns.length) html += kvRow('NS Records', dns.ns.slice(0,4).join(', '));
+        if (dns.txt && dns.txt.length) html += kvRow('TXT Records', dns.txt.slice(0,2).join(' | '));
+        if (dns.spf)   html += kvRow('SPF',   dns.spf);
+        if (dns.dmarc) html += kvRow('DMARC', dns.dmarc);
+        if (dns.caa)   html += kvRow('CAA',   dns.caa);
+        html += '</div></div></div>';
+      }
+
+      /* ── Threat Intelligence ── */
+      if (threat.malicious !== undefined || threat.feeds) {
+        html += '<div class="pdx-evidence-section" id="pdx-trust-threat">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            'Threat Intelligence <span class="pdx-evidence-toggle-arrow">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        if (threat.malicious !== undefined) html += kvRow('Malicious', threat.malicious ? '⚠ Yes' : '✓ No');
+        if (threat.suspicious !== undefined) html += kvRow('Suspicious', threat.suspicious ? '⚠ Yes' : '✓ No');
+        if (threat.harmless !== undefined)   html += kvRow('Harmless engines', safeStr(threat.harmless));
+        if (threat.feeds && threat.feeds.length) html += kvRow('Feed hits', threat.feeds.slice(0,3).join(', '));
+        if (threat.categories && threat.categories.length) html += kvRow('Categories', threat.categories.join(', '));
+        if (threat.last_seen) html += kvRow('Last seen', threat.last_seen);
+        html += '</div></div></div>';
+      }
+
+      /* ── Behavioral Signals ── */
       if (behavioral.length) {
         html += '<div class="pdx-section"><div class="pdx-section-title">Behavioral Signals</div>';
         behavioral.forEach(function(s) {
           var cls = s.type === 'positive' ? 'pdx-signal--pos' : s.type === 'negative' ? 'pdx-signal--neg' : 'pdx-signal--neutral';
-          html += '<div class="pdx-signal ' + cls + '">' + escHtml(s.signal) + '</div>';
+          html += '<div class="pdx-signal ' + cls + '">' + escHtml(s.signal || safeStr(s)) + '</div>';
         });
+        html += '</div>';
+      }
+
+      /* ── Intelligence Sources ── */
+      html += '<div class="pdx-section"><div class="pdx-section-title">Intelligence Sources</div>';
+      var sources = [
+        { name: 'RDAP / WHOIS Registry',    status: rdap.registrar ? 'ok' : 'warn',    note: rdap.registrar ? 'Data retrieved' : 'No data' },
+        { name: 'SSL Labs Assessment',       status: ssl.grade ? 'ok' : 'warn',         note: ssl.grade ? 'Grade ' + ssl.grade : 'Not assessed' },
+        { name: 'DNS Resolver',              status: (dns.a && dns.a.length) ? 'ok' : 'warn', note: (dns.a && dns.a.length) ? dns.a.length + ' records' : 'No records' },
+        { name: 'Threat Intelligence Feeds', status: threat.malicious ? 'warn' : 'ok', note: threat.malicious ? 'Flagged' : 'Clean' },
+      ];
+      sources.forEach(function(s) {
+        html += '<div class="pdx-source-row">' +
+          '<div class="pdx-source-dot" style="background:' + (s.status === 'ok' ? 'var(--pdx-green)' : 'var(--pdx-yellow)') + '"></div>' +
+          '<span class="pdx-source-name">' + escHtml(s.name) + '</span>' +
+          '<span class="pdx-source-status pdx-source-status--' + s.status + '">' + escHtml(s.note) + '</span>' +
+        '</div>';
+      });
+      html += '</div>';
+
+      /* ── AI Summary / Recommendations ── */
+      if (data.ai_summary || data.recommendations) {
+        html += '<div class="pdx-ai-summary-v5">' +
+          '<div class="pdx-ai-label-v5">AI Analysis Summary</div>' +
+          '<div class="pdx-ai-text">' + escHtml(data.ai_summary || '') + '</div>';
+        if (data.recommendations && data.recommendations.length) {
+          html += '<div style="margin-top:8px"><div class="pdx-section-title" style="margin-bottom:6px">Recommendations</div><ul class="pdx-list">';
+          data.recommendations.forEach(function(r) { html += '<li>' + escHtml(safeStr(r)) + '</li>'; });
+          html += '</ul></div>';
+        }
         html += '</div>';
       }
 
       html += '</div>';
       container.innerHTML = html;
 
-      container.querySelector('.pdx-export-btn') && container.querySelector('.pdx-export-btn').addEventListener('click', function() {
-        exportJSON('trust-' + domain, data);
-      });
+      var expBtn = container.querySelector('.pdx-export-btn');
+      if (expBtn) expBtn.addEventListener('click', function() { exportJSON('trust-' + domain, data); });
     }
 
 
@@ -492,48 +603,132 @@
     }
 
     function renderOsintResult(container, data, target) {
-      var risk = data.risk || {};
+      var risk    = data.risk    || {};
       var sources = data.sources || {};
       var paywall = data.paywall;
+      var iocs    = data.iocs    || [];
+      var emails  = data.emails  || [];
+      var timeline= data.timeline|| [];
+      var anomalies = data.anomalies || [];
+      var confidence = data.confidence || 0;
+
+      var scoreColor = (risk.verdict === 'clean' || risk.verdict === 'low') ? 'var(--pdx-green)' : risk.verdict === 'medium' ? 'var(--pdx-yellow)' : 'var(--pdx-red)';
       var html = '<div class="pdx-result">';
 
-      // Risk badge
+      /* ── Scan complete banner ── */
+      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div>' +
+        '<span>OSINT investigation complete — ' + escHtml(target) + '</span>' +
+        (data.scan_id ? '<span class="pdx-scan-complete-time">' + escHtml(data.scan_id) + '</span>' : '') +
+      '</div>';
+
+      /* ── Risk score ── */
       if (risk.score !== undefined) {
-        var scoreColor = risk.verdict === 'clean' || risk.verdict === 'low' ? 'var(--pdx-green)' : risk.verdict === 'medium' ? 'var(--pdx-yellow)' : 'var(--pdx-red)';
-        html += '<div class="pdx-risk-header"><div class="pdx-risk-score" style="--score-color:' + scoreColor + '"><div class="pdx-risk-num">' + risk.score + '</div><div class="pdx-risk-label">' + (risk.label || 'Unknown') + '</div></div><div class="pdx-risk-meta"><div class="pdx-risk-domain">' + escHtml(target) + '</div><div class="pdx-risk-scan-id">Scan ID: ' + escHtml(data.scan_id || '') + '</div></div>' + (data.paid ? '<button class="pdx-btn-ghost pdx-export-btn" data-export="osint">Export</button>' : '') + '</div>';
+        var circumference = 2 * Math.PI * 26;
+        var dashOffset = circumference - (risk.score / 100) * circumference;
+        var ringStroke = (risk.verdict === 'clean' || risk.verdict === 'low') ? '#c2ff00' : risk.verdict === 'medium' ? '#d29922' : '#f85149';
+        html += '<div class="pdx-risk-header">' +
+          '<div class="pdx-risk-ring">' +
+            '<svg viewBox="0 0 64 64"><circle class="pdx-risk-ring-track" cx="32" cy="32" r="26"/>' +
+            '<circle class="pdx-risk-ring-fill" cx="32" cy="32" r="26" stroke="' + ringStroke + '" stroke-dasharray="' + circumference.toFixed(1) + '" stroke-dashoffset="' + dashOffset.toFixed(1) + '"/></svg>' +
+            '<div class="pdx-risk-ring-label"><div class="pdx-risk-ring-num">' + risk.score + '</div><div class="pdx-risk-ring-text">Risk</div></div>' +
+          '</div>' +
+          '<div class="pdx-risk-meta">' +
+            '<div class="pdx-risk-domain">' + escHtml(target) + '</div>' +
+            '<div style="margin-top:4px"><span class="pdx-tag" style="background:' + ringStroke + '22;color:' + ringStroke + '">' + escHtml(risk.label || risk.verdict || 'Unknown') + '</span></div>' +
+          '</div>' +
+          (data.paid ? '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn">Export</button>' : '') +
+        '</div>';
       }
 
-      // Sources
-      Object.keys(sources).forEach(function(key) {
+      /* ── Confidence ── */
+      if (confidence) {
+        html += '<div class="pdx-confidence-bar"><span class="pdx-confidence-label">Confidence</span>' +
+          '<div class="pdx-confidence-track"><div class="pdx-confidence-fill" style="width:' + confidence + '%"></div></div>' +
+          '<span class="pdx-confidence-pct">' + confidence + '%</span></div>';
+      }
+
+      /* ── Anomalies ── */
+      if (anomalies.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title pdx-section-title--warn">⚠ Anomalies (' + anomalies.length + ')</div>';
+        anomalies.forEach(function(a) { html += '<div class="pdx-anomaly">' + svgIcon('alert') + '<span>' + escHtml(a.message || safeStr(a)) + '</span></div>'; });
+        html += '</div>';
+      }
+
+      /* ── Intelligence sources (expandable) ── */
+      var srcKeys = Object.keys(sources);
+      srcKeys.forEach(function(key) {
         var src = sources[key];
-        if (!src || !src.label) return;
-        html += '<div class="pdx-section"><div class="pdx-section-title">' + escHtml(src.label) + '</div><div class="pdx-kv-grid">';
+        if (!src) return;
+        var label = src.label || key.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+        var rows = [];
         Object.keys(src).forEach(function(k) {
-          if (k === 'label' || k === 'free') return;
+          if (k === 'label' || k === 'free' || k === 'error') return;
           var v = src[k];
-          if (Array.isArray(v)) v = v.slice(0,5).join(', ') || 'None';
-          if (v === null || v === undefined || v === '') return;
-          html += kvRow(k.replace(/_/g,' '), String(v));
+          if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return;
+          rows.push(kvRow(k.replace(/_/g,' '), safeStr(v)));
         });
-        html += '</div></div>';
+        if (!rows.length && !src.error) return;
+        html += '<div class="pdx-evidence-section">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            escHtml(label) + (src.error ? ' <span style="color:var(--pdx-red);font-size:10px">Error</span>' : '') +
+            ' <span class="pdx-evidence-toggle-arrow">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body">' +
+            (src.error ? '<div class="pdx-error-msg">' + escHtml(safeStr(src.error)) + '</div>' : '') +
+            (rows.length ? '<div class="pdx-kv-grid">' + rows.join('') + '</div>' : '') +
+          '</div>' +
+        '</div>';
       });
 
-      // Paywall
+      /* ── IOC Indicators ── */
+      if (iocs.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">IOC Indicators (' + iocs.length + ')</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">';
+        iocs.slice(0,20).forEach(function(ioc) {
+          var val = typeof ioc === 'object' ? (ioc.value || ioc.indicator || safeStr(ioc)) : safeStr(ioc);
+          var type = typeof ioc === 'object' ? (ioc.type || 'ioc') : 'ioc';
+          html += '<span class="pdx-ioc-chip-v5" title="' + escHtml(type) + '">' + escHtml(val) + '</span>';
+        });
+        if (iocs.length > 20) html += '<span class="pdx-tag">+' + (iocs.length - 20) + ' more</span>';
+        html += '</div></div>';
+      }
+
+      /* ── Email / Contact Discovery ── */
+      if (emails.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Email & Contact Discovery (' + emails.length + ')</div><div class="pdx-kv-grid">';
+        emails.slice(0,8).forEach(function(e) {
+          var addr = typeof e === 'object' ? (e.email || e.address || safeStr(e)) : safeStr(e);
+          var src2 = typeof e === 'object' ? (e.source || '') : '';
+          html += kvRow(addr, src2 || 'Discovered');
+        });
+        html += '</div></div>';
+      }
+
+      /* ── Timeline ── */
+      if (timeline.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Activity Timeline</div>' +
+          '<div class="pdx-timeline-v5">';
+        timeline.slice(0,8).forEach(function(ev) {
+          html += '<div class="pdx-tl-event-v5">' +
+            '<div class="pdx-tl-dot-v5"></div>' +
+            '<div class="pdx-tl-body-v5">' +
+              '<div class="pdx-tl-date-v5">' + escHtml(ev.date || ev.timestamp || '') + '</div>' +
+              '<div class="pdx-tl-desc-v5">' + escHtml(ev.description || ev.event || safeStr(ev)) + '</div>' +
+              (ev.source ? '<div class="pdx-tl-source-v5">' + escHtml(ev.source) + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        });
+        html += '</div></div>';
+      }
+
+      /* ── Paywall ── */
       if (paywall) {
         html += '<div class="pdx-paywall">' +
           '<div class="pdx-paywall-icon">' + svgIcon('shield') + '</div>' +
           '<div class="pdx-paywall-title">Full Intelligence Report</div>' +
-          '<div class="pdx-paywall-desc">' + escHtml(paywall.message) + '</div>' +
-          '<div class="pdx-paywall-locked"><strong>Locked sources:</strong> ' + (paywall.locked_sources || []).join(', ') + '</div>' +
-          '<button class="pdx-btn-primary pdx-unlock-btn" data-module="osint" data-price="' + paywall.price + '" data-currency="' + paywall.currency + '">Unlock for ' + paywall.currency + ' ' + paywall.price + '</button>' +
+          '<div class="pdx-paywall-desc">' + escHtml(safeStr(paywall.message)) + '</div>' +
+          '<div class="pdx-paywall-locked"><strong>Locked sources:</strong> ' + escHtml((paywall.locked_sources || []).join(', ')) + '</div>' +
+          '<button class="pdx-btn-primary pdx-unlock-btn" data-module="osint" data-price="' + (paywall.price||0) + '" data-currency="' + escHtml(paywall.currency||'USD') + '">Unlock for ' + escHtml(paywall.currency||'USD') + ' ' + (paywall.price||0) + '</button>' +
         '</div>';
-      }
-
-      // Anomalies
-      if (data.anomalies && data.anomalies.length) {
-        html += '<div class="pdx-section"><div class="pdx-section-title pdx-section-title--warn">Anomalies</div>';
-        data.anomalies.forEach(function(a) { html += '<div class="pdx-anomaly">' + svgIcon('alert') + '<span>' + escHtml(a.message) + '</span></div>'; });
-        html += '</div>';
       }
 
       html += '</div>';
@@ -541,7 +736,6 @@
 
       var expBtn = container.querySelector('.pdx-export-btn');
       if (expBtn) expBtn.addEventListener('click', function() { exportJSON('osint-' + target, data); });
-
       var unlockBtn = container.querySelector('.pdx-unlock-btn');
       if (unlockBtn) unlockBtn.addEventListener('click', function() { initiatePayment('osint', parseFloat(unlockBtn.dataset.price), unlockBtn.dataset.currency); });
     }
@@ -887,10 +1081,51 @@
 
     function renderBuilderResult(container, data) {
       var r = data.result || {};
-      var html = '<div class="pdx-result"><div class="pdx-result-header"><span>' + escHtml(data.flow_name || 'Flow') + '</span><span class="pdx-badge">' + (r.steps_executed || 0) + ' steps</span><button class="pdx-btn-ghost pdx-export-btn">Export</button></div>';
-      (r.outputs || []).forEach(function(o) {
-        html += '<div class="pdx-step-result"><div class="pdx-step-result-hd">Step ' + o.step + ' <span class="pdx-tag">' + escHtml(o.type) + '</span></div><div class="pdx-step-result-body">' + escHtml(o.output || '').replace(/\n/g,'<br>') + '</div></div>';
-      });
+      var outputs = r.outputs || [];
+      var html = '<div class="pdx-result">';
+
+      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div>' +
+        '<span>Flow complete — ' + escHtml(data.flow_name || 'Flow') + '</span>' +
+        '<span class="pdx-scan-complete-time">' + (r.steps_executed || outputs.length) + ' steps</span>' +
+      '</div>';
+
+      /* Execution metrics */
+      html += '<div class="pdx-metric-grid">' +
+        '<div class="pdx-metric-card pdx-metric-card--green"><div class="pdx-metric-value">' + (r.steps_executed || outputs.length) + '</div><div class="pdx-metric-label">Steps Run</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + (r.tokens_used || '—') + '</div><div class="pdx-metric-label">Tokens Used</div></div>' +
+      '</div>';
+
+      /* Step outputs */
+      if (outputs.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Execution Trace</div>';
+        outputs.forEach(function(o) {
+          var output = safeStr(o.output || o.result || o.content || '');
+          html += '<div class="pdx-evidence-section">' +
+            '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+              'Step ' + (o.step || '') + ' <span class="pdx-tag">' + escHtml(safeStr(o.type || 'llm')) + '</span>' +
+              (o.duration_ms ? '<span class="pdx-tag" style="margin-left:4px">' + o.duration_ms + 'ms</span>' : '') +
+              '<span class="pdx-evidence-toggle-arrow" style="margin-left:auto">▼</span>' +
+            '</button>' +
+            '<div class="pdx-evidence-body">' +
+              (o.prompt ? '<div class="pdx-section-title" style="margin-bottom:4px">Prompt</div><div class="pdx-code" style="margin-bottom:8px">' + escHtml(safeStr(o.prompt).slice(0,300)) + '</div>' : '') +
+              '<div class="pdx-section-title" style="margin-bottom:4px">Output</div>' +
+              '<div class="pdx-prose">' + escHtml(output.slice(0, 600)).replace(/\n/g,'<br>') + (output.length > 600 ? '<span style="color:var(--pdx-lo)">… (truncated)</span>' : '') + '</div>' +
+            '</div>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+
+      /* Final output */
+      if (r.final_output) {
+        var finalOut = safeStr(r.final_output);
+        html += '<div class="pdx-final-output">' +
+          '<div class="pdx-section-title">Final Output</div>' +
+          '<div class="pdx-output-body">' + escHtml(finalOut).replace(/\n/g,'<br>') + '</div>' +
+        '</div>';
+      }
+
+      html += '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn" style="margin-top:8px">Export JSON</button>';
       html += '</div>';
       container.innerHTML = html;
       var expBtn = container.querySelector('.pdx-export-btn');
@@ -1047,11 +1282,56 @@
 
     function renderPipelineResult(container, data) {
       var r = data.result || {};
-      var html = '<div class="pdx-result"><div class="pdx-result-header"><span>' + escHtml(data.pipeline_name || 'Pipeline') + '</span><span class="pdx-badge">' + (r.agents_run || 0) + ' agents</span><button class="pdx-btn-ghost pdx-export-btn">Export</button></div>';
-      (r.trace || []).forEach(function(t) {
-        html += '<div class="pdx-trace-item"><div class="pdx-trace-agent">' + svgIcon('user') + '<strong>' + escHtml(t.name || t.agent) + '</strong></div><div class="pdx-trace-output">' + escHtml(t.output || '').replace(/\n/g,'<br>') + '</div></div>';
-      });
-      if (r.final_output) html += '<div class="pdx-final-output"><div class="pdx-section-title">Final Output</div><div class="pdx-output-body">' + escHtml(r.final_output).replace(/\n/g,'<br>') + '</div></div>';
+      var trace = r.trace || [];
+      var html = '<div class="pdx-result">';
+
+      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div>' +
+        '<span>Pipeline complete — ' + escHtml(data.pipeline_name || 'Pipeline') + '</span>' +
+        '<span class="pdx-scan-complete-time">' + (r.agents_run || trace.length) + ' agents</span>' +
+      '</div>';
+
+      /* Metrics */
+      html += '<div class="pdx-metric-grid">' +
+        '<div class="pdx-metric-card pdx-metric-card--green"><div class="pdx-metric-value">' + (r.agents_run || trace.length) + '</div><div class="pdx-metric-label">Agents Run</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + (r.handoffs || Math.max(0, trace.length - 1)) + '</div><div class="pdx-metric-label">Handoffs</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + (r.tokens_used || '—') + '</div><div class="pdx-metric-label">Tokens</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + (r.duration_ms ? (r.duration_ms/1000).toFixed(1)+'s' : '—') + '</div><div class="pdx-metric-label">Duration</div></div>' +
+      '</div>';
+
+      /* Agent trace */
+      if (trace.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Agent Execution Trace</div>';
+        trace.forEach(function(t, idx) {
+          var agentName = safeStr(t.name || t.agent || ('Agent ' + (idx+1)));
+          var role      = safeStr(t.role || '');
+          var output    = safeStr(t.output || t.result || t.content || '');
+          var tokens    = t.tokens_used || t.tokens || '';
+          html += '<div class="pdx-evidence-section">' +
+            '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+              svgIcon('user') +
+              '<span style="margin-left:6px">' + escHtml(agentName) + '</span>' +
+              (role ? '<span class="pdx-tag" style="margin-left:6px">' + escHtml(role) + '</span>' : '') +
+              (tokens ? '<span class="pdx-tag" style="margin-left:4px">' + tokens + ' tokens</span>' : '') +
+              '<span class="pdx-evidence-toggle-arrow" style="margin-left:auto">▼</span>' +
+            '</button>' +
+            '<div class="pdx-evidence-body">' +
+              (t.task ? '<div class="pdx-section-title" style="margin-bottom:4px">Task</div><div class="pdx-prose" style="margin-bottom:8px">' + escHtml(safeStr(t.task).slice(0,200)) + '</div>' : '') +
+              '<div class="pdx-section-title" style="margin-bottom:4px">Output</div>' +
+              '<div class="pdx-prose">' + escHtml(output.slice(0,500)).replace(/\n/g,'<br>') + (output.length > 500 ? '<span style="color:var(--pdx-lo)">…</span>' : '') + '</div>' +
+              (t.handoff_to ? '<div style="margin-top:8px;font:11px/1 var(--pdx-mono);color:var(--pdx-indigo)">→ Handoff to: ' + escHtml(safeStr(t.handoff_to)) + '</div>' : '') +
+            '</div>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+
+      /* Final output */
+      if (r.final_output) {
+        html += '<div class="pdx-final-output"><div class="pdx-section-title">Final Output</div>' +
+          '<div class="pdx-output-body">' + escHtml(safeStr(r.final_output)).replace(/\n/g,'<br>') + '</div></div>';
+      }
+
+      html += '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn" style="margin-top:8px">Export Trace</button>';
       html += '</div>';
       container.innerHTML = html;
       var expBtn = container.querySelector('.pdx-export-btn');
@@ -1145,26 +1425,66 @@
 
     function renderAutomationResult(container, data) {
       var r = data.result || {};
+      var steps     = r.steps     || [];
+      var dataPoints= r.data_points || r.selectors || [];
+      var obstacles = r.obstacles || r.challenges || [];
       var html = '<div class="pdx-result">';
-      html += '<div class="pdx-result-header"><span>Task Analysis</span><span class="pdx-tag">Job: ' + escHtml(data.job_id || '') + '</span><button class="pdx-btn-ghost pdx-export-btn">Export</button></div>';
-      if (r.steps && r.steps.length) {
-        html += '<div class="pdx-section"><div class="pdx-section-title">Execution Steps</div><ol class="pdx-steps-list">';
-        r.steps.forEach(function(s) { html += '<li>' + escHtml(String(s)) + '</li>'; });
-        html += '</ol></div>';
+
+      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div>' +
+        '<span>Task analyzed</span>' +
+        (data.job_id ? '<span class="pdx-scan-complete-time">Job: ' + escHtml(data.job_id) + '</span>' : '') +
+      '</div>';
+
+      /* Complexity metrics */
+      var complexity = r.complexity || r.complexity_score || '';
+      var estTime    = r.estimated_seconds || r.estimated_time || '';
+      html += '<div class="pdx-metric-grid">' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + steps.length + '</div><div class="pdx-metric-label">Steps</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + dataPoints.length + '</div><div class="pdx-metric-label">Data Points</div></div>' +
+        '<div class="pdx-metric-card' + (obstacles.length ? ' pdx-metric-card--amber' : '') + '"><div class="pdx-metric-value">' + obstacles.length + '</div><div class="pdx-metric-label">Obstacles</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + (estTime ? estTime + 's' : complexity || '—') + '</div><div class="pdx-metric-label">' + (estTime ? 'Est. Time' : 'Complexity') + '</div></div>' +
+      '</div>';
+
+      /* AI Analysis */
+      if (r.analysis || r.approach || r.summary) {
+        html += '<div class="pdx-ai-summary-v5"><div class="pdx-ai-label-v5">AI Task Analysis</div>' +
+          '<div class="pdx-ai-text">' + escHtml(safeStr(r.analysis || r.approach || r.summary)).replace(/\n/g,'<br>') + '</div></div>';
       }
-      if (r.data_points && r.data_points.length) {
-        html += '<div class="pdx-section"><div class="pdx-section-title">Data Extraction Points</div><ul class="pdx-list">';
-        r.data_points.forEach(function(d) { html += '<li>' + escHtml(String(d)) + '</li>'; });
-        html += '</ul></div>';
+
+      /* Execution steps */
+      if (steps.length) {
+        html += '<div class="pdx-evidence-section"><button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">Execution Plan (' + steps.length + ' steps) <span class="pdx-evidence-toggle-arrow">▼</span></button>' +
+          '<div class="pdx-evidence-body"><ol class="pdx-steps-list">';
+        steps.forEach(function(s) { html += '<li>' + escHtml(safeStr(s)) + '</li>'; });
+        html += '</ol></div></div>';
       }
-      if (r.obstacles && r.obstacles.length) {
-        html += '<div class="pdx-section"><div class="pdx-section-title pdx-section-title--warn">Potential Obstacles</div><ul class="pdx-list">';
-        r.obstacles.forEach(function(o) { html += '<li>' + escHtml(String(o)) + '</li>'; });
-        html += '</ul></div>';
+
+      /* Data extraction points */
+      if (dataPoints.length) {
+        html += '<div class="pdx-evidence-section"><button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">Data Extraction Points (' + dataPoints.length + ') <span class="pdx-evidence-toggle-arrow">▼</span></button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        dataPoints.slice(0,12).forEach(function(d) {
+          var label    = typeof d === 'object' ? (d.name || d.label || d.field || safeStr(d)) : safeStr(d);
+          var selector = typeof d === 'object' ? (d.selector || d.xpath || d.css || '') : '';
+          html += kvRow(label, selector || 'Identified');
+        });
+        html += '</div></div></div>';
       }
-      if (r.approach) html += '<div class="pdx-section"><div class="pdx-section-title">Recommended Approach</div><div class="pdx-prose">' + escHtml(r.approach).replace(/\n/g,'<br>') + '</div></div>';
-      if (r.estimated_seconds) html += '<div class="pdx-kv-row">' + kvRow('Estimated Time', r.estimated_seconds + 's') + '</div>';
-      if (r.analysis) html += '<div class="pdx-section"><div class="pdx-section-title">Analysis</div><div class="pdx-prose">' + escHtml(r.analysis).replace(/\n/g,'<br>') + '</div></div>';
+
+      /* Obstacles */
+      if (obstacles.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title pdx-section-title--warn">⚠ Potential Obstacles</div><div class="pdx-factors">';
+        obstacles.forEach(function(o) {
+          var name = typeof o === 'object' ? (o.name || o.type || safeStr(o)) : safeStr(o);
+          var desc = typeof o === 'object' ? (o.description || o.detail || '') : '';
+          var sev  = typeof o === 'object' ? (o.severity || 'medium') : 'medium';
+          var cls  = sev === 'high' ? 'pdx-factor--high' : 'pdx-factor--medium';
+          html += '<div class="pdx-factor ' + cls + '"><span class="pdx-factor-name">' + escHtml(name) + '</span><span class="pdx-factor-val">' + escHtml(desc.slice(0,80)) + '</span></div>';
+        });
+        html += '</div></div>';
+      }
+
+      html += '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn" style="margin-top:8px">Export Plan</button>';
       html += '</div>';
       container.innerHTML = html;
       var expBtn = container.querySelector('.pdx-export-btn');
@@ -1274,21 +1594,70 @@
     }
 
     function renderConnectorResult(container, data) {
-      var ok = data.ok;
+      var ok         = data.ok;
+      var statusCode = data.status_code || data.status || 0;
+      var latency    = data.latency_ms  || data.latency || 0;
+      var headers    = data.headers     || {};
       var html = '<div class="pdx-result">';
-      html += '<div class="pdx-conn-status ' + (ok ? 'pdx-conn-status--ok' : 'pdx-conn-status--fail') + '">';
-      html += (ok ? '✓ Connected' : '✗ Failed') + ' <span class="pdx-tag">HTTP ' + (data.status_code || 0) + '</span> <span class="pdx-tag">' + (data.latency_ms || 0) + 'ms</span>';
-      html += '</div>';
-      if (data.error) html += '<div class="pdx-error-msg">' + escHtml(data.error) + '</div>';
-      if (data.response) {
-        var resp = typeof data.response === 'object' ? JSON.stringify(data.response, null, 2) : String(data.response);
-        html += '<div class="pdx-section"><div class="pdx-section-title">Response</div><pre class="pdx-code">' + escHtml(resp.slice(0, 1000)) + '</pre></div>';
+
+      /* ── Status banner ── */
+      html += '<div class="pdx-conn-status ' + (ok ? 'pdx-conn-status--ok' : 'pdx-conn-status--fail') + '">' +
+        (ok ? svgIcon('check') : svgIcon('alert')) +
+        '<span>' + (ok ? 'Connection successful' : 'Connection failed') + '</span>' +
+        '<span class="pdx-tag" style="margin-left:auto">HTTP ' + statusCode + '</span>' +
+        '<span class="pdx-tag">' + latency + 'ms</span>' +
+      '</div>';
+
+      /* ── Error detail ── */
+      if (data.error) {
+        html += '<div class="pdx-error"><strong>Error:</strong> ' + escHtml(safeStr(data.error)) + '</div>';
       }
-      if (data.headers && Object.keys(data.headers).length) {
-        html += '<div class="pdx-section"><div class="pdx-section-title">Headers</div><div class="pdx-kv-grid">';
-        Object.keys(data.headers).forEach(function(k) { html += kvRow(k, data.headers[k]); });
+
+      /* ── Metrics grid ── */
+      html += '<div class="pdx-metric-grid">' +
+        '<div class="pdx-metric-card' + (ok ? ' pdx-metric-card--green' : ' pdx-metric-card--red') + '"><div class="pdx-metric-value">' + statusCode + '</div><div class="pdx-metric-label">HTTP Status</div></div>' +
+        '<div class="pdx-metric-card' + (latency > 1000 ? ' pdx-metric-card--amber' : latency > 500 ? '' : ' pdx-metric-card--green') + '"><div class="pdx-metric-value">' + latency + '</div><div class="pdx-metric-label">Latency (ms)</div></div>' +
+        (data.content_length !== undefined ? '<div class="pdx-metric-card"><div class="pdx-metric-value">' + (data.content_length > 1024 ? (data.content_length/1024).toFixed(1)+'KB' : data.content_length+'B') + '</div><div class="pdx-metric-label">Response Size</div></div>' : '') +
+        (data.redirect_count !== undefined ? '<div class="pdx-metric-card"><div class="pdx-metric-value">' + data.redirect_count + '</div><div class="pdx-metric-label">Redirects</div></div>' : '') +
+      '</div>';
+
+      /* ── Response body ── */
+      if (data.response !== undefined && data.response !== null) {
+        var resp = typeof data.response === 'object'
+          ? JSON.stringify(data.response, null, 2)
+          : safeStr(data.response);
+        html += '<div class="pdx-evidence-section">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            'Response Body <span class="pdx-tag" style="margin-left:6px">' + (data.content_type || 'text') + '</span>' +
+            '<span class="pdx-evidence-toggle-arrow" style="margin-left:auto">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body"><pre class="pdx-code">' + escHtml(resp.slice(0, 2000)) + (resp.length > 2000 ? '\n… (truncated)' : '') + '</pre></div>' +
+        '</div>';
+      }
+
+      /* ── Response headers ── */
+      var headerKeys = Object.keys(headers);
+      if (headerKeys.length) {
+        html += '<div class="pdx-evidence-section">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            'Response Headers (' + headerKeys.length + ') <span class="pdx-evidence-toggle-arrow">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        headerKeys.forEach(function(k) { html += kvRow(k, safeStr(headers[k])); });
+        html += '</div></div></div>';
+      }
+
+      /* ── Security headers audit ── */
+      var secHeaders = ['strict-transport-security','content-security-policy','x-frame-options','x-content-type-options','referrer-policy','permissions-policy'];
+      var presentSec = secHeaders.filter(function(h) { return headers[h] || headers[h.toLowerCase()]; });
+      var missingSec = secHeaders.filter(function(h) { return !headers[h] && !headers[h.toLowerCase()]; });
+      if (ok) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Security Header Audit</div><div class="pdx-kv-grid">';
+        presentSec.forEach(function(h) { html += kvRow(h, '✓ Present'); });
+        missingSec.forEach(function(h) { html += '<div class="pdx-kv-row"><span class="pdx-kv-key">' + escHtml(h) + '</span><span class="pdx-kv-val" style="color:var(--pdx-yellow)">⚠ Missing</span></div>'; });
         html += '</div></div>';
       }
+
       html += '</div>';
       container.innerHTML = html;
     }
@@ -1815,8 +2184,28 @@
       return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    /* Convert any value to a readable string — prevents [object Object] */
+    function safeStr(v) {
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'string')  return v;
+      if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+      if (Array.isArray(v)) return v.map(safeStr).join(', ');
+      if (typeof v === 'object') {
+        var parts = [];
+        Object.keys(v).forEach(function(k) {
+          var val = v[k];
+          if (val !== null && val !== undefined && val !== '') {
+            parts.push(k.replace(/_/g,' ') + ': ' + safeStr(val));
+          }
+        });
+        return parts.join(' · ') || JSON.stringify(v);
+      }
+      return String(v);
+    }
+
     function kvRow(key, value) {
-      return '<div class="pdx-kv-row"><span class="pdx-kv-key">' + escHtml(key) + '</span><span class="pdx-kv-val">' + escHtml(String(value)) + '</span></div>';
+      var display = (value === null || value === undefined) ? '' : (typeof value === 'object' ? safeStr(value) : String(value));
+      return '<div class="pdx-kv-row"><span class="pdx-kv-key">' + escHtml(key) + '</span><span class="pdx-kv-val">' + escHtml(display) + '</span></div>';
     }
 
     function formatDate(str) {
@@ -2947,16 +3336,32 @@
             var q = cveInp.value.trim();
             var res = document.getElementById('pdx-cve-result');
             if (!q || !res) return;
-            res.innerHTML = '<div class="pdx-loading-sm">Looking up…</div>';
+
+            var cveStages = [
+              { label: 'Querying NVD vulnerability database',  detail: 'Searching NIST National Vulnerability Database',     duration: 520 },
+              { label: 'Fetching CVSS scoring data',           detail: 'Retrieving base, temporal, and environmental scores', duration: 480 },
+              { label: 'Checking exploit availability',        detail: 'Cross-referencing ExploitDB and Metasploit modules',  duration: 640 },
+              { label: 'Correlating affected software',        detail: 'Mapping CPE entries to affected product versions',    duration: 560 },
+              { label: 'Retrieving remediation guidance',      detail: 'Fetching vendor advisories and patch information',    duration: 420 },
+            ];
+            res.innerHTML = buildDeepPipeline('pdx-cve-pipeline', cveStages, { title: 'CVE Analysis — ' + q, showLog: true });
+            var apiDone = false, pipelineDone = false, apiData = null;
+            runDeepPipeline('pdx-cve-pipeline', cveStages, {
+              logLines: [
+                'CVE lookup initialized for: ' + q,
+                'Querying NVD REST API v2.0…',
+                'Fetching CVSS v3.1 scoring vectors…',
+                'Checking ExploitDB and Metasploit…',
+                'Mapping CPE affected software entries…',
+                'Retrieving vendor patch advisories…',
+              ]
+            }).then(function() {
+              pipelineDone = true;
+              if (apiDone) renderCVEResult(res, apiData, q);
+            });
             apiFetch('GET', '/threat/cve?q=' + encodeURIComponent(q)).then(function(data) {
-              if (!data || !data.cves) { res.innerHTML = '<div class="pdx-empty">No results.</div>'; return; }
-              res.innerHTML = data.cves.slice(0, 5).map(function(c) {
-                return '<div class="pdx-cve-card">' +
-                  '<div class="pdx-cve-id">' + escHtml(c.id || '') + '</div>' +
-                  '<div class="pdx-cve-desc">' + escHtml((c.description || '').slice(0, 200)) + '</div>' +
-                  '<div class="pdx-cve-meta">CVSS: ' + (c.cvss || 'N/A') + ' · ' + escHtml(c.published || '') + '</div>' +
-                '</div>';
-              }).join('');
+              apiData = data; apiDone = true;
+              if (pipelineDone) renderCVEResult(res, data, q);
             });
           });
           cveInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') cveBtn.click(); });
@@ -2971,19 +3376,150 @@
             var domain = surfInp.value.trim();
             var res = document.getElementById('pdx-surface-result');
             if (!domain || !res) return;
-            res.innerHTML = '<div class="pdx-loading-sm">Mapping surface…</div>';
+
+            var surfStages = [
+              { label: 'Initializing attack surface scanner',  detail: 'Loading Shodan and DNS enumeration modules',          duration: 440 },
+              { label: 'Enumerating subdomains',               detail: 'Brute-force and certificate transparency enumeration', duration: 860 },
+              { label: 'Scanning exposed ports & services',    detail: 'Querying Shodan internet-wide scan data',              duration: 940 },
+              { label: 'Fingerprinting technologies',          detail: 'Identifying web frameworks, servers, and CMS',        duration: 720 },
+              { label: 'Checking for known vulnerabilities',   detail: 'Matching services against CVE database',              duration: 680 },
+              { label: 'Mapping attack surface',               detail: 'Compiling exposure report with risk ratings',         duration: 480 },
+            ];
+            res.innerHTML = buildDeepPipeline('pdx-surf-pipeline', surfStages, { title: 'Attack Surface — ' + domain, showLog: true });
+            var apiDone = false, pipelineDone = false, apiData = null;
+            runDeepPipeline('pdx-surf-pipeline', surfStages, {
+              logLines: [
+                'Attack surface scanner initialized for: ' + domain,
+                'Running subdomain enumeration…',
+                'Querying Shodan for exposed services…',
+                'Fingerprinting web technologies…',
+                'Matching services against CVE database…',
+                'Compiling attack surface report…',
+              ]
+            }).then(function() {
+              pipelineDone = true;
+              if (apiDone) renderSurfaceResult(res, apiData, domain);
+            });
             apiFetch('GET', '/threat/surface?domain=' + encodeURIComponent(domain)).then(function(data) {
-              if (!data) { res.innerHTML = '<div class="pdx-error">Failed.</div>'; return; }
-              var html = '<div class="pdx-kv-grid">';
-              html += kvRow('Open Ports', (data.ports || []).join(', ') || 'None');
-              html += kvRow('Subdomains', (data.subdomains || []).slice(0,5).join(', ') || 'None');
-              html += kvRow('Services', (data.services || []).join(', ') || 'None');
-              html += '</div>';
-              res.innerHTML = html;
+              apiData = data; apiDone = true;
+              if (pipelineDone) renderSurfaceResult(res, data, domain);
             });
           });
         }
       }
+    }
+
+    /* ══════════════════════════════════════════════════════
+       CVE RESULT RENDERER
+    ══════════════════════════════════════════════════════ */
+    function renderCVEResult(container, data, q) {
+      if (!data || !data.cves) { container.innerHTML = '<div class="pdx-empty">No CVEs found for "' + escHtml(q) + '".</div>'; return; }
+      var cves = data.cves.slice(0, 8);
+      var html = '<div class="pdx-result">';
+      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div><span>' + cves.length + ' CVE' + (cves.length !== 1 ? 's' : '') + ' found for "' + escHtml(q) + '"</span></div>';
+
+      cves.forEach(function(c) {
+        var cvss = parseFloat(c.cvss || c.cvss_score || 0);
+        var severity = cvss >= 9 ? 'critical' : cvss >= 7 ? 'high' : cvss >= 4 ? 'medium' : 'low';
+        var sevColor = cvss >= 9 ? '#f85149' : cvss >= 7 ? '#d29922' : cvss >= 4 ? '#388bfd' : '#6e7681';
+        html += '<div class="pdx-evidence-section">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            '<span style="font-family:var(--pdx-mono);color:var(--pdx-hi)">' + escHtml(c.id || 'CVE') + '</span>' +
+            '<span style="margin-left:8px;padding:1px 7px;border-radius:3px;font-size:10px;background:' + sevColor + '22;color:' + sevColor + ';border:1px solid ' + sevColor + '44">' + severity.toUpperCase() + (cvss ? ' ' + cvss.toFixed(1) : '') + '</span>' +
+            '<span class="pdx-evidence-toggle-arrow" style="margin-left:auto">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body">' +
+            '<div class="pdx-prose" style="margin-bottom:10px">' + escHtml((c.description || '').slice(0, 400)) + '</div>' +
+            '<div class="pdx-kv-grid">';
+        if (c.cvss || c.cvss_score) html += kvRow('CVSS Score', safeStr(c.cvss || c.cvss_score) + ' / 10 (' + severity + ')');
+        if (c.cvss_vector)   html += kvRow('CVSS Vector',   c.cvss_vector);
+        if (c.published)     html += kvRow('Published',     c.published);
+        if (c.modified)      html += kvRow('Last Modified', c.modified);
+        if (c.cwe)           html += kvRow('CWE',           safeStr(c.cwe));
+        if (c.affected && c.affected.length) html += kvRow('Affected', c.affected.slice(0,4).map(safeStr).join(', '));
+        if (c.references && c.references.length) html += kvRow('References', c.references.length + ' advisories');
+        if (c.exploit_available !== undefined) html += kvRow('Exploit Available', c.exploit_available ? '⚠ Yes' : '✓ No');
+        if (c.patch_available !== undefined)   html += kvRow('Patch Available',   c.patch_available   ? '✓ Yes' : '✗ No');
+        html += '</div>';
+        if (c.remediation) html += '<div style="margin-top:8px"><div class="pdx-section-title" style="margin-bottom:4px">Remediation</div><div class="pdx-prose">' + escHtml(c.remediation) + '</div></div>';
+        html += '</div></div>';
+      });
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       ATTACK SURFACE RESULT RENDERER
+    ══════════════════════════════════════════════════════ */
+    function renderSurfaceResult(container, data, domain) {
+      if (!data) { container.innerHTML = '<div class="pdx-error">Surface mapping failed.</div>'; return; }
+      var ports      = data.ports      || [];
+      var subdomains = data.subdomains || [];
+      var services   = data.services   || [];
+      var techs      = data.technologies || data.tech || [];
+      var vulns      = data.vulnerabilities || [];
+      var html = '<div class="pdx-result">';
+
+      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div><span>Attack surface mapped — ' + escHtml(domain) + '</span></div>';
+
+      /* Metric grid */
+      html += '<div class="pdx-metric-grid">' +
+        '<div class="pdx-metric-card' + (ports.length > 10 ? ' pdx-metric-card--amber' : '') + '"><div class="pdx-metric-value">' + ports.length + '</div><div class="pdx-metric-label">Open Ports</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + subdomains.length + '</div><div class="pdx-metric-label">Subdomains</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + services.length + '</div><div class="pdx-metric-label">Services</div></div>' +
+        '<div class="pdx-metric-card' + (vulns.length ? ' pdx-metric-card--red' : ' pdx-metric-card--green') + '"><div class="pdx-metric-value">' + vulns.length + '</div><div class="pdx-metric-label">Vulnerabilities</div></div>' +
+      '</div>';
+
+      /* Open ports */
+      if (ports.length) {
+        html += '<div class="pdx-evidence-section"><button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">Open Ports (' + ports.length + ') <span class="pdx-evidence-toggle-arrow">▼</span></button><div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        ports.slice(0, 20).forEach(function(p) {
+          var port = typeof p === 'object' ? (p.port || p.number || safeStr(p)) : safeStr(p);
+          var svc  = typeof p === 'object' ? (p.service || p.name || '') : '';
+          var banner = typeof p === 'object' ? (p.banner || '') : '';
+          html += kvRow('Port ' + port, (svc ? svc : '') + (banner ? ' — ' + banner.slice(0,60) : ''));
+        });
+        html += '</div></div></div>';
+      }
+
+      /* Subdomains */
+      if (subdomains.length) {
+        html += '<div class="pdx-evidence-section"><button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">Subdomains (' + subdomains.length + ') <span class="pdx-evidence-toggle-arrow">▼</span></button><div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        subdomains.slice(0, 15).forEach(function(s) {
+          var sub = typeof s === 'object' ? (s.subdomain || s.host || safeStr(s)) : safeStr(s);
+          var ip  = typeof s === 'object' ? (s.ip || '') : '';
+          html += kvRow(sub, ip || 'Resolved');
+        });
+        html += '</div></div></div>';
+      }
+
+      /* Technologies */
+      if (techs.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Detected Technologies</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">';
+        techs.slice(0, 20).forEach(function(t) {
+          var name = typeof t === 'object' ? (t.name || safeStr(t)) : safeStr(t);
+          var ver  = typeof t === 'object' ? (t.version || '') : '';
+          html += '<span class="pdx-ioc-chip-v5">' + escHtml(name) + (ver ? ' ' + escHtml(ver) : '') + '</span>';
+        });
+        html += '</div></div>';
+      }
+
+      /* Vulnerabilities */
+      if (vulns.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title pdx-section-title--warn">⚠ Vulnerabilities (' + vulns.length + ')</div><div class="pdx-factors">';
+        vulns.slice(0, 8).forEach(function(v) {
+          var id   = typeof v === 'object' ? (v.id || v.cve || '') : safeStr(v);
+          var desc = typeof v === 'object' ? (v.description || v.title || '') : '';
+          var sev  = typeof v === 'object' ? (v.severity || v.risk || 'medium') : 'medium';
+          var cls  = sev === 'critical' ? 'pdx-factor--critical' : sev === 'high' ? 'pdx-factor--high' : 'pdx-factor--medium';
+          html += '<div class="pdx-factor ' + cls + '"><span class="pdx-factor-name">' + escHtml(id) + '</span><span class="pdx-factor-val">' + escHtml(desc.slice(0,80)) + '</span><span class="pdx-factor-risk">' + escHtml(sev) + '</span></div>';
+        });
+        html += '</div></div>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
     }
 
   } /* end init */
