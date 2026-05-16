@@ -1,5 +1,5 @@
 /**
- * PaxDesign Utility Dock — v4.2.0
+ * PaxDesign Utility Dock — v4.3.0
  * Enterprise AI/Cyber SaaS dock — SSE real-time, command palette,
  * infrastructure graph, investigation board, team collaboration,
  * billing enforcement, AI memory, keyboard shortcuts.
@@ -116,9 +116,12 @@
       backdrop.classList.add('is-open');
       panel.classList.add('is-open');
 
-      // iOS body-lock: save scroll position, apply fixed positioning.
+      // iOS body-lock: save scroll, fix body so page doesn't jump.
+      // CSS .pdx-no-scroll adds overflow:hidden + position:fixed on mobile.
+      // We set body.style.top so the page stays at the same visual position.
       _scrollY = window.scrollY || window.pageYOffset;
-      document.body.style.top = '-' + _scrollY + 'px';
+      document.body.style.top    = '-' + _scrollY + 'px';
+      document.body.style.width  = '100%';
       document.body.classList.add('pdx-no-scroll');
 
       // Hide dock on mobile so it doesn't overlap the panel (unless admin disabled it).
@@ -130,9 +133,14 @@
         b.classList.toggle('is-active', b.dataset.module === moduleId);
         b.setAttribute('aria-expanded', b.dataset.module === moduleId ? 'true' : 'false');
       });
-      // Reset panel scroll to top on each open.
-      panel.scrollTop = 0;
-      renderPanel(moduleId);
+      // Refresh access status before rendering so the panel always reflects
+      // the current module lock state — catches admin changes since last load.
+      apiFetch('GET', '/pay/status').then(function(s) {
+        if (s) state.accessStatus = s;
+        renderPanel(moduleId);
+        var _body = panel.querySelector('.pdx-ph-body');
+        if (_body) _body.scrollTop = 0;
+      });
       if (C.analytics) logEvent(moduleId, 'panel_open');
     }
 
@@ -141,9 +149,10 @@
       backdrop.classList.remove('is-open');
       panel.classList.remove('is-open');
 
-      // Restore scroll position after removing body-lock.
+      // Restore body and scroll position.
       document.body.classList.remove('pdx-no-scroll');
-      document.body.style.top = '';
+      document.body.style.top   = '';
+      document.body.style.width = '';
       window.scrollTo(0, _scrollY);
 
       // Restore dock visibility.
@@ -190,6 +199,31 @@
     apiFetch('GET', '/pay/status').then(function(data) {
       if (data) state.accessStatus = data;
     });
+
+    /* ── Live config sync ─────────────────────────────────────
+       Poll /config every 15 s. When the server-side version token
+       changes (admin saved settings), refresh accessStatus and the
+       active panel so module enable/disable is reflected immediately.
+    ─────────────────────────────────────────────────────────── */
+    var _configVersion = (C.configVersion || 0);
+    setInterval(function() {
+      apiFetch('GET', '/config').then(function(data) {
+        if (!data || typeof data.v === 'undefined') return;
+        if (data.v !== _configVersion) {
+          _configVersion = data.v;
+          // Refresh access status with fresh data.
+          apiFetch('GET', '/pay/status').then(function(s) {
+            if (s) state.accessStatus = s;
+            // Re-render the active panel so lock/unlock state updates live.
+            if (state.activeModule && panel.classList.contains('is-open')) {
+              renderPanel(state.activeModule);
+            }
+            // Re-render active panel to reflect any module enable/disable changes.
+            // Full dock rebuild requires a page reload (modules list is in PDX_CONFIG).
+          });
+        }
+      });
+    }, 15000);
 
     /* ── Load AI memory ───────────────────────────────────── */
     if (C.aiMemory) {
@@ -250,28 +284,35 @@
     /* ── v4: Billing badge in dock ────────────────────────── */
     buildBillingBadge();
 
-    /* ── Close button — always inject, not gated on mobileEnabled ── */
-    // The close button is always rendered in the panel header.
-    // CSS controls its size/visibility per breakpoint.
+    /* ── Close button ─────────────────────────────────────────────
+       Injected into #pdx-panel-inner (NOT .pdx-ph-hd) so it is never
+       clipped by overflow:hidden on .pdx-ph or any ancestor.
+       position:absolute on the button + position:relative on #pdx-panel-inner
+       keeps it pinned top-right above all content at all times.
+    ─────────────────────────────────────────────────────────────── */
     var _closeSvg = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>';
 
     function injectCloseBtnGlobal() {
-      var hd = panel.querySelector('.pdx-ph-hd');
-      if (!hd || hd.querySelector('.pdx-mobile-close')) return;
+      // Remove any stale button first (panel content was replaced).
+      var existing = inner.querySelector('.pdx-mobile-close');
+      if (existing) existing.remove();
+      // Only inject when a panel module is rendered (.pdx-ph exists).
+      if (!inner.querySelector('.pdx-ph')) return;
       var btn = document.createElement('button');
       btn.className = 'pdx-mobile-close';
       btn.type = 'button';
       btn.setAttribute('aria-label', 'Close panel');
       btn.innerHTML = _closeSvg;
       btn.addEventListener('click', closePanel);
-      hd.appendChild(btn);
+      // Append to inner (not .pdx-ph-hd) — avoids overflow:hidden clipping.
+      inner.appendChild(btn);
     }
 
     // Re-inject after every renderPanel() call via MutationObserver.
     var _closeBtnObserver = new MutationObserver(function() {
       injectCloseBtnGlobal();
     });
-    _closeBtnObserver.observe(panel, { childList: true, subtree: true });
+    _closeBtnObserver.observe(inner, { childList: true });
 
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
@@ -2770,9 +2811,9 @@
         ].forEach(removeProp);
       }
 
-      // Close button is handled globally by injectCloseBtnGlobal() above.
-      // setupMobile only needs to call it once on enter.
-      function injectCloseBtn() { injectCloseBtnGlobal(); }
+      // Close button is handled by the global MutationObserver on #pdx-panel-inner.
+      // No separate injection needed here.
+      function injectCloseBtn() { /* no-op — handled globally */ }
 
       // ── Enter / exit mobile mode ─────────────────────────
       function enterMobile() {
@@ -2852,18 +2893,20 @@
 
       panel.addEventListener('touchmove', function(e) {
         tsMoved = true;
-        // Let inner scrollable children scroll naturally.
+        // Walk up from touch target to find a scrollable child.
+        // #pdx-panel no longer scrolls — .pdx-ph-body is the real scroller.
         var el = e.target;
         while (el && el !== panel) {
           var ov = window.getComputedStyle(el).overflowY;
           if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) return;
           el = el.parentElement;
         }
-        // At panel root — only block if at scroll boundary in dismiss direction.
+        // No scrollable child — check dismiss boundary using .pdx-ph-body.
+        var scroller = panel.querySelector('.pdx-ph-body') || panel;
         var dy = e.touches[0].clientY - tsY;
-        var atTop    = panel.scrollTop <= 0;
-        var atBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 1;
-        if (isUnderHeader && atTop    && dy < 0) e.preventDefault();
+        var atTop    = scroller.scrollTop <= 0;
+        var atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+        if (isUnderHeader  && atTop    && dy < 0) e.preventDefault();
         if (!isUnderHeader && atBottom && dy > 0) e.preventDefault();
       }, { passive: false });
 

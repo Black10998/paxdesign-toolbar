@@ -1,4 +1,4 @@
-/* PaxDesign Utility Dock — v4.2.0
+/* PaxDesign Utility Dock — v4.3.0
    Enterprise AI/Cyber SaaS dock styles.
    #pdx-dock stays inside #pdx-root (scoped variables, fixed position).
    #pdx-backdrop, #pdx-panel, #pdx-notif are appended to <body> by JS. */
@@ -238,18 +238,23 @@ body.pdx-no-scroll { overflow: hidden !important; }
    PANEL
    ═══════════════════════════════════════════════════════════ */
 /* Panel base — shared (all screen sizes) */
-/* ─── Panel base — MOBILE FIRST ──────────────────────────── */
-/* Default (mobile): full-width, slides down from under the dock.
-   Top = --pdx-panel-top (dock-top + dock-h), set by JS.
-   Falls back to 48px (dock height default) if JS hasn't run yet. */
+/* ─── Panel — scroll architecture ────────────────────────────
+   Single scroll container model:
+     #pdx-panel        → fixed, overflow:hidden, defines the viewport
+     #pdx-panel-inner  → height:100%, flex column, no overflow
+     .pdx-ph           → flex:1, min-height:0, overflow:hidden
+     .pdx-ph-hd        → flex-shrink:0, sticky header (no scroll)
+     .pdx-ph-body      → flex:1, min-height:0, overflow-y:auto ← ONLY scroller
+   This prevents double-scroll and ensures content always reaches the bottom.
+   ─────────────────────────────────────────────────────────── */
+
+/* Mobile default: full-width bar pinned below dock, fills to bottom of screen */
 #pdx-panel {
   position: fixed;
   z-index: 99995;
   background: var(--pdx-bg, #0d1117);
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  /* Panel itself does NOT scroll — inner flex layout handles it */
+  overflow: hidden;
   will-change: transform;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
   border: 1px solid var(--pdx-border, rgba(255,255,255,.08));
@@ -261,13 +266,11 @@ body.pdx-no-scroll { overflow: hidden !important; }
   bottom: 0;
   width: 100%;
   max-width: 100%;
-  height: auto;
   border-left: none;
   border-right: none;
   border-bottom: none;
   border-radius: 0;
 
-  /* Slide down from top (under-header mode default) */
   transition: transform .26s cubic-bezier(.4,0,.2,1);
 }
 #pdx-panel:not(.is-open) { transform: translateY(-102%); }
@@ -276,38 +279,44 @@ body.pdx-no-scroll { overflow: hidden !important; }
 /* ─── Desktop panel — side-slide ────────────────────────── */
 @media (min-width: 681px) {
   #pdx-panel {
-    /* Reset mobile geometry */
     top: 0;
     bottom: 0;
     left: auto;
     right: auto;
     width: 420px;
     max-width: 100vw;
-    height: auto;
     border: 1px solid var(--pdx-border, rgba(255,255,255,.08));
     border-radius: 0;
     transition: transform .26s cubic-bezier(.4,0,.2,1);
   }
-  /* Left panel (default) */
   #pdx-root[data-position="left"]  #pdx-panel { left: 0; right: auto; border-radius: 0 12px 12px 0; }
   #pdx-root[data-position="right"] #pdx-panel { right: 0; left: auto; border-radius: 12px 0 0 12px; }
-  /* Slide from left */
   #pdx-root[data-position="left"]  #pdx-panel:not(.is-open) { transform: translateX(-110%); }
   #pdx-root[data-position="left"]  #pdx-panel.is-open       { transform: translateX(0); }
-  /* Slide from right */
   #pdx-root[data-position="right"] #pdx-panel:not(.is-open) { transform: translateX(110%); }
   #pdx-root[data-position="right"] #pdx-panel.is-open       { transform: translateX(0); }
 }
 
-#pdx-panel-inner { min-height: 100%; display: flex; flex-direction: column; }
+/* Inner container: fills panel exactly, flex column, no overflow */
+#pdx-panel-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 
-/* ─── Panel header ───────────────────────────────────────── */
-.pdx-ph { display: flex; flex-direction: column; flex: 1; }
+/* ─── Panel content wrapper ──────────────────────────────── */
+/* .pdx-ph fills the inner container and constrains .pdx-ph-body scroll */
+.pdx-ph {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;   /* critical: allows flex child to shrink below content size */
+  overflow: hidden;
+}
 
-/* Panel header: column layout for content, close button absolutely positioned.
-   The close button is injected by JS as the last child of .pdx-ph-hd.
-   Using position:relative + absolute close button avoids needing a wrapper div
-   in the 17 JS render locations. Content gets full width; close is always visible. */
+/* Panel header: column layout, no overflow clipping.
+   Right padding reserves space so title text never runs under the close button. */
 .pdx-ph-hd {
   position: sticky;
   top: 0;
@@ -315,7 +324,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 14px 52px 14px 20px; /* right padding reserves space for close button */
+  padding: 14px 52px 14px 20px;
   border-bottom: 1px solid rgba(255,255,255,.08);
   background: var(--pdx-bg-el, #161b22);
   flex-shrink: 0;
@@ -331,12 +340,31 @@ body.pdx-no-scroll { overflow: hidden !important; }
 }
 .pdx-ph-title svg { width: 16px; height: 16px; stroke: var(--pdx-accent, #c2ff00); fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .pdx-ph-sub { font: 12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: var(--pdx-lo, #6e7681); margin-top: 3px; }
-.pdx-ph-body { padding: 16px 20px; flex: 1; display: flex; flex-direction: column; gap: 12px; }
-.pdx-ph--chat { height: 100%; }
+
+/* .pdx-ph-body is the ONLY scroll container in the panel.
+   flex:1 + min-height:0 makes it fill remaining space without overflowing .pdx-ph. */
+.pdx-ph-body {
+  padding: 16px 20px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+/* Chat panel: body has no padding — chat messages/footer handle their own layout */
 .pdx-ph--chat .pdx-ph-body { padding: 0; gap: 0; }
 
-/* Close button — absolutely positioned top-right, always visible.
-   Works with the existing JS HTML structure without any wrapper div. */
+/* ─── Close button ───────────────────────────────────────── */
+/* Injected by JS into #pdx-panel-inner (NOT inside .pdx-ph).
+   #pdx-panel-inner has no overflow:hidden so the button is never clipped.
+   position:absolute relative to #pdx-panel-inner (which is position:relative). */
+#pdx-panel-inner {
+  position: relative; /* establishes containing block for .pdx-mobile-close */
+}
 .pdx-mobile-close {
   position: absolute;
   top: 12px;
@@ -344,21 +372,24 @@ body.pdx-no-scroll { overflow: hidden !important; }
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: none;
-  background: var(--pdx-bg-hov, rgba(255,255,255,.07));
+  background: var(--pdx-bg-el2, rgba(255,255,255,.1));
   border-radius: 50%;
   color: var(--pdx-mid, #8b949e);
   cursor: pointer;
   flex-shrink: 0;
   transition: background .15s, color .15s;
   -webkit-tap-highlight-color: transparent;
-  z-index: 2;
+  /* Above .pdx-ph-hd (z-index:10) and all panel content */
+  z-index: 20;
+  /* Never participates in flex layout — purely overlaid */
+  pointer-events: auto;
 }
 .pdx-mobile-close:hover,
 .pdx-mobile-close:active {
-  background: var(--pdx-bg-el2, rgba(255,255,255,.12));
+  background: rgba(255,255,255,.18);
   color: var(--pdx-hi, #e6edf3);
 }
 .pdx-mobile-close svg {
@@ -906,13 +937,12 @@ body.pdx-no-scroll { overflow: hidden !important; }
     left: 0 !important;
   }
 
-  /* Panel: mobile geometry already set in base rule above.
-     Only override what differs from the base here. */
-
+  /* Panel inner: height:100% so flex chain reaches .pdx-ph-body */
   #pdx-panel-inner {
+    height: 100%;
     display: flex;
     flex-direction: column;
-    min-height: 100%;
+    overflow: hidden;
   }
 
   .pdx-ph {
@@ -920,9 +950,11 @@ body.pdx-no-scroll { overflow: hidden !important; }
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
   }
 
-  /* Panel header: tighter padding on mobile, preserve right space for close button */
+  /* Panel header: tighter padding on mobile.
+     Right padding still reserves space so title doesn't run under the close button. */
   .pdx-ph-hd {
     padding: 12px 48px 10px 16px;
   }
@@ -931,17 +963,21 @@ body.pdx-no-scroll { overflow: hidden !important; }
     font-size: 14px;
   }
 
+  /* Close button: slightly smaller on mobile, same top-right position */
   .pdx-mobile-close {
     top: 10px;
     right: 12px;
+    width: 30px;
+    height: 30px;
   }
 
-  /* Panel body: natural scroll, safe-area bottom padding */
+  /* Panel body: the single scroll container — safe-area bottom padding */
   .pdx-ph-body {
     padding: 14px 16px;
     padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     gap: 10px;
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
@@ -1023,8 +1059,20 @@ body.pdx-no-scroll { overflow: hidden !important; }
   }
   .pdx-tabs::-webkit-scrollbar { display: none; }
 
-  /* Chat: fill available height */
-  .pdx-chat-messages { max-height: none; flex: 1; min-height: 140px; }
+  /* Remove max-height constraints from nested containers on mobile.
+     .pdx-ph-body is the single scroller — inner elements must not cap their height. */
+  .pdx-chat-messages,
+  .pdx-activity-feed,
+  .pdx-output-body,
+  .pdx-trace-output,
+  .pdx-step-result-body,
+  .pdx-dp-log,
+  .pdx-code--raw {
+    max-height: none;
+    overflow: visible;
+  }
+  /* Chat messages: flex-grow inside the body scroller */
+  .pdx-chat-messages { flex: 1; min-height: 140px; }
 
   /* Pipeline: hide verbose detail */
   .pdx-dp-stage-detail { display: none; }
@@ -1255,7 +1303,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
   .pdx-metric-grid { grid-template-columns: 1fr; }
 
   /* Tighter panel header — preserve right padding for close button */
-  .pdx-ph-hd { padding: 10px 44px 8px 12px; }
+  .pdx-ph-hd { padding: 10px 46px 8px 12px; }
+  .pdx-mobile-close { top: 8px; right: 10px; width: 28px; height: 28px; }
 
   /* Hide verbose pipeline log */
   .pdx-dp-log { display: none; }
@@ -1779,7 +1828,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     gap: var(--pdx-card-gap);
   }
   #pdx-root[data-mobile-spacing="compact"] .pdx-ph-hd {
-    padding: var(--pdx-sp-2) 44px var(--pdx-sp-2) var(--pdx-sp-3);
+    padding: var(--pdx-sp-2) 46px var(--pdx-sp-2) var(--pdx-sp-3);
   }
 
   /* Relaxed: loosen the token scale */
@@ -1795,7 +1844,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     gap: var(--pdx-card-gap);
   }
   #pdx-root[data-mobile-spacing="relaxed"] .pdx-ph-hd {
-    padding: var(--pdx-sp-4) 52px var(--pdx-sp-3) var(--pdx-sp-5);
+    padding: var(--pdx-sp-4) 54px var(--pdx-sp-3) var(--pdx-sp-5);
   }
 
   /* Compact mode: smaller buttons and icons */

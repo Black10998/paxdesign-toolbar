@@ -127,6 +127,14 @@ class PDX_Admin {
 
 		$this->settings->save( $data );
 
+		// Increment the config version token so the JS live-sync poll detects
+		// the change and refreshes module state on the frontend immediately.
+		update_option( 'pdx_config_version', (int) get_option( 'pdx_config_version', 0 ) + 1, false );
+
+		// Bust any object-cache entries that may have baked in the old PDX_CONFIG.
+		wp_cache_delete( 'pdx_js_config' );
+		delete_transient( 'pdx_js_config' );
+
 		// Fire action so PDX_CachePurge (and any other listeners) can flush.
 		do_action( 'pdx_settings_saved', $tab, $data );
 

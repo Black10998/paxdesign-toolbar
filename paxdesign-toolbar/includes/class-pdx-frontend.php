@@ -94,6 +94,9 @@ class PDX_Frontend {
 			'modules'          => $enabled,
 			'restUrl'          => esc_url( rest_url( 'pdx/v1' ) ),
 			'nonce'            => wp_create_nonce( 'wp_rest' ),
+			// Monotonic version token — JS compares against /config endpoint
+			// to detect admin changes and refresh state without a page reload.
+			'configVersion'    => (int) get_option( 'pdx_config_version', 0 ),
 		];
 	}
 

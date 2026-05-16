@@ -103,6 +103,10 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/event',        [ 'methods' => 'POST', 'callback' => [ $this, 'log_event'    ], 'permission_callback' => $pub, 'args' => [ 'module' => [ 'required' => true, 'sanitize_callback' => 'sanitize_key' ], 'action' => [ 'required' => true, 'sanitize_callback' => 'sanitize_key' ], 'meta' => [ 'required' => false, 'default' => [] ] ] ] );
 		register_rest_route( $ns, '/settings',     [ [ 'methods' => 'GET', 'callback' => [ $this, 'get_settings' ], 'permission_callback' => $adm ], [ 'methods' => 'POST', 'callback' => [ $this, 'update_settings' ], 'permission_callback' => $adm ] ] );
 
+		// Live config — returns current enabled modules + settings version.
+		// Called by JS to detect admin changes without a page reload.
+		register_rest_route( $ns, '/config', [ 'methods' => 'GET', 'callback' => [ $this, 'live_config' ], 'permission_callback' => $pub ] );
+
 		// Billing
 		register_rest_route( $ns, '/billing/plans',    [ 'methods' => 'GET',  'callback' => [ $this, 'billing_plans'    ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/billing/status',   [ 'methods' => 'GET',  'callback' => [ $this, 'billing_status'   ], 'permission_callback' => $pub ] );
@@ -400,7 +404,41 @@ class PDX_REST_API {
 				];
 			}
 		}
-		return new WP_REST_Response( $result, 200 );
+		$response = new WP_REST_Response( $result, 200 );
+		// Prevent browser and CDN caching — access state must always be live.
+		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+		$response->header( 'Pragma', 'no-cache' );
+		return $response;
+	}
+
+	/**
+	 * Live config endpoint — returns the current enabled module list and a
+	 * settings version token. The JS dock polls this to detect admin changes
+	 * and refresh its state without requiring a page reload.
+	 */
+	public function live_config(): WP_REST_Response {
+		$modules = $this->modules->all_with_pricing( $this->settings );
+		$enabled = [];
+		foreach ( $modules as $id => $mod ) {
+			if ( $this->settings->module_enabled( $id ) ) {
+				$enabled[ $id ] = [
+					'label'    => $mod['label']    ?? $id,
+					'tier'     => $mod['tier']     ?? 'free',
+					'price'    => $mod['price']    ?? 0,
+					'currency' => $mod['currency'] ?? 'USD',
+					'desc'     => $mod['desc']     ?? '',
+					'caps'     => $mod['caps']     ?? [],
+				];
+			}
+		}
+		$response = new WP_REST_Response( [
+			// Monotonic version token — JS compares this to detect changes.
+			'v'       => (int) get_option( 'pdx_config_version', 0 ),
+			'modules' => $enabled,
+		], 200 );
+		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+		$response->header( 'Pragma', 'no-cache' );
+		return $response;
 	}
 
 	/* ── Analytics ───────────────────────────────────────── */
