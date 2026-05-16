@@ -1685,12 +1685,179 @@ body.pdx-no-scroll { overflow: hidden !important; }
   animation: pdx-status-blink 2s ease infinite;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   v5.3 — INTELLIGENCE REPORT COMPONENTS
+   Human-readable report layout replacing raw JSON dumps.
+═══════════════════════════════════════════════════════════ */
+
+/* ─── Intelligence Summary Card ─────────────────────────── */
+.pdx-report-summary {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(194,255,0,.06) 0%, rgba(99,102,241,.04) 100%);
+  border: 1px solid rgba(194,255,0,.2);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pdx-report-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pdx-report-summary-icon {
+  width: 16px; height: 16px;
+  color: var(--pdx-green, #c2ff00);
+  flex-shrink: 0;
+}
+.pdx-report-summary-icon svg {
+  width: 16px; height: 16px;
+  stroke: currentColor; fill: none;
+  stroke-width: 1.75;
+}
+.pdx-report-summary-title {
+  font: 600 11px/1 var(--pdx-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--pdx-green, #c2ff00);
+}
+.pdx-report-summary-text {
+  font: 13px/1.65 var(--pdx-font, sans-serif);
+  color: var(--pdx-hi, #e6edf3);
+}
+
+/* ─── Recommendations list ───────────────────────────────── */
+.pdx-report-recs {
+  border-top: 1px solid rgba(194,255,0,.12);
+  padding-top: 10px;
+}
+.pdx-report-recs-title {
+  font: 600 10px/1 var(--pdx-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--pdx-mid, #8b949e);
+  margin-bottom: 8px;
+}
+.pdx-report-recs-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.pdx-report-recs-list li {
+  font: 12px/1.55 var(--pdx-font, sans-serif);
+  color: var(--pdx-hi, #e6edf3);
+}
+.pdx-report-recs-list li::marker {
+  color: var(--pdx-green, #c2ff00);
+}
+
+/* ─── Raw / Technical Data section ──────────────────────── */
+.pdx-raw-section .pdx-evidence-toggle {
+  background: rgba(255,255,255,.02);
+  color: var(--pdx-lo, #6e7681);
+  font-size: 10px;
+}
+.pdx-raw-section .pdx-evidence-toggle:hover {
+  background: rgba(255,255,255,.04);
+  color: var(--pdx-mid, #8b949e);
+}
+.pdx-code--raw {
+  font: 10px/1.6 var(--pdx-mono, monospace);
+  color: var(--pdx-lo, #6e7681);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.08) transparent;
+}
+.pdx-code--raw::-webkit-scrollbar { width: 4px; }
+.pdx-code--raw::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 2px; }
+
+/* ─── Error message ──────────────────────────────────────── */
+.pdx-error-msg {
+  font: 11px/1.5 var(--pdx-font, sans-serif);
+  color: var(--pdx-red, #f85149);
+  padding: 6px 0;
+}
+
+/* ─── Badge error variant ────────────────────────────────── */
+.pdx-badge--err {
+  background: rgba(248,81,73,.12);
+  color: var(--pdx-red, #f85149);
+  border-color: rgba(248,81,73,.25);
+}
+
+/* ─── Prose text ─────────────────────────────────────────── */
+.pdx-prose {
+  font: 12px/1.65 var(--pdx-font, sans-serif);
+  color: var(--pdx-hi, #e6edf3);
+}
+
+/* ─── Steps list ─────────────────────────────────────────── */
+.pdx-steps-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pdx-steps-list li {
+  font: 12px/1.55 var(--pdx-font, sans-serif);
+  color: var(--pdx-hi, #e6edf3);
+}
+.pdx-steps-list li::marker {
+  color: var(--pdx-indigo, #6366f1);
+  font-weight: 600;
+}
+
+/* ─── Generic list ───────────────────────────────────────── */
+.pdx-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pdx-list li {
+  font: 12px/1.55 var(--pdx-font, sans-serif);
+  color: var(--pdx-hi, #e6edf3);
+}
+
+/* ─── Tag inline ─────────────────────────────────────────── */
+.pdx-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font: 500 10px/1 var(--pdx-mono, monospace);
+  background: rgba(255,255,255,.06);
+  color: var(--pdx-mid, #8b949e);
+  border: 1px solid rgba(255,255,255,.08);
+  white-space: nowrap;
+}
+
 /* ─── Light mode overrides ───────────────────────────────── */
 @media (prefers-color-scheme: light) {
   .pdx-deep-pipeline { background: #f6f8fa; border-color: rgba(99,102,241,.2); }
   .pdx-dp-log { background: rgba(0,0,0,.04); }
   .pdx-cap-tag { background: rgba(99,102,241,.08); }
   .pdx-ph-desc { color: #57606a; border-color: rgba(0,0,0,.06); }
+  .pdx-report-summary { background: rgba(107,140,0,.05); border-color: rgba(107,140,0,.2); }
+  .pdx-report-summary-title { color: #4a6200; }
+  .pdx-report-summary-icon  { color: #4a6200; }
+  .pdx-report-summary-text  { color: #1f2328; }
+  .pdx-report-recs-list li  { color: #1f2328; }
+  .pdx-report-recs { border-color: rgba(107,140,0,.15); }
+  .pdx-prose { color: #1f2328; }
+  .pdx-steps-list li { color: #1f2328; }
+  .pdx-list li { color: #1f2328; }
+  .pdx-tag { background: rgba(0,0,0,.05); color: #57606a; border-color: rgba(0,0,0,.1); }
+  .pdx-raw-section .pdx-evidence-toggle { color: #8c959f; }
+  .pdx-code--raw { color: #57606a; }
   /* Ensure lime text is readable on light backgrounds */
   .pdx-success, .pdx-notif-item--success,
   .pdx-conn-status--ok, .pdx-signal--pos,

@@ -322,6 +322,7 @@
     }
 
     function renderTrustResult(container, data, domain) {
+      var targetType = detectTargetType(domain);
       var risk      = data.risk      || {};
       var score     = risk.score     || 0;
       var verdict   = risk.verdict   || 'unknown';
@@ -329,9 +330,25 @@
       var ssl       = (data.sources && data.sources.ssl)  || {};
       var dns       = (data.sources && data.sources.dns)  || {};
       var threat    = (data.sources && data.sources.threat) || {};
+      var geo       = (data.sources && data.sources.geo)  || {};
+      var hibp      = (data.sources && data.sources.hibp) || {};
       var anomalies = data.anomalies  || [];
       var behavioral= data.behavioral || [];
       var confidence= data.confidence || risk.confidence || 0;
+
+      /* Filter risk factors that don't apply to this target type */
+      if (risk.factors && targetType === 'email') {
+        risk.factors = risk.factors.filter(function(f) {
+          var name = (f.factor || '').toLowerCase();
+          return !name.includes('ssl') && !name.includes('tls') && !name.includes('certificate') && !name.includes('dns');
+        });
+      }
+      if (risk.factors && targetType === 'ip') {
+        risk.factors = risk.factors.filter(function(f) {
+          var name = (f.factor || '').toLowerCase();
+          return !name.includes('ssl') && !name.includes('registrar') && !name.includes('domain age');
+        });
+      }
 
       var scoreColor = (verdict === 'clean' || verdict === 'low') ? 'var(--pdx-green)' : verdict === 'medium' ? 'var(--pdx-yellow)' : 'var(--pdx-red)';
       var verdictLabel = verdict === 'clean' ? 'Clean' : verdict === 'low' ? 'Low Risk' : verdict === 'medium' ? 'Medium Risk' : verdict === 'high' ? 'High Risk' : 'Critical';
@@ -497,18 +514,61 @@
       });
       html += '</div>';
 
-      /* ── AI Summary / Recommendations ── */
-      if (data.ai_summary || data.recommendations) {
-        html += '<div class="pdx-ai-summary-v5">' +
-          '<div class="pdx-ai-label-v5">AI Analysis Summary</div>' +
-          '<div class="pdx-ai-text">' + escHtml(data.ai_summary || '') + '</div>';
-        if (data.recommendations && data.recommendations.length) {
-          html += '<div style="margin-top:8px"><div class="pdx-section-title" style="margin-bottom:6px">Recommendations</div><ul class="pdx-list">';
-          data.recommendations.forEach(function(r) { html += '<li>' + escHtml(safeStr(r)) + '</li>'; });
-          html += '</ul></div>';
+      /* ── Email-specific: breach data ── */
+      if (targetType === 'email' && (hibp.breached !== undefined || hibp.breach_count)) {
+        html += '<div class="pdx-section">' +
+          '<div class="pdx-section-title' + (hibp.breached ? ' pdx-section-title--warn' : '') + '">' +
+            (hibp.breached ? '⚠ Data Breach Exposure' : '✓ No Known Breaches') +
+          '</div>';
+        if (hibp.breached) {
+          html += '<div class="pdx-kv-grid">';
+          if (hibp.breach_count) html += kvRow('Breaches Found', hibp.breach_count + ' known breach' + (hibp.breach_count !== 1 ? 'es' : ''));
+          if (hibp.breaches && hibp.breaches.length) {
+            hibp.breaches.slice(0,5).forEach(function(b) {
+              var name = typeof b === 'object' ? (b.Name || b.name || safeStr(b)) : safeStr(b);
+              var date = typeof b === 'object' ? (b.BreachDate || b.date || '') : '';
+              html += kvRow(name, date || 'Compromised');
+            });
+          }
+          html += '</div>';
         }
         html += '</div>';
       }
+
+      /* ── IP-specific: geolocation ── */
+      if (targetType === 'ip' && (geo.country || geo.city || geo.org)) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Geolocation & Network</div><div class="pdx-kv-grid">';
+        if (geo.country)  html += kvRow('Country',      geo.country);
+        if (geo.city)     html += kvRow('City',         geo.city);
+        if (geo.org)      html += kvRow('Organisation', geo.org);
+        if (geo.asn)      html += kvRow('ASN',          geo.asn);
+        if (geo.isp)      html += kvRow('ISP',          geo.isp);
+        if (geo.lat && geo.lon) html += kvRow('Coordinates', geo.lat + ', ' + geo.lon);
+        if (geo.hosting !== undefined) html += kvRow('Hosting / VPS', geo.hosting ? 'Yes' : 'No');
+        if (geo.proxy !== undefined)   html += kvRow('Proxy / VPN',   geo.proxy   ? '⚠ Yes' : 'No');
+        if (geo.tor !== undefined)     html += kvRow('Tor Exit Node', geo.tor     ? '⚠ Yes' : 'No');
+        html += '</div></div>';
+      }
+
+      /* ── AI Intelligence Summary (always shown) ── */
+      var summaryText = data.ai_summary || generateSummary(targetType, domain, data);
+      var recs = (data.recommendations && data.recommendations.length)
+        ? data.recommendations.map(safeStr)
+        : generateRecommendations(targetType, data);
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header">' +
+          '<span class="pdx-report-summary-icon">' + svgIcon('shield') + '</span>' +
+          '<span class="pdx-report-summary-title">Intelligence Summary</span>' +
+        '</div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(summaryText) + '</div>' +
+        (recs.length ? '<div class="pdx-report-recs"><div class="pdx-report-recs-title">Recommendations</div><ul class="pdx-report-recs-list">' +
+          recs.map(function(r) { return '<li>' + escHtml(r) + '</li>'; }).join('') +
+        '</ul></div>' : '') +
+      '</div>';
+
+      /* ── Raw data (collapsed, developer only) ── */
+      html += rawSection('Raw Response', data);
 
       html += '</div>';
       container.innerHTML = html;
@@ -654,23 +714,51 @@
         html += '</div>';
       }
 
-      /* ── Intelligence sources (expandable) ── */
+      /* ── Intelligence sources — structured cards ── */
       var srcKeys = Object.keys(sources);
+      /* Friendly labels and field renderers per source type */
+      var srcMeta = {
+        rdap:    { label: 'Domain Registration (RDAP/WHOIS)', icon: 'folder' },
+        whois:   { label: 'WHOIS Record',                     icon: 'folder' },
+        ssl:     { label: 'SSL / TLS Certificate',            icon: 'shield' },
+        dns:     { label: 'DNS Infrastructure',               icon: 'link'   },
+        geo:     { label: 'Geolocation & Network',            icon: 'search' },
+        vt:      { label: 'VirusTotal Analysis',              icon: 'alert'  },
+        shodan:  { label: 'Shodan Infrastructure',            icon: 'grid'   },
+        hibp:    { label: 'Data Breach Check (HIBP)',         icon: 'alert'  },
+        hunter:  { label: 'Email Discovery (Hunter.io)',      icon: 'user'   },
+        abuse:   { label: 'Abuse.ch Intelligence',            icon: 'alert'  },
+        threat:  { label: 'Threat Intelligence Feeds',        icon: 'alert'  },
+      };
       srcKeys.forEach(function(key) {
         var src = sources[key];
         if (!src) return;
-        var label = src.label || key.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+        var meta  = srcMeta[key] || {};
+        var label = src.label || meta.label || key.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+        /* Build human-readable rows — skip internal/meta fields */
+        var skipFields = { label:1, free:1, raw:1, _raw:1 };
         var rows = [];
         Object.keys(src).forEach(function(k) {
-          if (k === 'label' || k === 'free' || k === 'error') return;
+          if (skipFields[k]) return;
           var v = src[k];
           if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return;
-          rows.push(kvRow(k.replace(/_/g,' '), safeStr(v)));
+          if (k === 'error') return; /* handled separately */
+          /* Format key nicely */
+          var keyLabel = k.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+          /* Format value nicely */
+          var valStr = safeStr(v);
+          /* Special formatting */
+          if (k === 'malicious' || k === 'suspicious') valStr = v ? '⚠ Yes' : '✓ No';
+          if (k === 'breached')  valStr = v ? '⚠ Breached' : '✓ Not found';
+          if (k === 'proxy' || k === 'tor' || k === 'hosting') valStr = v ? '⚠ Yes' : 'No';
+          if (k === 'age_days' && typeof v === 'number') valStr = v + ' days' + (v < 30 ? ' ⚠ Very new' : v < 180 ? ' ⚠ Recent' : '');
+          rows.push(kvRow(keyLabel, valStr));
         });
         if (!rows.length && !src.error) return;
         html += '<div class="pdx-evidence-section">' +
           '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
-            escHtml(label) + (src.error ? ' <span style="color:var(--pdx-red);font-size:10px">Error</span>' : '') +
+            escHtml(label) +
+            (src.error ? ' <span class="pdx-badge pdx-badge--err">Error</span>' : '') +
             ' <span class="pdx-evidence-toggle-arrow">▼</span>' +
           '</button>' +
           '<div class="pdx-evidence-body">' +
@@ -730,6 +818,27 @@
           '<button class="pdx-btn-primary pdx-unlock-btn" data-module="osint" data-price="' + (paywall.price||0) + '" data-currency="' + escHtml(paywall.currency||'USD') + '">Unlock for ' + escHtml(paywall.currency||'USD') + ' ' + (paywall.price||0) + '</button>' +
         '</div>';
       }
+
+      /* ── AI Intelligence Summary ── */
+      var osintType = detectTargetType(target);
+      var summaryText = data.ai_summary || generateSummary(osintType, target, data);
+      var recs = (data.recommendations && data.recommendations.length)
+        ? data.recommendations.map(safeStr)
+        : generateRecommendations(osintType, data);
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header">' +
+          '<span class="pdx-report-summary-icon">' + svgIcon('search') + '</span>' +
+          '<span class="pdx-report-summary-title">Intelligence Summary</span>' +
+        '</div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(summaryText) + '</div>' +
+        (recs.length ? '<div class="pdx-report-recs"><div class="pdx-report-recs-title">Recommendations</div><ul class="pdx-report-recs-list">' +
+          recs.map(function(r) { return '<li>' + escHtml(r) + '</li>'; }).join('') +
+        '</ul></div>' : '') +
+      '</div>';
+
+      /* ── Raw data (collapsed) ── */
+      html += rawSection('Raw Response', data);
 
       html += '</div>';
       container.innerHTML = html;
@@ -1125,6 +1234,21 @@
         '</div>';
       }
 
+      /* ── Summary ── */
+      var stepsRun = r.steps_executed || outputs.length;
+      var builderSummary = data.ai_summary ||
+        'AI flow "' + (data.flow_name || 'Flow') + '" completed successfully. ' +
+        stepsRun + ' step' + (stepsRun !== 1 ? 's' : '') + ' executed' +
+        (r.tokens_used ? ', consuming ' + r.tokens_used + ' tokens' : '') + '. ' +
+        (r.final_output ? 'Final output generated.' : 'See execution trace for step-level outputs.');
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('layers') + '</span>' +
+        '<span class="pdx-report-summary-title">Execution Summary</span></div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(builderSummary) + '</div>' +
+      '</div>';
+
+      html += rawSection('Raw Response', data);
       html += '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn" style="margin-top:8px">Export JSON</button>';
       html += '</div>';
       container.innerHTML = html;
@@ -1331,6 +1455,22 @@
           '<div class="pdx-output-body">' + escHtml(safeStr(r.final_output)).replace(/\n/g,'<br>') + '</div></div>';
       }
 
+      /* ── Summary ── */
+      var agentsRun = r.agents_run || trace.length;
+      var pipelineSummary = data.ai_summary ||
+        'Agent pipeline "' + (data.pipeline_name || 'Pipeline') + '" completed. ' +
+        agentsRun + ' agent' + (agentsRun !== 1 ? 's' : '') + ' executed with ' +
+        (r.handoffs || Math.max(0, agentsRun - 1)) + ' handoff' + ((r.handoffs || agentsRun - 1) !== 1 ? 's' : '') + '. ' +
+        (r.tokens_used ? r.tokens_used + ' tokens consumed. ' : '') +
+        (r.final_output ? 'Final synthesized output available below.' : 'See agent trace for individual outputs.');
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('pipeline') + '</span>' +
+        '<span class="pdx-report-summary-title">Orchestration Summary</span></div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(pipelineSummary) + '</div>' +
+      '</div>';
+
+      html += rawSection('Raw Response', data);
       html += '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn" style="margin-top:8px">Export Trace</button>';
       html += '</div>';
       container.innerHTML = html;
@@ -1484,6 +1624,20 @@
         html += '</div></div>';
       }
 
+      /* ── Summary ── */
+      var autoSummary = data.ai_summary || r.analysis || r.approach ||
+        'Browser automation task analyzed. ' +
+        steps.length + ' execution step' + (steps.length !== 1 ? 's' : '') + ' identified' +
+        (dataPoints.length ? ', ' + dataPoints.length + ' data extraction point' + (dataPoints.length !== 1 ? 's' : '') + ' mapped' : '') +
+        (obstacles.length ? '. ' + obstacles.length + ' potential obstacle' + (obstacles.length !== 1 ? 's' : '') + ' detected — review before execution' : '') + '.';
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('grid') + '</span>' +
+        '<span class="pdx-report-summary-title">Task Analysis Summary</span></div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(autoSummary) + '</div>' +
+      '</div>';
+
+      html += rawSection('Raw Response', data);
       html += '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn" style="margin-top:8px">Export Plan</button>';
       html += '</div>';
       container.innerHTML = html;
@@ -1653,11 +1807,24 @@
       var missingSec = secHeaders.filter(function(h) { return !headers[h] && !headers[h.toLowerCase()]; });
       if (ok) {
         html += '<div class="pdx-section"><div class="pdx-section-title">Security Header Audit</div><div class="pdx-kv-grid">';
-        presentSec.forEach(function(h) { html += kvRow(h, '✓ Present'); });
+        presentSec.forEach(function(h) { html += '<div class="pdx-kv-row"><span class="pdx-kv-key">' + escHtml(h) + '</span><span class="pdx-kv-val" style="color:var(--pdx-green)">✓ Present</span></div>'; });
         missingSec.forEach(function(h) { html += '<div class="pdx-kv-row"><span class="pdx-kv-key">' + escHtml(h) + '</span><span class="pdx-kv-val" style="color:var(--pdx-yellow)">⚠ Missing</span></div>'; });
         html += '</div></div>';
       }
 
+      /* ── Connection summary ── */
+      var connSummary = ok
+        ? 'Connection to endpoint succeeded. HTTP ' + statusCode + ' response received in ' + latency + 'ms.' +
+          (missingSec.length ? ' ' + missingSec.length + ' security header' + (missingSec.length !== 1 ? 's are' : ' is') + ' missing — consider adding them to improve security posture.' : ' All checked security headers are present.')
+        : 'Connection failed' + (data.error ? ': ' + safeStr(data.error) : '.') + ' Verify the endpoint URL, authentication credentials, and network accessibility.';
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('link') + '</span>' +
+        '<span class="pdx-report-summary-title">Connection Summary</span></div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(connSummary) + '</div>' +
+      '</div>';
+
+      html += rawSection('Raw Response', data);
       html += '</div>';
       container.innerHTML = html;
     }
@@ -2180,6 +2347,157 @@
     }
 
     /* ── Helpers ──────────────────────────────────────────── */
+    /* ══════════════════════════════════════════════════════
+       TARGET TYPE DETECTION
+       Determines what kind of indicator is being analysed
+       so result renderers can show contextually correct data.
+    ══════════════════════════════════════════════════════ */
+    function detectTargetType(target) {
+      if (!target) return 'unknown';
+      var t = target.trim().toLowerCase();
+      if (/^[\w.+%-]+@[\w.-]+\.[a-z]{2,}$/.test(t))                    return 'email';
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(t))                           return 'ip';
+      if (/^([0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/i.test(t))      return 'hash';
+      if (/^https?:\/\//i.test(t))                                      return 'url';
+      if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z]{2,})+$/i.test(t)) return 'domain';
+      return 'unknown';
+    }
+
+    /* ══════════════════════════════════════════════════════
+       CONTEXTUAL AI SUMMARY GENERATOR
+       Produces a human-readable intelligence summary from
+       structured scan data. Used when the API does not
+       return an ai_summary field.
+    ══════════════════════════════════════════════════════ */
+    function generateSummary(type, target, data) {
+      var risk      = data.risk      || {};
+      var score     = risk.score     || 0;
+      var verdict   = risk.verdict   || 'unknown';
+      var anomalies = data.anomalies || [];
+      var rdap      = (data.sources && data.sources.rdap) || {};
+      var ssl       = (data.sources && data.sources.ssl)  || {};
+      var threat    = (data.sources && data.sources.threat) || {};
+
+      var verdictText = verdict === 'clean' ? 'no significant threats detected'
+        : verdict === 'low'    ? 'low-level risk indicators present'
+        : verdict === 'medium' ? 'moderate risk indicators requiring attention'
+        : verdict === 'high'   ? 'high-risk indicators detected'
+        : 'critical threat indicators identified';
+
+      if (type === 'email') {
+        var breached = (data.sources && data.sources.hibp && data.sources.hibp.breached);
+        var breachCount = (data.sources && data.sources.hibp && data.sources.hibp.breach_count) || 0;
+        var parts = ['Intelligence analysis of ' + target + ' identified ' + verdictText + '.'];
+        if (breached) parts.push('This address appears in ' + breachCount + ' known data breach' + (breachCount !== 1 ? 'es' : '') + '.');
+        if (anomalies.length) parts.push(anomalies.length + ' anomal' + (anomalies.length === 1 ? 'y was' : 'ies were') + ' detected during analysis.');
+        parts.push('Risk score: ' + score + '/100.');
+        return parts.join(' ');
+      }
+
+      if (type === 'ip') {
+        var geo = (data.sources && data.sources.geo) || {};
+        var country = geo.country || '';
+        var asn = geo.asn || geo.org || '';
+        var parts = ['IP address ' + target + ' analysis completed — ' + verdictText + '.'];
+        if (country) parts.push('Geolocation: ' + country + (asn ? ' (' + asn + ')' : '') + '.');
+        if (threat.malicious) parts.push('This IP has been flagged by threat intelligence feeds.');
+        if (anomalies.length) parts.push(anomalies.length + ' anomal' + (anomalies.length === 1 ? 'y' : 'ies') + ' detected.');
+        parts.push('Risk score: ' + score + '/100.');
+        return parts.join(' ');
+      }
+
+      if (type === 'hash') {
+        var engines = threat.malicious || 0;
+        var total   = threat.total     || 0;
+        var parts = ['File hash analysis of ' + target.slice(0,16) + '… completed.'];
+        if (total) parts.push(engines + ' of ' + total + ' detection engines flagged this hash as malicious.');
+        else parts.push(verdictText.charAt(0).toUpperCase() + verdictText.slice(1) + '.');
+        if (anomalies.length) parts.push(anomalies.length + ' anomal' + (anomalies.length === 1 ? 'y' : 'ies') + ' detected.');
+        return parts.join(' ');
+      }
+
+      if (type === 'domain') {
+        var parts = ['Domain intelligence analysis of ' + target + ' completed — ' + verdictText + '.'];
+        if (rdap.age_days !== undefined) {
+          if (rdap.age_days < 30)       parts.push('Domain is very recently registered (' + rdap.age_days + ' days old), which is a common indicator of malicious infrastructure.');
+          else if (rdap.age_days < 180) parts.push('Domain was registered ' + rdap.age_days + ' days ago — relatively new.');
+          else                          parts.push('Domain has been registered for ' + Math.floor(rdap.age_days/365) + ' year' + (rdap.age_days >= 730 ? 's' : '') + '.');
+        }
+        if (ssl.grade) {
+          var sslNote = (ssl.grade === 'A+' || ssl.grade === 'A') ? 'SSL/TLS configuration is strong (Grade ' + ssl.grade + ').'
+            : ssl.grade === 'B' ? 'SSL/TLS configuration has minor weaknesses (Grade ' + ssl.grade + ').'
+            : 'SSL/TLS configuration has significant issues (Grade ' + ssl.grade + ').';
+          parts.push(sslNote);
+        }
+        if (threat.malicious) parts.push('Flagged by threat intelligence feeds as malicious.');
+        if (anomalies.length) parts.push(anomalies.length + ' anomal' + (anomalies.length === 1 ? 'y' : 'ies') + ' detected during analysis.');
+        parts.push('Overall risk score: ' + score + '/100.');
+        return parts.join(' ');
+      }
+
+      // Generic fallback
+      var parts = ['Analysis of ' + target + ' completed — ' + verdictText + '.'];
+      if (anomalies.length) parts.push(anomalies.length + ' anomal' + (anomalies.length === 1 ? 'y' : 'ies') + ' detected.');
+      parts.push('Risk score: ' + score + '/100.');
+      return parts.join(' ');
+    }
+
+    /* ══════════════════════════════════════════════════════
+       RAW DATA SECTION
+       Wraps any raw/technical data behind a collapsed
+       "Technical Data" toggle — never shown by default.
+    ══════════════════════════════════════════════════════ */
+    function rawSection(label, data) {
+      var json = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      return '<div class="pdx-evidence-section pdx-raw-section">' +
+        '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+          '<span style="color:var(--pdx-lo);font-size:10px">⚙</span> ' + escHtml(label || 'Technical Data') +
+          ' <span class="pdx-evidence-toggle-arrow">▼</span>' +
+        '</button>' +
+        '<div class="pdx-evidence-body"><pre class="pdx-code pdx-code--raw">' + escHtml(json.slice(0, 3000)) + (json.length > 3000 ? '\n… (truncated)' : '') + '</pre></div>' +
+      '</div>';
+    }
+
+    /* ══════════════════════════════════════════════════════
+       RECOMMENDATION ENGINE
+       Generates contextual recommendations from scan data.
+    ══════════════════════════════════════════════════════ */
+    function generateRecommendations(type, data) {
+      var recs = [];
+      var risk   = data.risk   || {};
+      var rdap   = (data.sources && data.sources.rdap) || {};
+      var ssl    = (data.sources && data.sources.ssl)  || {};
+      var dns    = (data.sources && data.sources.dns)  || {};
+      var threat = (data.sources && data.sources.threat) || {};
+      var anomalies = data.anomalies || [];
+
+      if (type === 'domain' || type === 'url') {
+        if (rdap.age_days !== undefined && rdap.age_days < 90) recs.push('Exercise caution — this domain was registered recently and may be associated with phishing or fraud campaigns.');
+        if (ssl.grade && ssl.grade !== 'A+' && ssl.grade !== 'A') recs.push('SSL/TLS configuration should be reviewed. Consider enabling HSTS and upgrading cipher suites.');
+        if (!dns.spf)   recs.push('No SPF record detected. Configure SPF to prevent email spoofing from this domain.');
+        if (!dns.dmarc) recs.push('No DMARC policy detected. Implement DMARC to protect against domain impersonation.');
+        if (threat.malicious) recs.push('This domain has been flagged as malicious. Block at the network perimeter and investigate any recent connections.');
+        if (anomalies.length) recs.push('Investigate the detected anomalies — they may indicate infrastructure abuse or compromise.');
+      }
+      if (type === 'ip') {
+        if (threat.malicious) recs.push('Block this IP at the firewall. It has been flagged by threat intelligence feeds.');
+        if (anomalies.length) recs.push('Review network logs for connections to/from this IP address.');
+      }
+      if (type === 'email') {
+        var hibp = (data.sources && data.sources.hibp) || {};
+        if (hibp.breached) recs.push('This email address appears in known data breaches. Advise the user to change passwords and enable MFA on all associated accounts.');
+        if (anomalies.length) recs.push('Treat communications from this address with caution.');
+      }
+      if (type === 'hash') {
+        var threat2 = (data.sources && data.sources.threat) || {};
+        if (threat2.malicious) recs.push('Quarantine and remove this file immediately. Conduct a full endpoint investigation.');
+        else recs.push('Continue monitoring — a clean result does not guarantee safety for all environments.');
+      }
+      if (!recs.length && risk.score > 50) recs.push('Elevated risk score detected. Conduct further investigation before trusting this target.');
+      if (!recs.length) recs.push('No immediate action required. Continue routine monitoring.');
+      return recs;
+    }
+
     function escHtml(str) {
       return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
@@ -3075,18 +3393,69 @@
 
     function renderCorrResult(res, data, value) {
       if (!data) { res.innerHTML = '<div class="pdx-error">Correlation failed.</div>'; return; }
+      var edges   = data.edges   || [];
+      var nodes   = data.nodes   || [];
+      var clusters= data.clusters|| [];
       var html = '<div class="pdx-result">';
-      html += '<div class="pdx-section"><div class="pdx-section-title">Relationships (' + (data.edges || []).length + ')</div><div class="pdx-kv-grid">';
-      (data.edges || []).slice(0, 10).forEach(function(e) {
-        html += kvRow(escHtml(e.source) + ' → ' + escHtml(e.target), escHtml(e.relation || '') + ' (' + (e.confidence || 0) + '%)');
-      });
-      html += '</div></div>';
-      if (data.ai_summary) {
-        html += '<div class="pdx-section"><div class="pdx-section-title">AI Summary</div><div class="pdx-ai-text">' + escHtml(data.ai_summary) + '</div></div>';
+
+      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div>' +
+        '<span>Correlation complete — ' + escHtml(value) + '</span>' +
+        '<span class="pdx-scan-complete-time">' + edges.length + ' relationship' + (edges.length !== 1 ? 's' : '') + '</span>' +
+      '</div>';
+
+      /* Metrics */
+      html += '<div class="pdx-metric-grid">' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + nodes.length + '</div><div class="pdx-metric-label">Nodes</div></div>' +
+        '<div class="pdx-metric-card"><div class="pdx-metric-value">' + edges.length + '</div><div class="pdx-metric-label">Relationships</div></div>' +
+        (clusters.length ? '<div class="pdx-metric-card"><div class="pdx-metric-value">' + clusters.length + '</div><div class="pdx-metric-label">Clusters</div></div>' : '') +
+        (data.confidence ? '<div class="pdx-metric-card"><div class="pdx-metric-value">' + data.confidence + '%</div><div class="pdx-metric-label">Confidence</div></div>' : '') +
+      '</div>';
+
+      /* Relationship table */
+      if (edges.length) {
+        html += '<div class="pdx-evidence-section"><button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">Relationships (' + edges.length + ') <span class="pdx-evidence-toggle-arrow">▼</span></button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        edges.slice(0, 15).forEach(function(e) {
+          var src = safeStr(e.source || e.from || '');
+          var tgt = safeStr(e.target || e.to   || '');
+          var rel = safeStr(e.relation || e.type || e.label || 'related');
+          var conf= e.confidence || e.weight || '';
+          html += kvRow(escHtml(src) + ' → ' + escHtml(tgt), escHtml(rel) + (conf ? ' (' + conf + '%)' : ''));
+        });
+        html += '</div></div></div>';
       }
-      html += '<button class="pdx-btn-ghost pdx-mt-sm" id="pdx-corr-graph-btn">View in Graph</button>';
+
+      /* Node inventory */
+      if (nodes.length) {
+        html += '<div class="pdx-evidence-section"><button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">Infrastructure Nodes (' + nodes.length + ') <span class="pdx-evidence-toggle-arrow">▼</span></button>' +
+          '<div class="pdx-evidence-body"><div style="display:flex;flex-wrap:wrap;gap:4px">';
+        nodes.slice(0, 30).forEach(function(n) {
+          var label = typeof n === 'object' ? (n.label || n.id || n.value || safeStr(n)) : safeStr(n);
+          var type  = typeof n === 'object' ? (n.type || n.group || '') : '';
+          html += '<span class="pdx-ioc-chip-v5" title="' + escHtml(type) + '">' + escHtml(label) + '</span>';
+        });
+        if (nodes.length > 30) html += '<span class="pdx-tag">+' + (nodes.length - 30) + ' more</span>';
+        html += '</div></div></div>';
+      }
+
+      /* AI Summary — always shown */
+      var corrSummary = data.ai_summary ||
+        'Correlation analysis of "' + value + '" identified ' + edges.length + ' relationship' + (edges.length !== 1 ? 's' : '') +
+        ' across ' + nodes.length + ' infrastructure node' + (nodes.length !== 1 ? 's' : '') + '. ' +
+        (clusters.length ? clusters.length + ' cluster' + (clusters.length !== 1 ? 's' : '') + ' of related indicators detected. ' : '') +
+        (edges.length > 5 ? 'This indicator has significant infrastructure connections — investigate related nodes for further context.' : 'Limited connections found — indicator may be isolated or newly observed.');
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('link') + '</span>' +
+        '<span class="pdx-report-summary-title">Correlation Summary</span></div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(corrSummary) + '</div>' +
+      '</div>';
+
+      html += '<button class="pdx-btn-ghost pdx-btn-sm pdx-mt-sm" id="pdx-corr-graph-btn">View in Infrastructure Graph</button>';
+      html += rawSection('Raw Response', data);
       html += '</div>';
       res.innerHTML = html;
+
       var graphBtn = document.getElementById('pdx-corr-graph-btn');
       if (graphBtn) graphBtn.addEventListener('click', function() {
         openPanel('graph');
@@ -3141,18 +3510,69 @@
 
     function renderTimelineResult(res, data) {
       var events = (data && data.timeline) || [];
-      if (!events.length) { res.innerHTML = '<div class="pdx-empty">No timeline data found.</div>'; return; }
-      var html = '<div class="pdx-timeline">';
+      if (!events.length) { res.innerHTML = '<div class="pdx-empty">No timeline data found for this target.</div>'; return; }
+
+      var html = '<div class="pdx-result">';
+
+      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div>' +
+        '<span>Timeline reconstructed</span>' +
+        '<span class="pdx-scan-complete-time">' + events.length + ' event' + (events.length !== 1 ? 's' : '') + '</span>' +
+      '</div>';
+
+      /* Group events by category if available */
+      var categories = {};
       events.forEach(function(ev) {
-        html += '<div class="pdx-tl-event">' +
-          '<div class="pdx-tl-dot"></div>' +
-          '<div class="pdx-tl-body">' +
-            '<div class="pdx-tl-date">' + escHtml(ev.date || '') + '</div>' +
-            '<div class="pdx-tl-desc">' + escHtml(ev.description || '') + '</div>' +
-            '<div class="pdx-tl-source">' + escHtml(ev.source || '') + '</div>' +
+        var cat = ev.category || ev.type || 'Event';
+        if (!categories[cat]) categories[cat] = 0;
+        categories[cat]++;
+      });
+      var catKeys = Object.keys(categories);
+      if (catKeys.length > 1) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Event Categories</div><div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">';
+        catKeys.forEach(function(c) {
+          html += '<span class="pdx-ioc-chip-v5">' + escHtml(c) + ' <strong>' + categories[c] + '</strong></span>';
+        });
+        html += '</div></div>';
+      }
+
+      /* Timeline */
+      html += '<div class="pdx-timeline-v5">';
+      events.slice(0, 20).forEach(function(ev) {
+        var date = ev.date || ev.timestamp || ev.time || '';
+        var desc = ev.description || ev.event || ev.title || safeStr(ev);
+        var src  = ev.source || ev.feed || '';
+        var sev  = ev.severity || ev.risk || '';
+        var dotColor = sev === 'critical' ? '#f85149' : sev === 'high' ? '#d29922' : sev === 'medium' ? '#388bfd' : 'var(--pdx-indigo)';
+        html += '<div class="pdx-tl-event-v5">' +
+          '<div class="pdx-tl-dot-v5" style="background:' + dotColor + '"></div>' +
+          '<div class="pdx-tl-body-v5">' +
+            (date ? '<div class="pdx-tl-date-v5">' + escHtml(date) + (sev ? ' <span style="font-size:9px;padding:1px 5px;border-radius:2px;background:' + dotColor + '22;color:' + dotColor + '">' + escHtml(sev.toUpperCase()) + '</span>' : '') + '</div>' : '') +
+            '<div class="pdx-tl-desc-v5">' + escHtml(desc) + '</div>' +
+            (src ? '<div class="pdx-tl-source-v5">Source: ' + escHtml(src) + '</div>' : '') +
           '</div>' +
         '</div>';
       });
+      if (events.length > 20) {
+        html += '<div class="pdx-tl-event-v5"><div class="pdx-tl-dot-v5" style="background:var(--pdx-lo)"></div>' +
+          '<div class="pdx-tl-body-v5"><div class="pdx-tl-desc-v5" style="color:var(--pdx-lo)">+ ' + (events.length - 20) + ' more events</div></div></div>';
+      }
+      html += '</div>';
+
+      /* Summary */
+      var earliest = events[events.length - 1];
+      var latest   = events[0];
+      var tlSummary = events.length + ' event' + (events.length !== 1 ? 's' : '') + ' reconstructed' +
+        (earliest && (earliest.date || earliest.timestamp) ? ' from ' + (earliest.date || earliest.timestamp) : '') +
+        (latest   && (latest.date   || latest.timestamp)   ? ' to '   + (latest.date   || latest.timestamp)   : '') + '. ' +
+        (catKeys.length > 1 ? 'Events span ' + catKeys.length + ' categories: ' + catKeys.join(', ') + '.' : '');
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('search') + '</span>' +
+        '<span class="pdx-report-summary-title">Timeline Summary</span></div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(tlSummary) + '</div>' +
+      '</div>';
+
+      html += rawSection('Raw Response', data);
       html += '</div>';
       res.innerHTML = html;
     }
@@ -3445,6 +3865,20 @@
         html += '</div></div>';
       });
 
+      /* ── CVE Summary ── */
+      var critCount = cves.filter(function(c){ return parseFloat(c.cvss||c.cvss_score||0) >= 9; }).length;
+      var highCount = cves.filter(function(c){ var s=parseFloat(c.cvss||c.cvss_score||0); return s>=7&&s<9; }).length;
+      var cveSummary = cves.length + ' CVE' + (cves.length !== 1 ? 's' : '') + ' found for "' + q + '". ' +
+        (critCount ? critCount + ' critical' + (highCount ? ', ' + highCount + ' high severity. ' : '. ') : (highCount ? highCount + ' high severity. ' : '')) +
+        (cves.some(function(c){ return c.exploit_available; }) ? 'At least one exploit is publicly available — prioritize patching.' : 'No public exploits confirmed in this result set.');
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('alert') + '</span>' +
+        '<span class="pdx-report-summary-title">Vulnerability Summary</span></div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(cveSummary) + '</div>' +
+      '</div>';
+
+      html += rawSection('Raw Response', data);
       html += '</div>';
       container.innerHTML = html;
     }
@@ -3518,6 +3952,27 @@
         html += '</div></div>';
       }
 
+      /* ── Attack Surface Summary ── */
+      var surfSummary = 'Attack surface mapping of ' + domain + ' complete. ' +
+        ports.length + ' open port' + (ports.length !== 1 ? 's' : '') + ' detected' +
+        (subdomains.length ? ', ' + subdomains.length + ' subdomain' + (subdomains.length !== 1 ? 's' : '') + ' enumerated' : '') +
+        (techs.length ? ', ' + techs.length + ' technolog' + (techs.length !== 1 ? 'ies' : 'y') + ' fingerprinted' : '') + '. ' +
+        (vulns.length
+          ? vulns.length + ' potential vulnerabilit' + (vulns.length !== 1 ? 'ies' : 'y') + ' identified — review and remediate before exposure.'
+          : 'No known vulnerabilities matched in this scan.');
+
+      html += '<div class="pdx-report-summary">' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('grid') + '</span>' +
+        '<span class="pdx-report-summary-title">Attack Surface Summary</span></div>' +
+        '<div class="pdx-report-summary-text">' + escHtml(surfSummary) + '</div>' +
+        (vulns.length ? '<div class="pdx-report-recs"><div class="pdx-report-recs-title">Recommendations</div><ul class="pdx-report-recs-list">' +
+          '<li>Audit all open ports and close any that are not required for business operations.</li>' +
+          (subdomains.length > 5 ? '<li>Review subdomain inventory — unused subdomains increase attack surface.</li>' : '') +
+          (vulns.length ? '<li>Prioritise patching identified vulnerabilities, starting with critical and high severity.</li>' : '') +
+        '</ul></div>' : '') +
+      '</div>';
+
+      html += rawSection('Raw Response', data);
       html += '</div>';
       container.innerHTML = html;
     }
