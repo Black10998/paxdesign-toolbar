@@ -1,5 +1,26 @@
 ﻿# Changelog
 
+## 8.1.2 — 2026-05-17
+
+**Production updater hotfix (wp-admin 7.x → 8.x)**
+
+- Version-aware upgrade success detection (no longer requires installed >= GitHub `latest` when updating to an intermediate release)
+- `includes/pdx-upgrade-manifest.php` — per-release required files + legacy file removal after update
+- `PDX_Recovery` loads manifest dynamically (no false unhealthy state on 8.0.x vs 8.1.x file lists)
+- Records `target` version during upgrade; validates package version in `verify_install`
+- `scripts/simulate-wp-upgrade.ps1` and `scripts/verify-release-zip.ps1` for pre-release QA
+- Build script runs ZIP validation automatically
+
+**Install:** `releases/paxdesign-toolbar-8.1.2.zip` — tag `v8.1.2`
+
+## 8.0.1 — 2026-05-17
+
+**Production updater hotfix for 8.0.x line** (same updater fixes as 8.1.2, 8.0 feature set only)
+
+Use this if you must stay on the 8.0 intelligence release before 8.1.x AI modules.
+
+**Install:** `releases/paxdesign-toolbar-8.0.1.zip` — tag `v8.0.1`
+
 ## 8.1.0 — 2026-05-17
 
 **Enterprise AI modules — Personas, Builder, Pipeline, Automation**

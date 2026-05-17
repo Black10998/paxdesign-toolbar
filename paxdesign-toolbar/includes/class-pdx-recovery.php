@@ -15,21 +15,42 @@ final class PDX_Recovery {
 	private const MAIN_FILE     = 'paxdesign-toolbar.php';
 
 	/** @var list<string> */
-	private const REQUIRED_FILES = [
+	private const FALLBACK_REQUIRED_FILES = [
 		'includes/class-pdx-loader.php',
 		'includes/class-pdx-settings.php',
 		'includes/class-pdx-target.php',
 		'includes/class-pdx-http.php',
 		'includes/class-pdx-intelligence.php',
-		'includes/class-pdx-url-analyzer.php',
-		'includes/class-pdx-scan-orchestrator.php',
-		'includes/class-pdx-threat-feeds.php',
-		'includes/class-pdx-ai-service.php',
-		'includes/class-pdx-conversation.php',
-		'includes/class-pdx-flow-store.php',
-		'includes/class-pdx-workflow-engine.php',
-		'includes/class-pdx-browser-automation.php',
 	];
+
+	/**
+	 * @return array{required_files:list<string>,legacy_remove:list<string>}
+	 */
+	public static function upgrade_manifest(): array {
+		$file = self::plugin_dir() . '/includes/pdx-upgrade-manifest.php';
+		if ( is_readable( $file ) ) {
+			$data = include $file;
+			if ( is_array( $data ) ) {
+				return [
+					'required_files' => array_values( array_filter( (array) ( $data['required_files'] ?? [] ) ) ),
+					'legacy_remove'    => array_values( array_filter( (array) ( $data['legacy_remove'] ?? [] ) ) ),
+				];
+			}
+		}
+
+		return [
+			'required_files' => self::FALLBACK_REQUIRED_FILES,
+			'legacy_remove'    => [],
+		];
+	}
+
+	/**
+	 * @return list<string>
+	 */
+	public static function required_files(): array {
+		$files = self::upgrade_manifest()['required_files'];
+		return ! empty( $files ) ? $files : self::FALLBACK_REQUIRED_FILES;
+	}
 
 	public static function register(): void {
 		add_action( 'plugins_loaded', [ self::class, 'boot' ], 0 );
@@ -67,7 +88,7 @@ final class PDX_Recovery {
 		if ( ! is_readable( $dir . '/' . self::MAIN_FILE ) ) {
 			return false;
 		}
-		foreach ( self::REQUIRED_FILES as $rel ) {
+		foreach ( self::required_files() as $rel ) {
 			if ( ! is_readable( $dir . '/' . $rel ) ) {
 				return false;
 			}

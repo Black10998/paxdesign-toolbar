@@ -54,3 +54,8 @@ $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash
 Write-Host "Built: $zipPath"
 Write-Host "Version: $version"
 Write-Host "SHA256: $hash"
+
+$verify = Join-Path $PSScriptRoot 'verify-release-zip.ps1'
+if (Test-Path $verify) {
+    & $verify -ZipPath $zipPath
+}
