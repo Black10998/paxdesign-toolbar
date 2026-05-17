@@ -7,6 +7,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once __DIR__ . '/class-pdx-phishing-heuristics.php';
+
 class PDX_Scan_Orchestrator {
 
 	public function __construct(
@@ -35,6 +37,11 @@ class PDX_Scan_Orchestrator {
 
 		// Infrastructure correlation block.
 		$report['forensics'] = $this->build_forensics( $report, $url_forensics );
+		$report['behavioral_signals'] = PDX_Intelligence::behavioral_score( $report );
+		$report['infrastructure']     = PDX_Phishing_Heuristics::infrastructure_fingerprint( $report );
+		$report['forensics']['infrastructure_score']      = (int) ( $report['infrastructure']['score'] ?? 0 );
+		$report['forensics']['infrastructure_fingerprint'] = (string) ( $report['infrastructure']['fingerprint'] ?? '' );
+		$report['forensics']['infrastructure_relationships'] = (array) ( $report['infrastructure']['relationships'] ?? [] );
 
 		// Re-score with forensic factors.
 		$report['risk'] = $this->intel->compute_risk(
@@ -84,18 +91,26 @@ class PDX_Scan_Orchestrator {
 		$geo     = $sources['geo'] ?? $sources['geolocation'] ?? [];
 		$rdap    = $sources['rdap'] ?? [];
 
+		$phish = $url_forensics['phishing'] ?? [];
+
 		return [
-			'redirect_hops'    => (int) ( $url_forensics['redirect_count'] ?? 0 ),
-			'phishing_score'   => (int) ( $url_forensics['phishing']['score'] ?? 0 ),
-			'phishing_verdict' => $url_forensics['phishing']['verdict'] ?? 'low',
-			'phishing_reasons' => $url_forensics['phishing']['reasons'] ?? [],
-			'has_login_form'   => ! empty( $url_forensics['page_signals']['password_fields'] ),
-			'asn'              => $geo['asn'] ?? null,
-			'org'              => $geo['org'] ?? $geo['isp'] ?? null,
-			'registrar'        => $rdap['registrar'] ?? null,
-			'mx_configured'    => ! empty( $dns['mx'] ),
-			'spf_configured'   => ! empty( $dns['spf'] ),
-			'dmarc_configured' => ! empty( $dns['dmarc'] ),
+			'redirect_hops'       => (int) ( $url_forensics['redirect_count'] ?? 0 ),
+			'redirect_intent'     => (string) ( $phish['redirect_intent'] ?? $url_forensics['redirect_intent']['intent'] ?? 'direct' ),
+			'phishing_score'      => (int) ( $phish['score'] ?? 0 ),
+			'phishing_verdict'    => $phish['verdict'] ?? 'low',
+			'phishing_reasons'    => $phish['reasons'] ?? [],
+			'path_risk_score'     => (int) ( $url_forensics['target_heuristics']['score'] ?? 0 ),
+			'landing_risk_score'  => (int) ( $url_forensics['landing_heuristics']['score'] ?? 0 ),
+			'has_login_form'      => ! empty( $url_forensics['page_signals']['password_fields'] ),
+			'has_form_bait'       => ! empty( $url_forensics['page_signals']['forms'] ) && ! empty( $url_forensics['page_signals']['password_fields'] ),
+			'external_form_action'=> ! empty( $url_forensics['page_signals']['external_form_action'] ),
+			'malware_indicators'  => (array) ( $phish['malware_indicators'] ?? [] ),
+			'asn'                 => $geo['asn'] ?? null,
+			'org'                 => $geo['org'] ?? $geo['isp'] ?? null,
+			'registrar'           => $rdap['registrar'] ?? null,
+			'mx_configured'       => ! empty( $dns['mx'] ),
+			'spf_configured'      => ! empty( $dns['spf'] ),
+			'dmarc_configured'    => ! empty( $dns['dmarc'] ),
 		];
 	}
 

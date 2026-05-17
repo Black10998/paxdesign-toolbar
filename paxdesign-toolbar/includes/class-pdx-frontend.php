@@ -57,14 +57,29 @@ class PDX_Frontend {
 			PDX_VERSION
 		);
 
+		wp_enqueue_style(
+			'pdx-intel-activity',
+			PDX_URL . 'assets/css/pdx-intel-activity.css',
+			[ 'pdx-dock-ui' ],
+			PDX_VERSION
+		);
+
 		// Use defer strategy (WP 6.3+) so the script always runs after the DOM is ready.
 		// Falls back to in_footer=true on older WordPress, which is safe because
 		// dock.js wraps its init in a DOMContentLoaded guard.
 		$script_args = [ 'strategy' => 'defer', 'in_footer' => true ];
+
+		wp_enqueue_script(
+			'pdx-module-icons',
+			PDX_URL . 'assets/js/pdx-module-icons.js',
+			[],
+			PDX_VERSION,
+			$script_args
+		);
 		wp_enqueue_script(
 			'pdx-dock',
 			PDX_URL . 'assets/js/dock.js',
-			[],
+			[ 'pdx-module-icons' ],
 			PDX_VERSION,
 			$script_args
 		);

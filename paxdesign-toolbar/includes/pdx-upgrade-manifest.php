@@ -13,6 +13,7 @@ return [
 		'includes/class-pdx-http.php',
 		'includes/class-pdx-intelligence.php',
 		'includes/class-pdx-url-analyzer.php',
+		'includes/class-pdx-phishing-heuristics.php',
 		'includes/class-pdx-scan-orchestrator.php',
 		'includes/class-pdx-threat-feeds.php',
 		'includes/class-pdx-ai-service.php',

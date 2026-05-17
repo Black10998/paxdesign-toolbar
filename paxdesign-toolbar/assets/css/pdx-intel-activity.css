@@ -1,0 +1,168 @@
+/* Intelligence activity — live scan atmosphere (v8.2) */
+
+.pdx-mod-icon {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+  vertical-align: -0.15em;
+}
+
+.pdx-mod-icon--trust { color: var(--pdx-accent, #c2ff00); filter: drop-shadow(0 0 6px rgba(194, 255, 0, 0.35)); }
+.pdx-mod-icon--osint { color: #5ecbff; }
+.pdx-mod-icon--threat { color: #ff6b6b; }
+.pdx-mod-icon--personas { color: #c084fc; }
+.pdx-mod-icon--builder { color: #fbbf24; }
+.pdx-mod-icon--pipeline { color: #34d399; }
+.pdx-mod-icon--automation { color: #fb923c; }
+.pdx-mod-icon--timeline { color: #93c5fd; }
+.pdx-mod-icon--investigation { color: #67e8f9; }
+.pdx-mod-icon--graph { color: #a78bfa; }
+.pdx-mod-icon--memory { color: #86efac; }
+.pdx-mod-icon--team { color: #fcd34d; }
+
+.pdx-intel-activity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem 1rem;
+  margin-bottom: 0.75rem;
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(12, 18, 28, 0.95), rgba(8, 12, 20, 0.88));
+  border: 1px solid rgba(194, 255, 0, 0.12);
+  position: relative;
+  overflow: hidden;
+}
+
+.pdx-intel-activity::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 40%, rgba(194, 255, 0, 0.06), transparent 65%);
+  pointer-events: none;
+}
+
+.pdx-intel-activity__viz {
+  position: relative;
+  width: 120px;
+  height: 120px;
+}
+
+.pdx-intel-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--pdx-accent, #c2ff00);
+  box-shadow: 0 0 18px rgba(194, 255, 0, 0.65);
+  animation: pdx-intel-pulse 1.4s ease-in-out infinite;
+}
+
+.pdx-intel-node {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(194, 255, 0, 0.5);
+  background: rgba(8, 14, 24, 0.9);
+  animation: pdx-intel-orbit 2.8s linear infinite;
+}
+
+.pdx-intel-node--a { left: 8px; top: 50%; animation-delay: 0s; }
+.pdx-intel-node--b { right: 10px; top: 22px; animation-delay: -0.9s; }
+.pdx-intel-node--c { right: 18px; bottom: 12px; animation-delay: -1.8s; }
+
+.pdx-intel-signal {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 42px;
+  margin-left: -1px;
+  transform-origin: center bottom;
+  background: linear-gradient(to top, transparent, rgba(194, 255, 0, 0.55));
+  opacity: 0.5;
+  animation: pdx-intel-sweep 2.2s ease-in-out infinite;
+}
+
+.pdx-intel-signal--1 { transform: rotate(0deg); }
+.pdx-intel-signal--2 { transform: rotate(120deg); animation-delay: 0.4s; }
+.pdx-intel-signal--3 { transform: rotate(240deg); animation-delay: 0.8s; }
+
+.pdx-intel-activity__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 1;
+}
+
+.pdx-intel-activity__title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--pdx-text, #e6edf3);
+  letter-spacing: 0.02em;
+}
+
+.pdx-intel-activity--osint .pdx-intel-core,
+.pdx-intel-activity--osint .pdx-intel-signal { background-color: transparent; }
+.pdx-intel-activity--osint .pdx-intel-core { background: #5ecbff; box-shadow: 0 0 16px rgba(94, 203, 255, 0.55); }
+.pdx-intel-activity--osint .pdx-intel-signal { background: linear-gradient(to top, transparent, rgba(94, 203, 255, 0.5)); }
+
+.pdx-intel-activity--threat .pdx-intel-core { background: #ff6b6b; box-shadow: 0 0 16px rgba(255, 107, 107, 0.5); }
+.pdx-intel-activity--threat .pdx-intel-signal { background: linear-gradient(to top, transparent, rgba(255, 107, 107, 0.45)); }
+
+.pdx-intel-activity--builder .pdx-intel-core { background: #fbbf24; box-shadow: 0 0 16px rgba(251, 191, 36, 0.45); }
+.pdx-intel-activity--pipeline .pdx-intel-core { background: #34d399; box-shadow: 0 0 16px rgba(52, 211, 153, 0.45); }
+.pdx-intel-activity--automation .pdx-intel-core { background: #fb923c; box-shadow: 0 0 16px rgba(251, 146, 60, 0.45); }
+.pdx-intel-activity--graph .pdx-intel-core { background: #a78bfa; box-shadow: 0 0 16px rgba(167, 139, 250, 0.45); }
+.pdx-intel-activity--timeline .pdx-intel-core { background: #93c5fd; box-shadow: 0 0 16px rgba(147, 197, 253, 0.45); }
+
+.pdx-deep-pipeline.pdx-dp--running .pdx-dp-header-left .pdx-dp-pulse-ring {
+  display: none;
+}
+
+.pdx-deep-pipeline.pdx-dp--running .pdx-dp-header {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pdx-dp-intel-slot {
+  width: 100%;
+  margin-bottom: 0.35rem;
+}
+
+.pdx-dp-intel-slot .pdx-intel-activity {
+  margin-bottom: 0;
+  padding: 0.65rem;
+}
+
+.pdx-dp-intel-slot .pdx-intel-activity__viz {
+  width: 72px;
+  height: 72px;
+}
+
+@keyframes pdx-intel-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.85; }
+}
+
+@keyframes pdx-intel-orbit {
+  0% { transform: rotate(0deg) translateX(38px) rotate(0deg); }
+  100% { transform: rotate(360deg) translateX(38px) rotate(-360deg); }
+}
+
+@keyframes pdx-intel-sweep {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 0.85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdx-intel-core,
+  .pdx-intel-node,
+  .pdx-intel-signal {
+    animation: none !important;
+  }
+}

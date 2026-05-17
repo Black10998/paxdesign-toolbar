@@ -950,6 +950,54 @@ class PDX_Intelligence {
 			$factors[] = [ 'factor' => 'Redirect Chain', 'value' => (int) $forensics['redirect_hops'] . ' hops', 'risk' => 8, 'weight' => 'medium' ];
 		}
 
+		$path_risk = (int) ( $forensics['path_risk_score'] ?? 0 );
+		if ( $path_risk >= 10 ) {
+			$path_factor = min( 18, $path_risk );
+			$score      += $path_factor;
+			$factors[]   = [ 'factor' => 'Suspicious URL Path', 'value' => "{$path_risk}", 'risk' => $path_factor, 'weight' => 'high' ];
+		}
+
+		$landing_risk = (int) ( $forensics['landing_risk_score'] ?? 0 );
+		if ( $landing_risk >= 10 ) {
+			$land_factor = min( 20, $landing_risk );
+			$score      += $land_factor;
+			$factors[]   = [ 'factor' => 'Landing Page Heuristics', 'value' => "{$landing_risk}", 'risk' => $land_factor, 'weight' => 'high' ];
+		}
+
+		$intent = (string) ( $forensics['redirect_intent'] ?? '' );
+		if ( in_array( $intent, [ 'multi_hop_laundering', 'cross_domain_delivery' ], true ) ) {
+			$score    += 10;
+			$factors[] = [ 'factor' => 'Redirect Intent', 'value' => $intent, 'risk' => 10, 'weight' => 'high' ];
+		}
+
+		if ( ! empty( $forensics['external_form_action'] ) ) {
+			$score    += 14;
+			$factors[] = [ 'factor' => 'Credential Exfiltration Form', 'value' => 'External action', 'risk' => 14, 'weight' => 'critical' ];
+		}
+
+		$malware = (array) ( $forensics['malware_indicators'] ?? [] );
+		if ( ! empty( $malware ) ) {
+			$mal_risk = min( 22, count( $malware ) * 8 );
+			$score   += $mal_risk;
+			$factors[] = [
+				'factor' => 'Malware / Abuse Indicators',
+				'value'  => implode( ', ', array_slice( $malware, 0, 3 ) ),
+				'risk'   => $mal_risk,
+				'weight' => 'high',
+			];
+		}
+
+		$infra_score = (int) ( $forensics['infrastructure_score'] ?? 0 );
+		if ( $infra_score > 0 ) {
+			$score    += $infra_score;
+			$factors[] = [
+				'factor' => 'Infrastructure Fingerprint',
+				'value'  => (string) ( $forensics['infrastructure_fingerprint'] ?? 'mapped' ),
+				'risk'   => $infra_score,
+				'weight' => 'medium',
+			];
+		}
+
 		$score = min( 100, max( 0, $score ) );
 
 		$ok_sources = 0;
@@ -1189,6 +1237,23 @@ class PDX_Intelligence {
 		// Good SSL
 		if ( in_array( $report['sources']['ssl']['grade'] ?? '', [ 'A+', 'A' ], true ) ) {
 			$signals[] = [ 'signal' => 'Strong SSL/TLS configuration', 'type' => 'positive' ];
+		}
+
+		$forensics = $report['forensics'] ?? [];
+		if ( (int) ( $forensics['phishing_score'] ?? 0 ) >= 45 ) {
+			$signals[] = [ 'signal' => 'Elevated phishing heuristics on landing page', 'type' => 'negative' ];
+		}
+		if ( ! empty( $forensics['malware_indicators'] ) ) {
+			$signals[] = [
+				'signal' => 'Malware-style indicators: ' . implode( ', ', array_slice( (array) $forensics['malware_indicators'], 0, 3 ) ),
+				'type'   => 'negative',
+			];
+		}
+		if ( in_array( $forensics['redirect_intent'] ?? '', [ 'multi_hop_laundering', 'cross_domain_delivery' ], true ) ) {
+			$signals[] = [ 'signal' => 'Suspicious redirect intent (' . $forensics['redirect_intent'] . ')', 'type' => 'negative' ];
+		}
+		if ( ! empty( $forensics['external_form_action'] ) ) {
+			$signals[] = [ 'signal' => 'Credential form posts to external host', 'type' => 'negative' ];
 		}
 
 		return $signals;

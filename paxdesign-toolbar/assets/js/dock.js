@@ -593,6 +593,7 @@
       runIntelPipeline({
         btn: btn,
         result: result,
+        module: 'trust',
         fast: true,
         id: 'pdx-trust-pipeline',
         stages: trustStages,
@@ -1028,6 +1029,7 @@
       runIntelPipeline({
         btn: btn,
         result: result,
+        module: 'osint',
         id: 'pdx-osint-pipeline',
         stages: osintStages,
         title: 'OSINT Investigation — ' + target,
@@ -2658,7 +2660,9 @@
 
       if (cfg.fast) {
         setBtnBusy(btn, true, cfg.busyLabel || 'Running…');
-        resultEl.innerHTML = '<div class="pdx-scan-running"><div class="pdx-dp-pulse-ring"></div><span>' + escHtml(cfg.title || 'Running analysis…') + '</div>';
+        resultEl.innerHTML = (typeof global.pdxBuildIntelActivity === 'function')
+          ? global.pdxBuildIntelActivity(cfg.module || 'trust', cfg.title || 'Running analysis…')
+          : '<div class="pdx-scan-running"><div class="pdx-dp-pulse-ring"></div><span>' + escHtml(cfg.title || 'Running analysis…') + '</span></div>';
         Promise.resolve(cfg.api()).then(function (data) {
           setBtnBusy(btn, false);
           if (!data || data.error) {
@@ -2680,6 +2684,7 @@
       resultEl.innerHTML = buildDeepPipeline(cfg.id, cfg.stages, {
         title: cfg.title,
         showLog: cfg.showLog !== false,
+        module: cfg.module || 'osint',
       });
 
       var apiDone = false;
@@ -2770,6 +2775,11 @@
         '</div>';
       }).join('');
 
+      var mod = opts.module || 'osint';
+      var activityHtml = (typeof global.pdxBuildIntelActivity === 'function')
+        ? '<div class="pdx-dp-intel-slot">' + global.pdxBuildIntelActivity(mod, opts.title || 'Intelligence pipeline active') + '</div>'
+        : '';
+
       return '<div class="pdx-deep-pipeline" id="' + pipelineId + '">' +
         '<div class="pdx-dp-header">' +
           '<div class="pdx-dp-header-left">' +
@@ -2778,6 +2788,7 @@
           '</div>' +
           '<div class="pdx-dp-timer" id="' + pipelineId + '-timer">0.0s</div>' +
         '</div>' +
+        activityHtml +
         '<div class="pdx-dp-stages">' + stageRows + '</div>' +
         (opts.showLog !== false ? '<div class="pdx-dp-log" id="' + pipelineId + '-log"></div>' : '') +
         '<div class="pdx-dp-findings" id="' + pipelineId + '-findings"></div>' +
@@ -3434,6 +3445,10 @@
     }
 
     function svgIcon(name) {
+      if (typeof global.pdxModuleIcon === 'function') {
+        var modKeys = ['trust','osint','threat','personas','builder','pipeline','automation','timeline','investigation','graph','memory','team','check'];
+        if (modKeys.indexOf(name) !== -1) return global.pdxModuleIcon(name);
+      }
       var icons = {
         shield:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
         search:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-3.5-3.5"/></svg>',
@@ -4441,6 +4456,7 @@
       runIntelPipeline({
         btn: btn,
         result: res,
+        module: 'threat',
         id: 'pdx-corr-pipeline',
         stages: corrStages,
         title: 'IOC Correlation — ' + value,
@@ -4770,6 +4786,7 @@
         runIntelPipeline({
           btn: btn,
           result: res,
+          module: 'threat',
           id: 'pdx-feeds-pipeline',
           stages: [
             { label: 'Connecting to feed endpoints', detail: 'AlienVault OTX, Abuse.ch, CISA KEV', duration: 360 },

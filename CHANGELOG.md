@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 8.2.0 — 2026-05-17
+
+**Intelligence engine & scan UX**
+
+- New `PDX_Phishing_Heuristics` — path patterns, redirect intent, landing-page signals, brand impersonation, punycode/TLD risk, infrastructure fingerprinting
+- URL analyzer and scan orchestrator use expanded HTML/behavioral phishing signals; intelligence risk scoring includes path, landing, redirect, and infrastructure factors
+- Per-module SVG icons (`pdx-module-icons.js`) and animated intelligence activity UI during TrustCheck, OSINT, threat correlation, and feed sync pipelines
+- Fixed invalid `motion.div` HTML typos in dock pipeline templates; `pdx-module-icons` script enqueue order corrected
+
+**Install:** `releases/paxdesign-toolbar-8.2.0.zip` — tag `v8.2.0`
+
 ## 8.1.5 — 2026-05-17
 
 **Critical hotfix — REST API parse error blocked activation**
