@@ -413,11 +413,22 @@ class PDX_Updater {
 		$this->upgrade_finalized           = false;
 		$this->upgrade_shutdown_registered = false;
 
+		$target_version = '';
+		if ( is_array( $hook_extra ) && ! empty( $hook_extra['new_version'] ) ) {
+			$target_version = (string) $hook_extra['new_version'];
+		} else {
+			$release = $this->fetch_release( false );
+			if ( is_array( $release ) && ! empty( $release['version'] ) ) {
+				$target_version = (string) $release['version'];
+			}
+		}
+
 		$this->set_state(
 			[
 				'upgrading' => true,
 				'started'   => time(),
 				'from'      => PDX_VERSION,
+				'target'    => $target_version,
 			]
 		);
 
@@ -476,6 +487,20 @@ class PDX_Updater {
 			return new WP_Error(
 				'pdx_invalid_version',
 				__( 'Updated package does not contain a valid plugin version.', 'paxdesign-toolbar' )
+			);
+		}
+
+		$state = $this->get_state();
+		if ( ! empty( $state['target'] ) && version_compare( (string) $plugin_data['Version'], (string) $state['target'], '<' ) ) {
+			$this->handle_failed_upgrade( $hook_extra );
+			return new WP_Error(
+				'pdx_version_mismatch',
+				sprintf(
+					/* translators: 1: expected version, 2: installed version */
+					__( 'Update package version %1$s does not match expected %2$s.', 'paxdesign-toolbar' ),
+					$plugin_data['Version'],
+					$state['target']
+				)
 			);
 		}
 
@@ -729,6 +754,7 @@ class PDX_Updater {
 			}
 
 			if ( $this->plugin_passes_health_check() ) {
+				$this->purge_legacy_files();
 				$this->cleanup_duplicate_plugin_folders( true );
 				$this->cleanup_upgrade_artifacts();
 				$this->cleanup_failed_backups();
@@ -827,12 +853,44 @@ class PDX_Updater {
 			return false;
 		}
 
-		$release = $this->fetch_release( false );
-		if ( ! is_array( $release ) || empty( $release['version'] ) ) {
+		$state  = $this->get_state();
+		$from   = isset( $state['from'] ) ? (string) $state['from'] : '';
+		$target = isset( $state['target'] ) ? (string) $state['target'] : '';
+
+		if ( $target && version_compare( $installed, $target, '>=' ) ) {
 			return true;
 		}
 
-		return version_compare( $installed, $release['version'], '>=' );
+		if ( $from && version_compare( $installed, $from, '>' ) ) {
+			return true;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Remove legacy files left from older releases (not overwritten by ZIP).
+	 */
+	private function purge_legacy_files(): void {
+		if ( ! class_exists( 'PDX_Recovery', false ) ) {
+			return;
+		}
+
+		$manifest = PDX_Recovery::upgrade_manifest();
+		$paths    = $manifest['legacy_remove'] ?? [];
+		if ( empty( $paths ) ) {
+			return;
+		}
+
+		$base = $this->plugin_dir();
+		foreach ( $paths as $rel ) {
+			$path = $base . '/' . ltrim( (string) $rel, '/' );
+			if ( is_file( $path ) ) {
+				@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			} elseif ( is_dir( $path ) ) {
+				$this->delete_directory( $path );
+			}
+		}
 	}
 
 	/**
