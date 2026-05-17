@@ -131,7 +131,7 @@ class PDX_Updater {
 
 		$cached = get_transient( self::CACHE_KEY );
 		if ( is_array( $cached ) && ! $force ) {
-			return $cached;
+			return $this->normalize_release_data( $cached );
 		}
 
 		$url = 'https://api.github.com/repos/' . self::GITHUB_REPO . '/releases/latest';
@@ -149,38 +149,44 @@ class PDX_Updater {
 		update_option( self::LAST_CHECK_OPTION, time() );
 
 		if ( is_wp_error( $res ) ) {
-			return [
-				'error'   => $res->get_error_message(),
-				'version' => '',
-				'package' => '',
-				'url'     => 'https://github.com/' . self::GITHUB_REPO,
-				'name'    => 'PaxDesign Utility Dock',
-				'notes'   => '',
-			];
+			return $this->normalize_release_data(
+				[
+					'error'   => $res->get_error_message(),
+					'version' => '',
+					'package' => '',
+					'url'     => 'https://github.com/' . self::GITHUB_REPO,
+					'name'    => 'PaxDesign Utility Dock',
+					'notes'   => '',
+				]
+			);
 		}
 
 		$code = wp_remote_retrieve_response_code( $res );
 		if ( 200 !== (int) $code ) {
-			return [
-				'error'   => sprintf( 'GitHub API returned HTTP %d.', (int) $code ),
-				'version' => '',
-				'package' => '',
-				'url'     => 'https://github.com/' . self::GITHUB_REPO,
-				'name'    => 'PaxDesign Utility Dock',
-				'notes'   => '',
-			];
+			return $this->normalize_release_data(
+				[
+					'error'   => sprintf( 'GitHub API returned HTTP %d.', (int) $code ),
+					'version' => '',
+					'package' => '',
+					'url'     => 'https://github.com/' . self::GITHUB_REPO,
+					'name'    => 'PaxDesign Utility Dock',
+					'notes'   => '',
+				]
+			);
 		}
 
 		$body = json_decode( wp_remote_retrieve_body( $res ), true );
 		if ( ! is_array( $body ) || empty( $body['tag_name'] ) ) {
-			return [
-				'error'   => 'Invalid release metadata from GitHub.',
-				'version' => '',
-				'package' => '',
-				'url'     => 'https://github.com/' . self::GITHUB_REPO,
-				'name'    => 'PaxDesign Utility Dock',
-				'notes'   => '',
-			];
+			return $this->normalize_release_data(
+				[
+					'error'   => 'Invalid release metadata from GitHub.',
+					'version' => '',
+					'package' => '',
+					'url'     => 'https://github.com/' . self::GITHUB_REPO,
+					'name'    => 'PaxDesign Utility Dock',
+					'notes'   => '',
+				]
+			);
 		}
 
 		$version = ltrim( (string) $body['tag_name'], 'vV' );
@@ -197,27 +203,63 @@ class PDX_Updater {
 		}
 
 		if ( ! $package ) {
-			return [
-				'error'   => 'No installable release ZIP asset found on GitHub. Upload paxdesign-toolbar-x.y.z.zip to the release.',
+			return $this->normalize_release_data(
+				[
+					'error'   => 'No installable release ZIP asset found on GitHub. Upload paxdesign-toolbar-x.y.z.zip to the release.',
+					'version' => $version,
+					'package' => '',
+					'url'     => $body['html_url'] ?? 'https://github.com/' . self::GITHUB_REPO,
+					'name'    => 'PaxDesign Utility Dock',
+					'notes'   => $body['body'] ?? '',
+				]
+			);
+		}
+
+		$data = $this->normalize_release_data(
+			[
 				'version' => $version,
-				'package' => '',
+				'package' => $package,
 				'url'     => $body['html_url'] ?? 'https://github.com/' . self::GITHUB_REPO,
 				'name'    => 'PaxDesign Utility Dock',
 				'notes'   => $body['body'] ?? '',
-			];
-		}
-
-		$data = [
-			'version' => $version,
-			'package' => $package,
-			'url'     => $body['html_url'] ?? 'https://github.com/' . self::GITHUB_REPO,
-			'name'    => 'PaxDesign Utility Dock',
-			'notes'   => $body['body'] ?? '',
-			'error'   => null,
-		];
+				'error'   => null,
+			]
+		);
 
 		set_transient( self::CACHE_KEY, $data, self::CACHE_TTL );
 		return $data;
+	}
+
+	/**
+	 * WordPress core (esc_url, etc.) rejects null strings on PHP 8.1+.
+	 *
+	 * @param array<string, mixed> $data
+	 * @return array<string, mixed>
+	 */
+	private function normalize_release_data( array $data ): array {
+		$fallback_url = 'https://github.com/' . self::GITHUB_REPO;
+
+		$data['version'] = isset( $data['version'] ) ? (string) $data['version'] : '';
+		$data['package'] = isset( $data['package'] ) ? (string) $data['package'] : '';
+		$data['url']     = ! empty( $data['url'] ) ? (string) $data['url'] : $fallback_url;
+		$data['name']    = ! empty( $data['name'] ) ? (string) $data['name'] : 'PaxDesign Utility Dock';
+		$data['notes']   = isset( $data['notes'] ) ? (string) $data['notes'] : '';
+
+		return $data;
+	}
+
+	/**
+	 * @return string WordPress version string safe for update metadata (never null).
+	 */
+	private function wp_version_for_update_meta(): string {
+		global $wp_version;
+
+		if ( is_string( $wp_version ) && '' !== $wp_version ) {
+			return $wp_version;
+		}
+
+		$blog_version = get_bloginfo( 'version' );
+		return is_string( $blog_version ) ? $blog_version : '';
 	}
 
 	public function inject_update( $transient ) {
@@ -237,14 +279,16 @@ class PDX_Updater {
 			return $transient;
 		}
 
-		$plugin = $this->plugin_basename();
+		$release = $this->normalize_release_data( $release );
+		$plugin  = $this->plugin_basename();
+
 		$transient->response[ $plugin ] = (object) [
 			'slug'        => PDX_SLUG,
 			'plugin'      => $plugin,
 			'new_version' => $release['version'],
 			'url'         => $release['url'],
 			'package'     => $release['package'],
-			'tested'      => get_bloginfo( 'version' ),
+			'tested'      => $this->wp_version_for_update_meta(),
 			'id'          => $plugin,
 		];
 
@@ -261,6 +305,9 @@ class PDX_Updater {
 			return $result;
 		}
 
+		$release = $this->normalize_release_data( $release );
+		$notes   = $release['notes'] !== '' ? $release['notes'] : 'See GitHub releases for changelog.';
+
 		return (object) [
 			'name'          => $release['name'],
 			'slug'          => PDX_SLUG,
@@ -270,7 +317,7 @@ class PDX_Updater {
 			'download_link' => $release['package'],
 			'sections'      => [
 				'description' => 'Enterprise utility dock for WordPress.',
-				'changelog'   => wp_kses_post( $release['notes'] ),
+				'changelog'   => wp_kses_post( $notes ),
 			],
 		];
 	}

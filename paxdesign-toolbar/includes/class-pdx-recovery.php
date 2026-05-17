@@ -54,6 +54,12 @@ final class PDX_Recovery {
 
 	public static function register(): void {
 		add_action( 'plugins_loaded', [ self::class, 'boot' ], 0 );
+		// Always clear stale maintenance after AJAX/fatal upgrades (runs even if updater fatals).
+		register_shutdown_function( [ self::class, 'shutdown_release_maintenance' ] );
+	}
+
+	public static function shutdown_release_maintenance(): void {
+		self::release_maintenance_file();
 	}
 
 	public static function boot(): void {

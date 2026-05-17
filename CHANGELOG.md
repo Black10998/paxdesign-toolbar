@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 8.1.4 — 2026-05-17
+
+**Updater hotfix — PHP 8.1 null deprecations + maintenance after fatal**
+
+- Update metadata (`url`, `package`, `tested`, changelog) never passes `null` into WordPress (fixes `strpos`/`str_replace` deprecations during plugin update)
+- `PDX_Recovery` registers shutdown handler to remove `.maintenance` even when the updater fatals mid-request
+
+**Install:** `releases/paxdesign-toolbar-8.1.4.zip` — tag `v8.1.4`
+
+**Stuck on pre-8.1.3 updater:** FTP-replace `includes/class-pdx-updater.php` and `includes/class-pdx-recovery.php` from this release, delete `/.maintenance`, then update via wp-admin.
+
 ## 8.1.3 — 2026-05-17
 
 **Critical updater fix — maintenance mode cleanup**
