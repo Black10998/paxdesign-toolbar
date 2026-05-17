@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## 8.3.0 — 2026-05-17
+
+**Visible intelligence UX — module identity, scan atmosphere, phishing surface**
+
+- New `pdx-module-chrome.css` — per-module dock glow, themed panel headers, cyber grid atmosphere
+- Dock buttons now use **module-specific SVGs** via `pdx-module-icons.js` (replaces generic PHP icons at runtime)
+- Stronger `pdx-intel-activity` animations during TrustCheck, OSINT, threat correlation, and feed sync
+- Trust/OSINT/Threat panels use themed headers, capability tags, and module accent colors
+- Prominent **Phishing & URL intelligence** hero card on TrustCheck results (scores, redirects, credential forms, verdict)
+- Asset cache busting uses `PDX_VERSION` + file modification time (stops stale JS/CSS after update)
+- `svgIcon()` routes all legacy names (`shield`, `search`, `alert`, etc.) through module icon aliases
+
+**Install:** `releases/paxdesign-toolbar-8.3.0.zip` — tag `v8.3.0`
+
+**After update:** hard-refresh the site (Ctrl+F5) or clear Hostinger cache so new CSS/JS load.
+
 ## 8.2.1 — 2026-05-17
 
 **Critical updater fix — wp-admin update not applying new version**

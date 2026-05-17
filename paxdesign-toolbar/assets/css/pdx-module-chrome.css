@@ -1,0 +1,221 @@
+/* Module identity & enterprise intelligence chrome (v8.3) */
+
+#pdx-panel[data-pdx-module] {
+  --pdx-mod-accent: var(--pdx-accent, #c2ff00);
+  --pdx-mod-glow: rgba(194, 255, 0, 0.22);
+}
+
+#pdx-panel[data-pdx-module="trust"]       { --pdx-mod-accent: #c2ff00; --pdx-mod-glow: rgba(194, 255, 0, 0.28); }
+#pdx-panel[data-pdx-module="osint"]       { --pdx-mod-accent: #5ecbff; --pdx-mod-glow: rgba(94, 203, 255, 0.28); }
+#pdx-panel[data-pdx-module="threat"]      { --pdx-mod-accent: #ff6b6b; --pdx-mod-glow: rgba(255, 107, 107, 0.28); }
+#pdx-panel[data-pdx-module="personas"]    { --pdx-mod-accent: #c084fc; --pdx-mod-glow: rgba(192, 132, 252, 0.28); }
+#pdx-panel[data-pdx-module="builder"]     { --pdx-mod-accent: #fbbf24; --pdx-mod-glow: rgba(251, 191, 36, 0.28); }
+#pdx-panel[data-pdx-module="pipeline"]    { --pdx-mod-accent: #34d399; --pdx-mod-glow: rgba(52, 211, 153, 0.28); }
+#pdx-panel[data-pdx-module="automation"]  { --pdx-mod-accent: #fb923c; --pdx-mod-glow: rgba(251, 146, 60, 0.28); }
+#pdx-panel[data-pdx-module="investigation"] { --pdx-mod-accent: #67e8f9; --pdx-mod-glow: rgba(103, 232, 249, 0.28); }
+#pdx-panel[data-pdx-module="graph"]       { --pdx-mod-accent: #a78bfa; --pdx-mod-glow: rgba(167, 139, 250, 0.28); }
+#pdx-panel[data-pdx-module="memory"]      { --pdx-mod-accent: #86efac; --pdx-mod-glow: rgba(134, 239, 172, 0.28); }
+#pdx-panel[data-pdx-module="team"]        { --pdx-mod-accent: #fcd34d; --pdx-mod-glow: rgba(252, 211, 77, 0.28); }
+#pdx-panel[data-pdx-module="timeline"]    { --pdx-mod-accent: #93c5fd; --pdx-mod-glow: rgba(147, 197, 253, 0.28); }
+
+/* Dock buttons — per-module color + glow */
+#pdx-dock .pdx-btn[data-module] {
+  position: relative;
+  transition: box-shadow 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+}
+
+#pdx-dock .pdx-btn[data-module] .pdx-mod-icon {
+  width: 1.35em;
+  height: 1.35em;
+  filter: drop-shadow(0 0 8px var(--pdx-mod-glow, rgba(194, 255, 0, 0.35)));
+}
+
+#pdx-dock .pdx-btn--trust .pdx-mod-icon       { color: #c2ff00; }
+#pdx-dock .pdx-btn--osint .pdx-mod-icon       { color: #5ecbff; }
+#pdx-dock .pdx-btn--threat .pdx-mod-icon      { color: #ff6b6b; }
+#pdx-dock .pdx-btn--personas .pdx-mod-icon    { color: #c084fc; }
+#pdx-dock .pdx-btn--builder .pdx-mod-icon     { color: #fbbf24; }
+#pdx-dock .pdx-btn--pipeline .pdx-mod-icon    { color: #34d399; }
+#pdx-dock .pdx-btn--automation .pdx-mod-icon   { color: #fb923c; }
+#pdx-dock .pdx-btn--investigation .pdx-mod-icon { color: #67e8f9; }
+#pdx-dock .pdx-btn--graph .pdx-mod-icon        { color: #a78bfa; }
+#pdx-dock .pdx-btn--memory .pdx-mod-icon       { color: #86efac; }
+#pdx-dock .pdx-btn--team .pdx-mod-icon         { color: #fcd34d; }
+#pdx-dock .pdx-btn--timeline .pdx-mod-icon     { color: #93c5fd; }
+
+#pdx-dock .pdx-btn.is-active[data-module] {
+  box-shadow: 0 0 0 1px var(--pdx-mod-accent), 0 0 18px var(--pdx-mod-glow);
+  transform: translateY(-1px);
+}
+
+/* Panel header atmosphere */
+.pdx-ph--trust .pdx-ph-hd,
+.pdx-ph--osint .pdx-ph-hd,
+.pdx-ph--threat .pdx-ph-hd,
+.pdx-ph--personas .pdx-ph-hd,
+.pdx-ph--builder .pdx-ph-hd,
+.pdx-ph--pipeline .pdx-ph-hd,
+.pdx-ph--automation .pdx-ph-hd,
+.pdx-ph--investigation .pdx-ph-hd,
+.pdx-ph--graph .pdx-ph-hd,
+.pdx-ph--memory .pdx-ph-hd,
+.pdx-ph--team .pdx-ph-hd {
+  position: relative;
+  padding: 1rem 1rem 0.85rem;
+  margin: -0.5rem -0.5rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--pdx-mod-accent) 35%, transparent);
+  background:
+    linear-gradient(135deg, rgba(8, 12, 20, 0.92), rgba(12, 18, 28, 0.75)),
+    repeating-linear-gradient(90deg, transparent, transparent 48px, rgba(255, 255, 255, 0.02) 48px, rgba(255, 255, 255, 0.02) 49px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 40px var(--pdx-mod-glow);
+  overflow: hidden;
+}
+
+.pdx-ph-hd::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 12% 20%, var(--pdx-mod-glow), transparent 55%);
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.pdx-ph-title--trust,
+.pdx-ph-title--osint,
+.pdx-ph-title--threat,
+.pdx-ph-title--personas,
+.pdx-ph-title--builder,
+.pdx-ph-title--pipeline,
+.pdx-ph-title--automation,
+.pdx-ph-title--investigation,
+.pdx-ph-title--graph,
+.pdx-ph-title--memory,
+.pdx-ph-title--team {
+  font-size: 1.12rem;
+  letter-spacing: 0.02em;
+}
+
+.pdx-ph-title .pdx-mod-icon {
+  width: 1.65em;
+  height: 1.65em;
+  filter: drop-shadow(0 0 10px var(--pdx-mod-glow));
+}
+
+.pdx-ph-title--trust .pdx-mod-icon       { color: #c2ff00; }
+.pdx-ph-title--osint .pdx-mod-icon       { color: #5ecbff; }
+.pdx-ph-title--threat .pdx-mod-icon      { color: #ff6b6b; }
+.pdx-ph-title--personas .pdx-mod-icon    { color: #c084fc; }
+.pdx-ph-title--builder .pdx-mod-icon     { color: #fbbf24; }
+.pdx-ph-title--pipeline .pdx-mod-icon    { color: #34d399; }
+.pdx-ph-title--automation .pdx-mod-icon  { color: #fb923c; }
+.pdx-ph-title--investigation .pdx-mod-icon { color: #67e8f9; }
+.pdx-ph-title--graph .pdx-mod-icon       { color: #a78bfa; }
+.pdx-ph-title--memory .pdx-mod-icon      { color: #86efac; }
+.pdx-ph-title--team .pdx-mod-icon        { color: #fcd34d; }
+
+.pdx-cap-tag--intel {
+  border-color: color-mix(in srgb, var(--pdx-mod-accent) 45%, transparent);
+  color: var(--pdx-mod-accent);
+  background: color-mix(in srgb, var(--pdx-mod-accent) 12%, transparent);
+}
+
+/* Phishing / threat intelligence hero */
+.pdx-intel-hero {
+  position: relative;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  background: linear-gradient(145deg, rgba(40, 12, 16, 0.95), rgba(16, 8, 12, 0.9));
+  overflow: hidden;
+}
+
+.pdx-intel-hero--clean {
+  border-color: rgba(194, 255, 0, 0.35);
+  background: linear-gradient(145deg, rgba(20, 28, 8, 0.95), rgba(10, 14, 8, 0.9));
+}
+
+.pdx-intel-hero--warn {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: linear-gradient(145deg, rgba(32, 24, 8, 0.95), rgba(16, 12, 6, 0.9));
+}
+
+.pdx-intel-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.02) 2px,
+    rgba(255, 255, 255, 0.02) 4px
+  );
+  animation: pdx-scanlines 6s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes pdx-scanlines {
+  from { transform: translateY(0); }
+  to { transform: translateY(8px); }
+}
+
+.pdx-intel-hero__head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.pdx-intel-hero__title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pdx-intel-hero__score {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.pdx-intel-hero__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.pdx-intel-hero__chip {
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Deep pipeline scan atmosphere */
+.pdx-deep-pipeline {
+  border: 1px solid color-mix(in srgb, var(--pdx-mod-accent) 25%, transparent);
+  box-shadow: 0 0 32px var(--pdx-mod-glow);
+}
+
+.pdx-dp-stage.is-active .pdx-dp-stage-label {
+  color: var(--pdx-mod-accent);
+  text-shadow: 0 0 12px var(--pdx-mod-glow);
+}
+
+#pdx-root::after {
+  content: 'PDX ' attr(data-pdx-version);
+  position: fixed;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

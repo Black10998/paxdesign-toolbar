@@ -15,6 +15,13 @@ class PDX_Frontend {
 		add_action( 'wp_footer',          [ $this, 'render' ], 100 );
 	}
 
+	private function asset_version( string $relative_path ): string {
+		$path = PDX_DIR . ltrim( $relative_path, '/' );
+		$mtime = is_readable( $path ) ? (string) filemtime( $path ) : '';
+
+		return PDX_VERSION . ( '' !== $mtime ? '.' . $mtime : '' );
+	}
+
 	public function enqueue(): void {
 		if ( ! $this->settings->should_render() ) return;
 
@@ -33,35 +40,42 @@ class PDX_Frontend {
 			'pdx-tokens',
 			PDX_URL . 'assets/css/pdx-tokens.css',
 			[],
-			PDX_VERSION
+			$this->asset_version( 'assets/css/pdx-tokens.css' )
 		);
 
 		wp_enqueue_style(
 			'pdx-dock',
 			PDX_URL . 'assets/css/dock.css',
 			[ 'pdx-tokens' ],
-			PDX_VERSION
+			$this->asset_version( 'assets/css/dock.css' )
 		);
 
 		wp_enqueue_style(
 			'pdx-dock-ui',
 			PDX_URL . 'assets/css/pdx-dock-ui.css',
 			[ 'pdx-dock', 'pdx-tokens' ],
-			PDX_VERSION
+			$this->asset_version( 'assets/css/pdx-dock-ui.css' )
 		);
 
 		wp_enqueue_style(
 			'pdx-panel-scroll',
 			PDX_URL . 'assets/css/pdx-panel-scroll.css',
 			[ 'pdx-dock-ui' ],
-			PDX_VERSION
+			$this->asset_version( 'assets/css/pdx-panel-scroll.css' )
 		);
 
 		wp_enqueue_style(
 			'pdx-intel-activity',
 			PDX_URL . 'assets/css/pdx-intel-activity.css',
 			[ 'pdx-dock-ui' ],
-			PDX_VERSION
+			$this->asset_version( 'assets/css/pdx-intel-activity.css' )
+		);
+
+		wp_enqueue_style(
+			'pdx-module-chrome',
+			PDX_URL . 'assets/css/pdx-module-chrome.css',
+			[ 'pdx-intel-activity' ],
+			$this->asset_version( 'assets/css/pdx-module-chrome.css' )
 		);
 
 		// Use defer strategy (WP 6.3+) so the script always runs after the DOM is ready.
@@ -73,14 +87,14 @@ class PDX_Frontend {
 			'pdx-module-icons',
 			PDX_URL . 'assets/js/pdx-module-icons.js',
 			[],
-			PDX_VERSION,
+			$this->asset_version( 'assets/js/pdx-module-icons.js' ),
 			$script_args
 		);
 		wp_enqueue_script(
 			'pdx-dock',
 			PDX_URL . 'assets/js/dock.js',
 			[ 'pdx-module-icons' ],
-			PDX_VERSION,
+			$this->asset_version( 'assets/js/dock.js' ),
 			$script_args
 		);
 
@@ -88,7 +102,7 @@ class PDX_Frontend {
 			'pdx-dock-v81',
 			PDX_URL . 'assets/js/dock-v81.js',
 			[ 'pdx-dock' ],
-			PDX_VERSION,
+			$this->asset_version( 'assets/js/dock-v81.js' ),
 			$script_args
 		);
 
@@ -180,6 +194,7 @@ class PDX_Frontend {
 			 data-theme="<?php echo $theme; ?>"
 			 data-size="<?php echo $size; ?>"
 			 data-mobile-dock="<?php echo $mobile_dock; ?>"
+			 data-pdx-version="<?php echo esc_attr( PDX_VERSION ); ?>"
 			 aria-label="PaxDesign Utility Dock"
 			 role="complementary">
 			<nav id="pdx-dock" aria-label="Utility dock tools">
@@ -205,9 +220,8 @@ class PDX_Frontend {
 			$prev_cat = $mod['category'];
 
 			printf(
-				'<button class="pdx-btn" data-module="%s" data-tip="%s" type="button" aria-label="%s" aria-expanded="false">%s</button>',
+				'<button class="pdx-btn pdx-btn--mod-%1$s" data-module="%1$s" data-tip="%2$s" type="button" aria-label="%2$s" aria-expanded="false">%3$s</button>',
 				esc_attr( $id ),
-				esc_attr( $mod['label'] ),
 				esc_attr( $mod['label'] ),
 				$this->get_svg_icon( $mod['icon'] )
 			);

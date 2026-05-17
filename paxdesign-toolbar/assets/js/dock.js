@@ -197,6 +197,7 @@
     function openPanel(moduleId) {
       if (state.commandPaletteOpen) closeCommandPalette();
       state.activeModule = moduleId;
+      setPanelModuleTheme(moduleId);
       _panelFocusReturn = document.activeElement;
       panel.setAttribute('aria-hidden', 'false');
       backdrop.classList.add('is-entering');
@@ -471,9 +472,77 @@
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
 
+    /* ── Module theme + icons (v8.3) ─────────────────────── */
+    var MODULE_THEME = {
+      trust: 'trust', osint: 'osint', threat: 'threat', personas: 'personas',
+      builder: 'builder', pipeline: 'pipeline', automation: 'automation',
+      connectors: 'graph', create: 'builder', workspace: 'timeline',
+      investigation: 'investigation', graph: 'graph', team: 'team',
+      memory: 'memory', billing: 'trust'
+    };
+
+    var MODULE_ACCENTS = {
+      trust: '#c2ff00', osint: '#5ecbff', threat: '#ff6b6b', personas: '#c084fc',
+      builder: '#fbbf24', pipeline: '#34d399', automation: '#fb923c',
+      investigation: '#67e8f9', graph: '#a78bfa', memory: '#86efac',
+      team: '#fcd34d', timeline: '#93c5fd'
+    };
+
+    function themeKey(moduleId) {
+      return MODULE_THEME[moduleId] || moduleId || 'trust';
+    }
+
+    function modIcon(moduleId) {
+      return svgIcon(themeKey(moduleId));
+    }
+
+    function setPanelModuleTheme(moduleId) {
+      var tk = themeKey(moduleId);
+      panel.setAttribute('data-pdx-module', tk);
+      inner.className = 'pdx-panel-inner pdx-panel-inner--' + tk;
+      if (MODULE_ACCENTS[tk]) {
+        document.documentElement.style.setProperty('--pdx-mod-accent', MODULE_ACCENTS[tk]);
+      }
+    }
+
+    function applyDockModuleIcons() {
+      if (typeof global.pdxModuleIcon !== 'function') return;
+      dock.querySelectorAll('.pdx-btn[data-module]').forEach(function (btn) {
+        var tk = themeKey(btn.dataset.module || '');
+        btn.innerHTML = global.pdxModuleIcon(tk);
+        btn.classList.add('pdx-btn--' + tk);
+      });
+    }
+
+    function renderPhishingIntelHero(forensics, urlFx, phish) {
+      forensics = forensics || {};
+      urlFx = urlFx || {};
+      phish = phish || {};
+      var score = forensics.phishing_score != null ? forensics.phishing_score : (phish.score != null ? phish.score : null);
+      if (score == null && !urlFx.redirect_count && !(phish.reasons && phish.reasons.length)) return '';
+
+      var verdict = (forensics.phishing_verdict || phish.verdict || 'unknown').toLowerCase();
+      var heroCls = verdict === 'clean' || verdict === 'low' ? 'pdx-intel-hero--clean' : (verdict === 'medium' ? 'pdx-intel-hero--warn' : '');
+      var html = '<div class="pdx-intel-hero ' + heroCls + '">' +
+        '<div class="pdx-intel-hero__head">' + modIcon('threat') +
+          '<span class="pdx-intel-hero__title">Phishing & URL intelligence</span>';
+      if (score != null) html += '<span class="pdx-intel-hero__score">' + escHtml(String(score)) + '</span>';
+      html += '</div><div class="pdx-intel-hero__grid">';
+      if (urlFx.redirect_count) html += '<span class="pdx-intel-hero__chip">Redirects: ' + escHtml(String(urlFx.redirect_count)) + '</span>';
+      if (forensics.has_login_form) html += '<span class="pdx-intel-hero__chip">Credential form</span>';
+      if (forensics.brand_impersonation) html += '<span class="pdx-intel-hero__chip">Brand impersonation</span>';
+      if (forensics.punycode_detected) html += '<span class="pdx-intel-hero__chip">Punycode / IDN</span>';
+      if (forensics.infrastructure_fingerprint) html += '<span class="pdx-intel-hero__chip">Infra fingerprint</span>';
+      html += '<span class="pdx-intel-hero__chip">Verdict: ' + escHtml(verdict) + '</span></div></div>';
+      return html.replace(/<motion\.div/g, '<div').replace(/<\/motion\.motion\.div>/g, '</div>');
+    }
+
+    applyDockModuleIcons();
+
     /* ── Panel renderer ───────────────────────────────────── */
     function renderPanel(moduleId) {
       if (!moduleId) return;
+      setPanelModuleTheme(moduleId);
       var mod = (C.modules && C.modules[moduleId]) || null;
       if (!mod) { inner.innerHTML = '<div class="pdx-empty">Module not found.</div>'; return; }
 
@@ -518,13 +587,14 @@
     ══════════════════════════════════════════════════════ */
     function renderTrust(mod, access) {
       inner.innerHTML =
-        '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>TrustCheck</span>' +
+        '<div class="pdx-ph pdx-ph--trust">' +
+          '<div class="pdx-ph-hd pdx-ph-hd--trust">' +
+            '<div class="pdx-ph-title pdx-ph-title--trust">' + modIcon('trust') + '<span>TrustCheck</span>' +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="System online"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Analyze domain reputation, SSL posture, infrastructure trust signals, DNS configuration, and behavioral indicators to identify potential risks.</div>' +
             '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag pdx-cap-tag--intel">Phishing Heuristics</span>' +
               '<span class="pdx-cap-tag">RDAP/WHOIS</span>' +
               '<span class="pdx-cap-tag">SSL/TLS</span>' +
               '<span class="pdx-cap-tag">DNS Analysis</span>' +
@@ -536,7 +606,7 @@
           '<div class="pdx-ph-body">' +
             '<div class="pdx-input-row">' +
               '<input id="pdx-trust-input" class="pdx-input" type="text" placeholder="domain.com or IP address" autocomplete="off" spellcheck="false"/>' +
-              '<button id="pdx-trust-btn" class="pdx-btn-primary">Analyze</button>' +
+              '<button id="pdx-trust-btn" class="pdx-btn-primary pdx-btn-primary--trust">Analyze</button>' +
             '</div>' +
             '<div id="pdx-trust-result"></div>' +
             '<div id="pdx-trust-history" class="pdx-section-sm"></div>' +
@@ -693,6 +763,11 @@
         '<span>Analysis complete — ' + escHtml(displayTarget) + '</span>' +
         '<span class="pdx-scan-complete-time">' + (data.duration ? data.duration + 's' : '') + '</span>' +
       '</div>';
+
+      var forensicsEarly = data.forensics || {};
+      var urlFxEarly = (src && src.url_forensics) || {};
+      var phishEarly = urlFxEarly.phishing || {};
+      html += renderPhishingIntelHero(forensicsEarly, urlFxEarly, phishEarly);
 
       /* ── Risk header with score ring ── */
       var circumference = 2 * Math.PI * 26; // r=26
@@ -945,13 +1020,14 @@
     function renderOsint(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
-        '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('search') + '<span>OSINT Agents</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
+        '<div class="pdx-ph pdx-ph--osint">' +
+          '<div class="pdx-ph-hd pdx-ph-hd--osint">' +
+            '<div class="pdx-ph-title pdx-ph-title--osint">' + modIcon('osint') + '<span>OSINT Agents</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="System online"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Deep intelligence gathering across domain, IP geolocation, VirusTotal, Shodan, email discovery, IOC extraction, and timeline reconstruction from multiple open-source feeds.</div>' +
             '<div class="pdx-module-caps">' +
+              '<span class="pdx-cap-tag pdx-cap-tag--intel">Live Intel Pipeline</span>' +
               '<span class="pdx-cap-tag">Domain Intel</span>' +
               '<span class="pdx-cap-tag">IP Geolocation</span>' +
               '<span class="pdx-cap-tag">VirusTotal</span>' +
@@ -963,7 +1039,7 @@
           '<div class="pdx-ph-body">' +
             '<div class="pdx-input-row">' +
               '<input id="pdx-osint-input" class="pdx-input" type="text" placeholder="domain.com, IP, or email" autocomplete="off" spellcheck="false"/>' +
-              '<button id="pdx-osint-btn" class="pdx-btn-primary">Investigate</button>' +
+              '<button id="pdx-osint-btn" class="pdx-btn-primary pdx-btn-primary--osint">Investigate</button>' +
             '</div>' +
             '<div id="pdx-osint-result"></div>' +
           '</div>' +
@@ -1253,9 +1329,9 @@
     function renderThreat(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
       inner.innerHTML =
-        '<div class="pdx-ph">' +
-          '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('alert') + '<span>Threat Intel</span><span class="pdx-badge pdx-badge--new">New</span>' +
+        '<div class="pdx-ph pdx-ph--threat">' +
+          '<div class="pdx-ph-hd pdx-ph-hd--threat">' +
+            '<div class="pdx-ph-title pdx-ph-title--threat">' + modIcon('threat') + '<span>Threat Intel</span><span class="pdx-badge pdx-badge--new">New</span>' +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Feeds active"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Correlate infrastructure indicators, intelligence feeds, and behavioral signals to identify suspicious or malicious patterns. CVE lookup, live threat feeds, and attack surface mapping.</div>' +
@@ -3446,8 +3522,7 @@
 
     function svgIcon(name) {
       if (typeof global.pdxModuleIcon === 'function') {
-        var modKeys = ['trust','osint','threat','personas','builder','pipeline','automation','timeline','investigation','graph','memory','team','check'];
-        if (modKeys.indexOf(name) !== -1) return global.pdxModuleIcon(name);
+        return global.pdxModuleIcon(name);
       }
       var icons = {
         shield:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',

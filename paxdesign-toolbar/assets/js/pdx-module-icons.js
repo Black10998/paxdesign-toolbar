@@ -98,6 +98,17 @@
     graph: 'graph',
     memory: 'memory',
     team: 'team',
+    shield: 'trust',
+    search: 'osint',
+    alert: 'threat',
+    layers: 'builder',
+    grid: 'automation',
+    link: 'graph',
+    user: 'personas',
+    connectors: 'graph',
+    create: 'builder',
+    workspace: 'timeline',
+    billing: 'trust',
   };
 
   function moduleIcon(name) {
@@ -121,7 +132,10 @@
         '</div>' +
         '<div class="pdx-intel-activity__meta">' +
           moduleIcon(mod) +
-          '<span class="pdx-intel-activity__title">' + label + '</span>' +
+          '<div class="pdx-intel-activity__copy">' +
+            '<span class="pdx-intel-activity__title">' + label + '</span>' +
+            '<span class="pdx-intel-activity__status">Intelligence engine active</span>' +
+          '</div>' +
         '</div>' +
       '</div>'
     );
