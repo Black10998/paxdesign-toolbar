@@ -66,6 +66,25 @@ if ( ! function_exists( 'untrailingslashit' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wp_parse_url' ) ) {
+	function wp_parse_url( $url, $component = -1 ) {
+		$parts = parse_url( (string) $url );
+		if ( false === $parts ) {
+			return -1 === $component ? false : null;
+		}
+		if ( -1 === $component ) {
+			return $parts;
+		}
+		return $parts[ $component ] ?? null;
+	}
+}
+
+if ( ! function_exists( 'wp_is_stream' ) ) {
+	function wp_is_stream( $path ) {
+		return is_string( $path ) && str_contains( $path, '://' );
+	}
+}
+
 if ( ! function_exists( 'get_transient' ) ) {
 	function get_transient( $key ) {
 		return $GLOBALS['pdx_test_transients'][ $key ] ?? false;
@@ -128,6 +147,18 @@ function simulate_wp_core_update_row_handling( object $row ): void {
 	}
 }
 
+/** esc_url() / wp_normalize_path() paths used when rendering update rows. */
+function simulate_wp_core_url_handling( object $row ): void {
+	$url = $row->url ?? null;
+	if ( function_exists( 'wp_is_stream' ) ) {
+		wp_is_stream( $url );
+	}
+	str_replace( ' ', '%20', ltrim( (string) $url ) );
+	if ( isset( $row->package ) ) {
+		strpos( (string) $row->package, '.zip' );
+	}
+}
+
 $GLOBALS['pdx_test_transients']  = [];
 $GLOBALS['pdx_test_options']     = [];
 $GLOBALS['pdx_site_transients']  = [];
@@ -179,6 +210,7 @@ $sanitize->invoke( $updater, $transient );
 
 if ( isset( $transient->response[ $canonical ] ) ) {
 	simulate_wp_core_update_row_handling( $transient->response[ $canonical ] );
+	simulate_wp_core_url_handling( $transient->response[ $canonical ] );
 }
 if ( isset( $transient->no_update[ $canonical ] ) ) {
 	simulate_wp_core_update_row_handling( $transient->no_update[ $canonical ] );
@@ -226,6 +258,62 @@ if ( ! isset( $out->response[ $canonical ] ) ) {
 	exit( 1 );
 }
 simulate_wp_core_update_row_handling( $out->response[ $canonical ] );
+simulate_wp_core_url_handling( $out->response[ $canonical ] );
+
+// 2b) inject_update on fetch failure must not leave corrupt no_update rows.
+set_transient(
+	'pdx_github_release',
+	[
+		'version' => '',
+		'package' => '',
+		'url'     => null,
+		'name'    => null,
+		'notes'   => null,
+		'error'   => 'Simulated GitHub failure',
+	],
+	3600
+);
+$fail_out = $inject->invoke(
+	$updater,
+	(object) [
+		'response'  => [ $canonical => clone $corrupt ],
+		'no_update' => [ $canonical => clone $corrupt ],
+	]
+);
+if ( isset( $fail_out->response[ $canonical ] ) || isset( $fail_out->no_update[ $canonical ] ) ) {
+	fwrite( STDERR, "FAIL: inject_update left PDX rows after fetch failure\n" );
+	exit( 1 );
+}
+
+// 2c) update_plugins_github.com filter returns normalized payload.
+set_transient(
+	'pdx_github_release',
+	[
+		'version' => '8.6.1',
+		'package' => 'https://github.com/Black10998/paxdesign-toolbar/releases/download/v8.6.1/paxdesign-toolbar-8.6.1.zip',
+		'url'     => 'https://github.com/Black10998/paxdesign-toolbar/releases/tag/v8.6.1',
+		'name'    => 'PaxDesign Utility Dock',
+		'notes'   => '',
+		'error'   => '',
+	],
+	3600
+);
+$uri_filter = $ref->getMethod( 'filter_update_plugins_uri' );
+$uri_filter->setAccessible( true );
+$uri_payload = $uri_filter->invoke(
+	$updater,
+	false,
+	[
+		'UpdateURI' => 'https://github.com/Black10998/paxdesign-toolbar',
+		'Version'   => '8.6.0',
+	],
+	$canonical,
+	[]
+);
+if ( ! is_array( $uri_payload ) || '' === ( $uri_payload['package'] ?? '' ) ) {
+	fwrite( STDERR, "FAIL: filter_update_plugins_uri did not return package URL\n" );
+	exit( 1 );
+}
 
 // 3) repair_stored_update_transient persists scrubbed site transient.
 $GLOBALS['pdx_site_transients']['update_plugins'] = (object) [

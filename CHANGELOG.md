@@ -1,5 +1,24 @@
 ﻿# Changelog
 
+## 8.6.1 — 2026-05-17 (unreleased — verify `debug.log` on Hostinger before tagging)
+
+**Updater PHP 8.1 — complete null scrub + Update URI hook**
+
+### Root cause
+- Plugin declares `Update URI: https://github.com/...` but did not implement WordPress’s `update_plugins_github.com` filter, so core built incomplete update rows on `wp_update_plugins()` before our transient scrub ran.
+- `inject_update()` error path removed `response` rows only, leaving corrupt `no_update` entries with `null` fields.
+- `icons` / `banners` and extra object properties were not coerced; core `esc_url()` / `add_query_arg()` still received `null`.
+
+### Fix
+- `filter_update_plugins_uri()` — official Update URI injection path with normalized `version`, `package`, `url`, `slug`, `tested`, `requires`.
+- `finalize_update_transient()` at priority 9999 on read and write of `update_plugins`.
+- `clear_pdx_update_transient_entries()` on GitHub fetch failure (both buckets).
+- `sanitize_url_map()`, `coerce_null_scalars_on_object()`, full `sanitize_plugins_api_object()`.
+- Drop invalid PDX rows from `no_update` as well as `response`.
+- Extended `scripts/test-updater-php81-deprecations.php` (fetch failure, Update URI filter, `esc_url` paths).
+
+**Do not publish until `debug.log` is clean** on PHP 8.1+ for activation, Plugins, Dashboard → Updates, and update checks.
+
 ## 8.6.0 — 2026-05-17
 
 **Dock icon identity + floating transparent toolbar**
