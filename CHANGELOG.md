@@ -10,6 +10,8 @@
 
 **Install:** `releases/paxdesign-toolbar-8.1.3.zip` — tag `v8.1.3`
 
+**If you are still on 7.1.10:** update to **7.1.11** first (fixes the maintenance fatal in the running updater), then to **8.1.3**. Tag `v7.1.11`.
+
 ## 8.1.2 — 2026-05-17
 
 **Production updater hotfix (wp-admin 7.x → 8.x)**
