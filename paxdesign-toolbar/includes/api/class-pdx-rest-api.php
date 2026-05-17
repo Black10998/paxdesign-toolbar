@@ -226,9 +226,9 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/platform/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_stats' ], 'permission_callback' => $adm ] );
 
 		// Threat Intel — CVE lookup + attack surface mapping
-		register_rest_route( $ns, '/threat/cve',     [ 'methods' => 'GET', 'callback' => [ $this, 'threat_cve'     ], 'permission_callback' => $pub, 'args' => [ 'q' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] ] );
-		register_rest_route( $ns, '/threat/surface', [ 'methods' => 'GET', 'callback' => [ $this, 'threat_surface' ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] ] );
-		register_rest_route( $ns, '/threat/feeds',   [ 'methods' => 'GET', 'callback' => [ $this, 'threat_feeds'   ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => false, 'sanitize_callback' => 'sanitize_text_field' ] ] ] ] );
+		register_rest_route( $ns, '/threat/cve',     [ 'methods' => 'GET', 'callback' => [ $this, 'threat_cve'     ], 'permission_callback' => $pub, 'args' => [ 'q' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
+		register_rest_route( $ns, '/threat/surface', [ 'methods' => 'GET', 'callback' => [ $this, 'threat_surface' ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
+		register_rest_route( $ns, '/threat/feeds',   [ 'methods' => 'GET', 'callback' => [ $this, 'threat_feeds'   ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => false, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
 	}
 
 	/**

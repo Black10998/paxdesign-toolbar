@@ -1,0 +1,23 @@
+name: PHP Lint
+
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint all plugin PHP files
+        run: |
+          set -e
+          count=0
+          while IFS= read -r -d '' file; do
+            php -l "$file" >/dev/null
+            count=$((count + 1))
+          done < <(find paxdesign-toolbar -name '*.php' -print0)
+          echo "Linted ${count} PHP files — all passed."

@@ -17,6 +17,14 @@ if ($content -match "define\s*\(\s*'PDX_VERSION'\s*,\s*'([^']+)'\s*\)") {
     throw 'Could not read PDX_VERSION from paxdesign-toolbar.php'
 }
 
+$lint = Join-Path $PSScriptRoot 'lint-php.ps1'
+if (Test-Path $lint) {
+    & $lint
+    if ($LASTEXITCODE -ne 0) {
+        throw 'PHP lint failed — fix parse errors before building a release.'
+    }
+}
+
 $releasesDir = Join-Path $root 'releases'
 $stagingDir  = Join-Path $env:TEMP "pdx-release-$version"
 $zipName     = "paxdesign-toolbar-$version.zip"
@@ -58,4 +66,18 @@ Write-Host "SHA256: $hash"
 $verify = Join-Path $PSScriptRoot 'verify-release-zip.ps1'
 if (Test-Path $verify) {
     & $verify -ZipPath $zipPath
+}
+
+$smoke = Join-Path $PSScriptRoot 'wp-bootstrap-smoke.php'
+if (Test-Path $smoke) {
+    if (-not $env:PHP_BIN) {
+        $localPhp = Join-Path $root '.tools\php\php.exe'
+        if (Test-Path $localPhp) { $env:PHP_BIN = $localPhp }
+    }
+    if ($env:PHP_BIN) {
+        & $env:PHP_BIN $smoke
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Plugin bootstrap smoke test failed.'
+        }
+    }
 }

@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## 8.1.5 — 2026-05-17
+
+**Critical hotfix — REST API parse error blocked activation**
+
+- Fixed extra `]` in `register_rest_route()` for `/threat/cve`, `/threat/surface`, `/threat/feeds` (`class-pdx-rest-api.php` line 229)
+- `scripts/lint-php.ps1` — `php -l` on every plugin PHP file (runs automatically in `build-release.ps1`)
+- GitHub Actions PHP lint on push and before tagged releases
+
+**Install:** `releases/paxdesign-toolbar-8.1.5.zip` — tag `v8.1.5`
+
 ## 8.1.4 — 2026-05-17
 
 **Updater hotfix — PHP 8.1 null deprecations + maintenance after fatal**

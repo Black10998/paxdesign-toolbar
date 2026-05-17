@@ -25,6 +25,14 @@ jobs:
           sed -i "s/Version:.*/Version:      ${VER}/" paxdesign-toolbar/paxdesign-toolbar.php
           sed -i "s/define( 'PDX_VERSION'.*/define( 'PDX_VERSION',   '${VER}' );/" paxdesign-toolbar/paxdesign-toolbar.php
 
+      - name: PHP lint (required before release)
+        run: |
+          set -e
+          while IFS= read -r -d '' file; do
+            php -l "$file" >/dev/null
+          done < <(find paxdesign-toolbar -name '*.php' -print0)
+          echo "All PHP files passed syntax check."
+
       - name: Build ZIP
         run: |
           VER="${{ steps.ver.outputs.version }}"
