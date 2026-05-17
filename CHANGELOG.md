@@ -1,5 +1,24 @@
 ﻿# Changelog
 
+## 7.1.3 — 2026-05-17
+
+**Production-grade GitHub updater** — maintenance recovery, safer installs, and transparent update checks.
+
+### Updater
+- Stale `.maintenance` cleanup on `admin_init`, `shutdown`, and after upgrades
+- Manual maintenance clear from admin; backup before install and rollback on failure
+- GitHub zipball folder rename via `upgrader_source_selection`
+- Post-install verification (`paxdesign-toolbar.php` + version header)
+- Clears `pdx_github_release` and `update_plugins` transients after updates
+- Longer GitHub API/download timeouts (45s)
+
+### Admin
+- **Updates** panel on General: installed vs latest, status badge, last checked
+- **Check for Updates** button (force GitHub refresh + cache clear)
+- Plugin row link to updates panel
+
+**Install:** `releases/paxdesign-toolbar-7.1.3.zip` — tag `v7.1.3`
+
 ## 7.1.2 — 2026-05-17
 
 **Admin-wide compact layout pass** — readability, sidebar density, and control column fixes.

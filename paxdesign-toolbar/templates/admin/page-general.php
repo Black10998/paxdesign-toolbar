@@ -7,6 +7,8 @@ include __DIR__ . '/partials/header.php';
   <p>Core plugin configuration and contact/CTA settings.</p>
 </div>
 
+<?php include __DIR__ . '/partials/updates-panel.php'; ?>
+
 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="pdx-form">
   <?php wp_nonce_field( 'pdx_save_settings', 'pdx_nonce' ); ?>
   <input type="hidden" name="action"  value="pdx_save">

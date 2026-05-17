@@ -285,13 +285,42 @@ class PDX_Admin {
 	}
 
 	public function admin_notices(): void {
-		if ( ! isset( $_GET['updated'] ) ) return;
-		if ( strpos( sanitize_key( $_GET['page'] ?? '' ), PDX_SLUG ) === false ) return;
-		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'paxdesign-toolbar' ) . '</p></div>';
+		$page = sanitize_key( $_GET['page'] ?? '' );
+		if ( strpos( $page, PDX_SLUG ) === false ) {
+			return;
+		}
+
+		if ( isset( $_GET['updated'] ) ) {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'paxdesign-toolbar' ) . '</p></div>';
+		}
+
+		if ( isset( $_GET['pdx_checked'] ) ) {
+			$status = PDX_Updater::instance()->get_status( false );
+			if ( ! empty( $status['update_available'] ) ) {
+				$msg = sprintf(
+					/* translators: %s: latest version number */
+					__( 'Update check complete. Version %s is available — use Plugins → Update to install.', 'paxdesign-toolbar' ),
+					$status['latest']
+				);
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $msg ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Update check complete. You are on the latest release.', 'paxdesign-toolbar' ) . '</p></div>';
+			}
+		}
+
+		if ( isset( $_GET['pdx_maintenance_fixed'] ) ) {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Maintenance mode cleared.', 'paxdesign-toolbar' ) . '</p></div>';
+		}
+
+		if ( ! empty( $_GET['pdx_update_error'] ) ) {
+			$err = sanitize_text_field( wp_unslash( $_GET['pdx_update_error'] ) );
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $err ) . '</p></div>';
+		}
 	}
 
 	public function plugin_links( array $links ): array {
 		$links[] = '<a href="' . esc_url( admin_url( 'admin.php?page=' . PDX_SLUG ) ) . '">' . __( 'Settings', 'paxdesign-toolbar' ) . '</a>';
+		$links[] = '<a href="' . esc_url( admin_url( 'admin.php?page=' . PDX_SLUG . '#pdx-updates' ) ) . '">' . __( 'Check for updates', 'paxdesign-toolbar' ) . '</a>';
 		return $links;
 	}
 
