@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## 7.1.5 — 2026-05-17
+
+**Duplicate plugin folder fix** — only one `paxdesign-toolbar` install in Plugins.
+
+### Updater
+- Automatic cleanup of stale `paxdesign-toolbar-*` folders (and nested copies)
+- Runs on load, Plugins screen, after updates, and after plugin delete
+- Merges mis-installed versioned folders into `wp-content/plugins/paxdesign-toolbar`
+- Repairs `active_plugins` so only `paxdesign-toolbar/paxdesign-toolbar.php` stays active
+- Clears duplicate entries from `upgrade-temp-backup`
+- Safer ZIP normalization in upgrade working dir (copy fallback if move fails)
+
+**Install:** `releases/paxdesign-toolbar-7.1.5.zip` — tag `v7.1.5`
+
 ## 7.1.4 — 2026-05-17
 
 **Hostinger / shared-hosting update fix** — no longer depends on WordPress moving the plugin into `upgrade-temp-backup`.

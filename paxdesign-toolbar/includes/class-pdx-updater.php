@@ -11,6 +11,8 @@ class PDX_Updater {
 
 	private const GITHUB_REPO         = 'Black10998/paxdesign-toolbar';
 	private const PLUGIN_FOLDER       = 'paxdesign-toolbar';
+	private const PLUGIN_MAIN_FILE    = 'paxdesign-toolbar.php';
+	private const PLUGIN_TEXT_DOMAIN  = 'paxdesign-toolbar';
 	private const CACHE_KEY           = 'pdx_github_release';
 	private const LAST_CHECK_OPTION   = 'pdx_updater_last_checked';
 	private const STATE_OPTION        = 'pdx_updater_state';
@@ -39,8 +41,10 @@ class PDX_Updater {
 
 		add_action( 'plugins_loaded', [ $this, 'bootstrap_recovery' ], 1 );
 		add_action( 'admin_init', [ $this, 'maybe_cleanup_stale_maintenance' ] );
+		add_action( 'admin_init', [ $this, 'maybe_cleanup_duplicate_plugins_admin' ] );
 		add_action( 'shutdown', [ $this, 'maybe_cleanup_stale_maintenance' ], 999 );
 		add_action( 'upgrader_process_complete', [ $this, 'on_upgrade_complete' ], 10, 2 );
+		add_action( 'deleted_plugin', [ $this, 'on_deleted_plugin' ], 10, 2 );
 
 		add_action( 'admin_post_pdx_check_updates', [ $this, 'handle_check_updates' ] );
 		add_action( 'admin_post_pdx_clear_maintenance', [ $this, 'handle_clear_maintenance' ] );
@@ -318,16 +322,27 @@ class PDX_Updater {
 
 		$parent     = trailingslashit( dirname( $source ) );
 		$normalized = $parent . self::PLUGIN_FOLDER;
+		$source     = untrailingslashit( $source );
 
 		if ( $source === $normalized ) {
 			return $source;
 		}
 
-		if ( $wp_filesystem->exists( $normalized ) ) {
+		// Only remove another extracted copy in the upgrade working directory — never wp-plugins.
+		if ( $wp_filesystem->exists( $normalized ) && ! $this->is_under_plugins_dir( $normalized ) ) {
 			$wp_filesystem->delete( $normalized, true );
 		}
 
 		if ( $wp_filesystem->move( $source, $normalized, true ) ) {
+			return $normalized;
+		}
+
+		// Fallback: copy then remove source (move_dir fails on some hosts).
+		if ( ! function_exists( 'copy_dir' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+		if ( function_exists( 'copy_dir' ) && true === copy_dir( $source, $normalized ) ) {
+			$wp_filesystem->delete( $source, true );
 			return $normalized;
 		}
 
@@ -449,7 +464,11 @@ class PDX_Updater {
 			);
 		}
 
-		$this->remove_versioned_plugin_folders();
+		if ( is_array( $result ) ) {
+			$this->consolidate_install_to_canonical_folder( $result );
+		}
+
+		$this->cleanup_duplicate_plugin_folders( true );
 
 		return $response;
 	}
@@ -491,12 +510,36 @@ class PDX_Updater {
 
 		$this->clear_all_caches();
 		$this->cleanup_failed_backups();
-		$this->remove_versioned_plugin_folders();
+		$this->cleanup_duplicate_plugin_folders( true );
 		$this->set_state( [] );
+	}
+
+	/**
+	 * @param string $plugin_file Plugin basename path.
+	 * @param bool   $deleted     Whether the plugin was deleted successfully.
+	 */
+	public function on_deleted_plugin( $plugin_file, $deleted ): void {
+		if ( ! is_string( $plugin_file ) || ! str_contains( $plugin_file, 'paxdesign-toolbar' ) ) {
+			return;
+		}
+
+		$this->cleanup_duplicate_plugin_folders( true );
+	}
+
+	public function maybe_cleanup_duplicate_plugins_admin(): void {
+		if ( ! is_admin() || ! function_exists( 'get_current_screen' ) ) {
+			return;
+		}
+
+		$screen = get_current_screen();
+		if ( $screen && 'plugins' === $screen->id ) {
+			$this->cleanup_duplicate_plugin_folders( true );
+		}
 	}
 
 	public function bootstrap_recovery(): void {
 		$this->maybe_cleanup_stale_maintenance();
+		$this->cleanup_duplicate_plugin_folders();
 
 		$state = $this->get_state();
 		if ( empty( $state['upgrading'] ) ) {
@@ -621,16 +664,174 @@ class PDX_Updater {
 	}
 
 	/**
-	 * Remove wrongly named folders like paxdesign-toolbar-7.1.4 left in wp-plugins.
+	 * Ensure only wp-content/plugins/paxdesign-toolbar exists; remove stale duplicates.
+	 *
+	 * @param bool $force Run even if already ran this request.
 	 */
-	private function remove_versioned_plugin_folders(): void {
+	public function cleanup_duplicate_plugin_folders( bool $force = false ): void {
+		static $ran = false;
+		if ( $ran && ! $force ) {
+			return;
+		}
+		$ran = true;
+
 		$plugins_dir = WP_PLUGIN_DIR;
 		if ( ! is_dir( $plugins_dir ) ) {
 			return;
 		}
 
-		$pattern = $plugins_dir . '/paxdesign-toolbar-*';
-		foreach ( glob( $pattern ) as $path ) {
+		$this->consolidate_versioned_install_into_canonical();
+		$this->maybe_repair_active_plugins_list();
+
+		$canonical = $this->canonical_plugin_dir_path();
+
+		// Versioned sibling folders: paxdesign-toolbar-7.1.2, etc.
+		$patterns = [
+			$plugins_dir . '/paxdesign-toolbar-*',
+			$plugins_dir . '/' . self::PLUGIN_FOLDER . '/paxdesign-toolbar-*',
+		];
+
+		foreach ( $patterns as $pattern ) {
+			$matches = glob( $pattern );
+			if ( ! is_array( $matches ) ) {
+				continue;
+			}
+			foreach ( $matches as $path ) {
+				if ( ! is_dir( $path ) ) {
+					continue;
+				}
+				$this->delete_duplicate_plugin_directory( $path, $canonical );
+			}
+		}
+
+		// Any top-level folder that registers a second PaxDesign plugin file.
+		$entries = @scandir( $plugins_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( ! is_array( $entries ) ) {
+			$this->flush_plugin_cache();
+			return;
+		}
+
+		foreach ( $entries as $entry ) {
+			if ( '.' === $entry || '..' === $entry ) {
+				continue;
+			}
+
+			$dir = $plugins_dir . '/' . $entry;
+			if ( ! is_dir( $dir ) ) {
+				continue;
+			}
+
+			if ( $this->is_canonical_plugin_dir( $dir ) ) {
+				continue;
+			}
+
+			$main_file = $dir . '/' . self::PLUGIN_MAIN_FILE;
+			if ( is_readable( $main_file ) && $this->is_our_plugin_header_file( $main_file ) ) {
+				$this->delete_duplicate_plugin_directory( $dir, $canonical );
+			}
+		}
+
+		$this->cleanup_temp_backup_duplicates();
+		$this->flush_plugin_cache();
+	}
+
+	/**
+	 * If a versioned folder is newer than canonical, merge into canonical first.
+	 */
+	private function consolidate_versioned_install_into_canonical(): void {
+		$plugins_dir = WP_PLUGIN_DIR;
+		$canonical   = $this->plugin_dir();
+		$canon_main  = $canonical . '/' . self::PLUGIN_MAIN_FILE;
+
+		if ( ! is_readable( $canon_main ) ) {
+			$best_dir = null;
+			$best_ver = '0.0.0';
+
+			foreach ( glob( $plugins_dir . '/paxdesign-toolbar-*' ) ?: [] as $path ) {
+				if ( ! is_dir( $path ) ) {
+					continue;
+				}
+				$main = $path . '/' . self::PLUGIN_MAIN_FILE;
+				if ( ! is_readable( $main ) || ! $this->is_our_plugin_header_file( $main ) ) {
+					continue;
+				}
+				$ver = $this->read_plugin_version( $main );
+				if ( version_compare( $ver, $best_ver, '>' ) ) {
+					$best_ver = $ver;
+					$best_dir = $path;
+				}
+			}
+
+			if ( $best_dir ) {
+				wp_mkdir_p( $canonical );
+				$this->copy_directory( $best_dir, $canonical );
+			}
+		}
+
+		foreach ( glob( $plugins_dir . '/paxdesign-toolbar-*' ) ?: [] as $path ) {
+			if ( ! is_dir( $path ) || $this->is_canonical_plugin_dir( $path ) ) {
+				continue;
+			}
+			$main = $path . '/' . self::PLUGIN_MAIN_FILE;
+			if ( ! is_readable( $main ) || ! $this->is_our_plugin_header_file( $main ) ) {
+				$this->delete_directory( $path );
+				continue;
+			}
+
+			$canon_ver = is_readable( $canon_main ) ? $this->read_plugin_version( $canon_main ) : '0.0.0';
+			$alt_ver   = $this->read_plugin_version( $main );
+
+			if ( version_compare( $alt_ver, $canon_ver, '>' ) ) {
+				$this->copy_directory( $path, $canonical );
+			}
+
+			$this->delete_duplicate_plugin_directory( $path, $this->canonical_plugin_dir_path() );
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $result Install result from WP_Upgrader.
+	 */
+	private function consolidate_install_to_canonical_folder( array $result ): void {
+		$candidates = [];
+
+		if ( ! empty( $result['destination'] ) ) {
+			$candidates[] = (string) $result['destination'];
+		}
+		if ( ! empty( $result['local_destination'] ) ) {
+			$candidates[] = (string) $result['local_destination'];
+		}
+
+		$canonical = $this->plugin_dir();
+		wp_mkdir_p( $canonical );
+
+		foreach ( array_unique( $candidates ) as $dest ) {
+			$dest = untrailingslashit( wp_normalize_path( $dest ) );
+			if ( $this->is_canonical_plugin_dir( $dest ) ) {
+				continue;
+			}
+
+			$main = $dest . '/' . self::PLUGIN_MAIN_FILE;
+			if ( ! is_readable( $main ) || ! $this->is_our_plugin_header_file( $main ) ) {
+				continue;
+			}
+
+			$this->copy_directory( $dest, $canonical );
+			if ( ! $this->is_canonical_plugin_dir( $dest ) ) {
+				$this->delete_directory( $dest );
+			}
+		}
+
+		$this->maybe_repair_active_plugins_list();
+	}
+
+	private function cleanup_temp_backup_duplicates(): void {
+		$base = WP_CONTENT_DIR . '/upgrade-temp-backup/plugins';
+		if ( ! is_dir( $base ) ) {
+			return;
+		}
+
+		foreach ( glob( $base . '/paxdesign-toolbar*' ) ?: [] as $path ) {
 			if ( ! is_dir( $path ) ) {
 				continue;
 			}
@@ -638,6 +839,117 @@ class PDX_Updater {
 				continue;
 			}
 			$this->delete_directory( $path );
+		}
+	}
+
+	private function delete_duplicate_plugin_directory( string $path, string $canonical ): void {
+		$path = wp_normalize_path( $path );
+
+		if ( $this->is_canonical_plugin_dir( $path ) ) {
+			return;
+		}
+
+		if ( $path === $canonical ) {
+			return;
+		}
+
+		$main_file = $path . '/' . self::PLUGIN_MAIN_FILE;
+		if ( is_readable( $main_file ) ) {
+			$basename = plugin_basename( $main_file );
+			if ( $basename === $this->plugin_basename() ) {
+				return;
+			}
+			if ( $this->is_plugin_active_basename( $basename ) && ! $this->is_versioned_plugin_basename( $basename ) ) {
+				return;
+			}
+		}
+
+		$this->delete_directory( $path );
+	}
+
+	private function is_versioned_plugin_basename( string $basename ): bool {
+		return (bool) preg_match( '#^paxdesign-toolbar-[^/]+/paxdesign-toolbar\.php$#', $basename );
+	}
+
+	private function is_plugin_active_basename( string $basename ): bool {
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		return is_plugin_active( $basename );
+	}
+
+	private function maybe_repair_active_plugins_list(): void {
+		$correct = $this->plugin_basename();
+		$active  = (array) get_option( 'active_plugins', [] );
+		$changed = false;
+		$has_ok  = in_array( $correct, $active, true );
+
+		foreach ( $active as $index => $basename ) {
+			if ( $basename === $correct ) {
+				continue;
+			}
+			if ( ! $this->is_versioned_plugin_basename( $basename ) ) {
+				continue;
+			}
+			unset( $active[ $index ] );
+			$changed = true;
+		}
+
+		if ( $changed ) {
+			if ( ! $has_ok && is_readable( PDX_DIR . self::PLUGIN_MAIN_FILE ) ) {
+				$active[] = $correct;
+			}
+			update_option( 'active_plugins', array_values( array_unique( $active ) ) );
+			$this->flush_plugin_cache();
+		}
+	}
+
+	private function is_our_plugin_header_file( string $main_file ): bool {
+		if ( ! function_exists( 'get_plugin_data' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$data = get_plugin_data( $main_file, false, false );
+		$domain = isset( $data['TextDomain'] ) ? (string) $data['TextDomain'] : '';
+		$name   = isset( $data['Name'] ) ? (string) $data['Name'] : '';
+
+		return self::PLUGIN_TEXT_DOMAIN === $domain
+			|| str_contains( $name, 'PaxDesign Utility Dock' );
+	}
+
+	private function read_plugin_version( string $main_file ): string {
+		$data = get_file_data(
+			$main_file,
+			[ 'Version' => 'Version' ],
+			'plugin'
+		);
+
+		return isset( $data['Version'] ) ? (string) $data['Version'] : '0.0.0';
+	}
+
+	private function canonical_plugin_dir_path(): string {
+		return wp_normalize_path( realpath( $this->plugin_dir() ) ?: $this->plugin_dir() );
+	}
+
+	private function is_canonical_plugin_dir( string $dir ): bool {
+		$canonical = $this->canonical_plugin_dir_path();
+		$dir_path  = wp_normalize_path( realpath( $dir ) ?: $dir );
+
+		return $dir_path === $canonical;
+	}
+
+	private function is_under_plugins_dir( string $path ): bool {
+		$plugins = wp_normalize_path( realpath( WP_PLUGIN_DIR ) ?: WP_PLUGIN_DIR );
+		$path    = wp_normalize_path( $path );
+
+		return str_starts_with( $path, $plugins . '/' );
+	}
+
+	private function flush_plugin_cache(): void {
+		wp_cache_delete( 'plugins', 'plugins' );
+		if ( function_exists( 'wp_clean_plugins_cache' ) ) {
+			wp_clean_plugins_cache( true );
 		}
 	}
 
