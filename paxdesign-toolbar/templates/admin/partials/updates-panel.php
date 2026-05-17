@@ -79,7 +79,7 @@ $maint_url = wp_nonce_url(
 			<?php if ( ! empty( $status['release_url'] ) ) : ?>
 			<div class="pdx-updates-meta__row">
 				<dt>Release</dt>
-				<dd><a href="<?php echo esc_url( $status['release_url'] ); ?>" target="_blank" rel="noopener noreferrer">View on GitHub</a></dd>
+				<dd><a href="<?php echo esc_url( ! empty( $status['release_url'] ) ? (string) $status['release_url'] : 'https://github.com/Black10998/paxdesign-toolbar' ); ?>" target="_blank" rel="noopener noreferrer">View on GitHub</a></dd>
 			</div>
 			<?php endif; ?>
 		</dl>

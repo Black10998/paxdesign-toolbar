@@ -38,6 +38,7 @@ class PDX_Updater {
 
 	private function __construct() {
 		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'inject_update' ] );
+		add_filter( 'site_transient_update_plugins', [ $this, 'sanitize_stored_update_transient' ] );
 		add_filter( 'plugins_api', [ $this, 'plugins_api' ], 20, 3 );
 		add_filter( 'http_request_args', [ $this, 'http_request_args' ], 10, 2 );
 		add_filter( 'upgrader_package_options', [ $this, 'filter_package_options' ], 10, 1 );
@@ -291,6 +292,99 @@ class PDX_Updater {
 	}
 
 	/**
+	 * WordPress core calls esc_url() / path helpers on update metadata — null values trigger PHP 8.1+ deprecations.
+	 *
+	 * @param array<string, mixed> $release
+	 */
+	private function build_update_offer( array $release, string $plugin ): object {
+		$release = $this->normalize_release_data( $release );
+
+		return (object) [
+			'id'            => $plugin,
+			'slug'          => PDX_SLUG,
+			'plugin'        => $plugin,
+			'new_version'   => $release['version'],
+			'url'           => $release['url'],
+			'package'       => $release['package'],
+			'tested'        => $this->wp_version_for_update_meta(),
+			'requires'      => '6.0',
+			'requires_php'  => '8.0',
+			'compatibility' => (object) [],
+			'icons'         => [],
+			'banners'       => [],
+			'banners_rtl'   => [],
+		];
+	}
+
+	/**
+	 * @param mixed $transient
+	 * @return mixed
+	 */
+	public function sanitize_stored_update_transient( $transient ) {
+		if ( ! is_object( $transient ) ) {
+			return $transient;
+		}
+
+		$plugin = $this->plugin_basename();
+
+		if ( isset( $transient->response ) && is_array( $transient->response ) && isset( $transient->response[ $plugin ] ) ) {
+			$transient->response[ $plugin ] = $this->sanitize_update_object( $transient->response[ $plugin ] );
+			if ( ! $this->update_object_is_valid( $transient->response[ $plugin ] ) ) {
+				unset( $transient->response[ $plugin ] );
+			}
+		}
+
+		if ( isset( $transient->no_update ) && is_array( $transient->no_update ) && isset( $transient->no_update[ $plugin ] ) ) {
+			$transient->no_update[ $plugin ] = $this->sanitize_update_object( $transient->no_update[ $plugin ] );
+		}
+
+		return $transient;
+	}
+
+	/**
+	 * @param mixed $obj
+	 */
+	private function sanitize_update_object( $obj ): object {
+		if ( ! is_object( $obj ) ) {
+			$obj = (object) [];
+		}
+
+		$fallback = 'https://github.com/' . self::GITHUB_REPO;
+
+		$obj->id          = isset( $obj->id ) ? (string) $obj->id : $this->plugin_basename();
+		$obj->slug        = isset( $obj->slug ) ? (string) $obj->slug : PDX_SLUG;
+		$obj->plugin      = isset( $obj->plugin ) ? (string) $obj->plugin : $this->plugin_basename();
+		$obj->new_version = isset( $obj->new_version ) ? (string) $obj->new_version : '';
+		$obj->url         = ( isset( $obj->url ) && is_string( $obj->url ) && '' !== $obj->url ) ? $obj->url : $fallback;
+		$obj->package     = isset( $obj->package ) && is_string( $obj->package ) ? $obj->package : '';
+		$obj->tested      = $this->wp_version_for_update_meta();
+		$obj->requires    = isset( $obj->requires ) ? (string) $obj->requires : '6.0';
+		$obj->requires_php = isset( $obj->requires_php ) ? (string) $obj->requires_php : '8.0';
+
+		if ( ! isset( $obj->compatibility ) || ! is_object( $obj->compatibility ) ) {
+			$obj->compatibility = (object) [];
+		}
+		if ( ! isset( $obj->icons ) || ! is_array( $obj->icons ) ) {
+			$obj->icons = [];
+		}
+		if ( ! isset( $obj->banners ) || ! is_array( $obj->banners ) ) {
+			$obj->banners = [];
+		}
+		if ( ! isset( $obj->banners_rtl ) || ! is_array( $obj->banners_rtl ) ) {
+			$obj->banners_rtl = [];
+		}
+
+		return $obj;
+	}
+
+	private function update_object_is_valid( object $obj ): bool {
+		return '' !== ( $obj->new_version ?? '' )
+			&& '' !== ( $obj->package ?? '' )
+			&& is_string( $obj->url ?? null )
+			&& '' !== $obj->url;
+	}
+
+	/**
 	 * @return string WordPress version string safe for update metadata (never null).
 	 */
 	private function wp_version_for_update_meta(): string {
@@ -321,18 +415,8 @@ class PDX_Updater {
 			return $transient;
 		}
 
-		$release = $this->normalize_release_data( $release );
-		$plugin  = $this->plugin_basename();
-
-		$transient->response[ $plugin ] = (object) [
-			'slug'        => PDX_SLUG,
-			'plugin'      => $plugin,
-			'new_version' => $release['version'],
-			'url'         => $release['url'],
-			'package'     => $release['package'],
-			'tested'      => $this->wp_version_for_update_meta(),
-			'id'          => $plugin,
-		];
+		$plugin = $this->plugin_basename();
+		$transient->response[ $plugin ] = $this->build_update_offer( $release, $plugin );
 
 		return $transient;
 	}
@@ -343,7 +427,7 @@ class PDX_Updater {
 		}
 
 		$release = $this->fetch_release( false );
-		if ( ! is_array( $release ) || empty( $release['version'] ) ) {
+		if ( ! is_array( $release ) || empty( $release['version'] ) || empty( $release['package'] ) ) {
 			return $result;
 		}
 
@@ -357,6 +441,9 @@ class PDX_Updater {
 			'author'        => '<a href="https://paxdesign.io">PaxDesign</a>',
 			'homepage'      => $release['url'],
 			'download_link' => $release['package'],
+			'requires'      => '6.0',
+			'requires_php'  => '8.0',
+			'tested'        => $this->wp_version_for_update_meta(),
 			'sections'      => [
 				'description' => 'Enterprise utility dock for WordPress.',
 				'changelog'   => wp_kses_post( $notes ),

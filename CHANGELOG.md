@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 8.3.1 — 2026-05-17
+
+**Updater hotfix — PHP 8.1 null deprecations on Plugins screen**
+
+- Sanitize `update_plugins` transient on read so `url`, `package`, and related fields are never `null` when WordPress calls `esc_url()` / path helpers
+- Build complete update metadata object (`requires`, `tested`, `icons`, etc.) for GitHub releases
+- Remove invalid cached update rows with empty package URLs
+- Harden admin updates panel GitHub link when release URL is missing
+
+**Install:** `releases/paxdesign-toolbar-8.3.1.zip` — tag `v8.3.1`
+
 ## 8.3.0 — 2026-05-17
 
 **Visible intelligence UX — module identity, scan atmosphere, phishing surface**
