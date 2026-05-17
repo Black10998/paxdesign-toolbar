@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## 7.1.9 — 2026-05-17
+
+**Hotfix: JavaScript target normalization stack overflow**
+
+### Frontend
+- Fixed infinite recursion between `normalizePdxTarget()` and `detectTargetType()` (RangeError on all scans)
+- Split strip → normalize → classify: `stripPdxIndicator`, `normalizePdxTarget`, `detectTargetTypeFromString`
+- Recursion depth guard and safe fallback on errors
+- Exposed `window.PDXTargetUtil` for reuse across dock modules
+- Timeline and Automation use the same global normalization path
+
+**Install:** `releases/paxdesign-toolbar-7.1.9.zip` — tag `v7.1.9`
+
 ## 7.1.8 — 2026-05-17
 
 **Production-grade updater finalization** — seamless updates on Hostinger without manual cleanup.

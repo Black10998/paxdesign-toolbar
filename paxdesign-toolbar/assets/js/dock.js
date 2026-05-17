@@ -631,7 +631,7 @@
 
     function renderTrustResult(container, data, domain) {
       var displayTarget = (data && data.target) ? data.target : domain;
-      var targetType = detectTargetType(displayTarget);
+      var targetType = (data && data.target_type) || detectTargetTypeFromString(displayTarget);
       var risk      = data.risk      || {};
       var score     = risk.score     != null ? risk.score : 0;
       var verdict   = risk.verdict   || 'insufficient_data';
@@ -1178,7 +1178,7 @@
       }
 
       /* ── AI Intelligence Summary ── */
-      var osintType = detectTargetType(target);
+      var osintType = (data && data.target_type) || detectTargetTypeFromString(target);
       var summaryText = data.ai_summary || generateSummary(osintType, target, data);
       var recs = (data.recommendations && data.recommendations.length)
         ? data.recommendations.map(safeStr)
@@ -1882,11 +1882,15 @@
       document.getElementById('pdx-auto-submit').addEventListener('click', function() {
         var urlInput = document.getElementById('pdx-auto-url');
         var rawUrl   = (urlInput || {}).value || '';
-        var norm     = normalizePdxTarget(rawUrl);
-        if (!norm.host) { showNotif('Enter a valid URL or domain', 'warn'); return; }
+        var norm = normalizePdxTarget(rawUrl);
+        if (!norm.normalized && !norm.host) { showNotif('Enter a valid URL or domain', 'warn'); return; }
+        if (norm.type === 'email' || norm.type === 'hash') {
+          showNotif('Automation requires a URL or domain', 'warn');
+          return;
+        }
         var url = /^[a-z][a-z0-9+.-]*:\/\//i.test(rawUrl)
           ? rawUrl.replace(/[?#].*$/, '')
-          : 'https://' + norm.host;
+          : 'https://' + (norm.host || norm.normalized);
         if (urlInput) urlInput.value = url;
         var task   = (document.getElementById('pdx-auto-task') || {}).value || '';
         var format = (document.getElementById('pdx-auto-format') || {}).value || 'json';
@@ -2957,24 +2961,127 @@
 
     /* ── Helpers ──────────────────────────────────────────── */
     /* ══════════════════════════════════════════════════════
-       GLOBAL TARGET NORMALIZATION
-       Strips protocol, query strings, fragments, and paths
-       before any API call (TrustCheck, OSINT, Threat, etc.).
+       GLOBAL TARGET NORMALIZATION (no recursion)
+       normalizePdxTarget → strip indicator → detectTargetTypeFromString
     ══════════════════════════════════════════════════════ */
-    function normalizePdxTarget(input) {
-      if (!input) return { raw: '', host: '', normalized: '', type: 'unknown' };
-      var raw = String(input).trim();
-      var s = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+    var _pdxNormalizeDepth = 0;
+
+    /**
+     * Strip protocol / query / fragment / path for API host extraction.
+     * Does not call type detection.
+     */
+    function stripPdxIndicator(raw) {
+      var original = String(raw == null ? '' : raw).trim();
+      if (!original) {
+        return { value: '', raw: '', hadProtocol: false, hadPath: false, hadQuery: false };
+      }
+
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(original)) {
+        return {
+          value: original.toLowerCase(),
+          raw: original,
+          hadProtocol: false,
+          hadPath: false,
+          hadQuery: false,
+        };
+      }
+
+      if (/^([0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/i.test(original)) {
+        return {
+          value: original.toLowerCase(),
+          raw: original,
+          hadProtocol: false,
+          hadPath: false,
+          hadQuery: false,
+        };
+      }
+
+      var hadProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(original);
+      var hadQuery = /[?]/.test(original);
+      var hadFragment = /#/.test(original);
+      var hadPath = hadProtocol && /:\/\/[^/?#]+\/.+/.test(original);
+
+      var s = original;
+      s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
       s = s.replace(/[?#].*$/, '');
       s = (s.split('/')[0] || '').split(':')[0] || '';
       s = s.replace(/^\.+|\.+$/g, '').toLowerCase();
-      return { raw: raw, host: s, normalized: s, type: detectTargetType(s) };
+
+      return {
+        value: s,
+        raw: original,
+        hadProtocol: hadProtocol,
+        hadPath: hadPath,
+        hadQuery: hadQuery || hadFragment,
+      };
+    }
+
+    /**
+     * Type detection from an already-normalized indicator string only.
+     * Never calls normalizePdxTarget.
+     */
+    function detectTargetTypeFromString(value, meta) {
+      meta = meta || {};
+      var t = String(value == null ? '' : value).trim().toLowerCase();
+      if (!t) return 'unknown';
+
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) return 'email';
+      if (/^(\d{1,3}\.){3}\d{1,3}$/.test(t)) return 'ip';
+      if (/^([0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/i.test(t)) return 'hash';
+      if (meta.hadProtocol || meta.hadPath || meta.hadQuery) return 'url';
+      if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9-]{2,})+$/i.test(t)) return 'domain';
+      if (/^[a-z0-9-]+\.[a-z]{2,}$/i.test(t)) return 'domain';
+      return 'unknown';
+    }
+
+    function normalizePdxTarget(input) {
+      if (_pdxNormalizeDepth > 4) {
+        return { raw: '', host: '', normalized: '', type: 'unknown', error: 'recursion_guard' };
+      }
+      _pdxNormalizeDepth++;
+
+      try {
+        var raw = String(input == null ? '' : input).trim();
+        if (!raw) {
+          return { raw: '', host: '', normalized: '', type: 'unknown' };
+        }
+
+        var stripped = stripPdxIndicator(raw);
+        var normalized = stripped.value;
+        var type = detectTargetTypeFromString(normalized, stripped);
+
+        return {
+          raw: raw,
+          host: normalized,
+          normalized: normalized,
+          type: type,
+          hadProtocol: stripped.hadProtocol,
+          hadPath: stripped.hadPath,
+          hadQuery: stripped.hadQuery,
+        };
+      } catch (e) {
+        return { raw: String(input || ''), host: '', normalized: '', type: 'unknown', error: 'normalize_failed' };
+      } finally {
+        _pdxNormalizeDepth--;
+      }
+    }
+
+    function resolvePdxTarget(input) {
+      return normalizePdxTarget(input);
     }
 
     function applyNormalizedInput(inputEl, norm) {
-      if (!inputEl || !norm || !norm.host) return norm.host;
-      if (norm.raw !== norm.host) inputEl.value = norm.host;
-      return norm.host;
+      if (!inputEl || !norm) return norm.normalized || norm.host || '';
+      var display = norm.normalized || norm.host || '';
+      if (!display) return '';
+      if (norm.raw !== display) {
+        if (norm.type === 'url' && /^[a-z][a-z0-9+.-]*:\/\//i.test(norm.raw)) {
+          inputEl.value = norm.raw.replace(/[?#].*$/, '');
+        } else {
+          inputEl.value = display;
+        }
+      }
+      return display;
     }
 
     function formatSourceStatusNote(st) {
@@ -3001,16 +3108,26 @@
        Determines what kind of indicator is being analysed
        so result renderers can show contextually correct data.
     ══════════════════════════════════════════════════════ */
+    /**
+     * Detect type from user input — normalizes once, then classifies (no mutual recursion).
+     */
     function detectTargetType(target) {
-      if (!target) return 'unknown';
-      var t = normalizePdxTarget(target).host || target.trim().toLowerCase();
-      if (/^[\w.+%-]+@[\w.-]+\.[a-z]{2,}$/.test(t))                    return 'email';
-      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(t))                           return 'ip';
-      if (/^([0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/i.test(t))      return 'hash';
-      if (/^https?:\/\//i.test(t))                                      return 'url';
-      if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z]{2,})+$/i.test(t)) return 'domain';
-      return 'unknown';
+      if (target == null || target === '') return 'unknown';
+      var raw = String(target).trim();
+      if (!raw) return 'unknown';
+      if (/[?#\/]/.test(raw) || /^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) {
+        return normalizePdxTarget(raw).type;
+      }
+      return detectTargetTypeFromString(raw, stripPdxIndicator(raw));
     }
+
+    window.PDXTargetUtil = {
+      normalize: normalizePdxTarget,
+      resolve: resolvePdxTarget,
+      detectType: detectTargetType,
+      detectTypeFromString: detectTargetTypeFromString,
+      strip: stripPdxIndicator,
+    };
 
     /* ══════════════════════════════════════════════════════
        CONTEXTUAL AI SUMMARY GENERATOR
@@ -4306,7 +4423,9 @@
       var inp = document.getElementById('pdx-tl-input');
       if (!btn || !inp) return;
       btn.addEventListener('click', function() {
-        var target = inp.value.trim();
+        var norm = normalizePdxTarget(inp.value);
+        if (!norm.host && !norm.normalized) return;
+        var target = applyNormalizedInput(inp, norm);
         var res = document.getElementById('pdx-tl-result');
         if (!target || !res) return;
 
