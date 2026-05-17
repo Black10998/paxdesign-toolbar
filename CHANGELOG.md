@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-## 8.6.1 — 2026-05-17 (unreleased — verify `debug.log` on Hostinger before tagging)
+## 8.6.1 — 2026-05-17
 
 **Updater PHP 8.1 — complete null scrub + Update URI hook**
 
@@ -17,7 +17,7 @@
 - Drop invalid PDX rows from `no_update` as well as `response`.
 - Extended `scripts/test-updater-php81-deprecations.php` (fetch failure, Update URI filter, `esc_url` paths).
 
-**Do not publish until `debug.log` is clean** on PHP 8.1+ for activation, Plugins, Dashboard → Updates, and update checks.
+**Install:** `releases/paxdesign-toolbar-8.6.1.zip` — tag `v8.6.1`
 
 ## 8.6.0 — 2026-05-17
 
