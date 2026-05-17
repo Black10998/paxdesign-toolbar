@@ -26,8 +26,18 @@ function trailingslashit( $string ) {
 	return rtrim( $string, '/\\' ) . '/';
 }
 
+function untrailingslashit( $string ) {
+	return rtrim( $string, '/\\' );
+}
+
+function wp_normalize_path( $path ) {
+	return str_replace( '\\', '/', $path );
+}
+
 function add_action( ...$args ) {}
 function add_filter( ...$args ) {}
+function register_activation_hook( ...$args ) {}
+function register_deactivation_hook( ...$args ) {}
 function get_option( $key, $default = false ) {
 	return $default;
 }

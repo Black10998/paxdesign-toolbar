@@ -69,7 +69,12 @@ final class PDX_Recovery {
 			return;
 		}
 
-		if ( self::restore_from_backup() ) {
+		$state = self::get_upgrade_state();
+		if ( ! empty( $state['upgrading'] ) ) {
+			return;
+		}
+
+		if ( self::should_restore_from_backup() && self::restore_from_backup() ) {
 			self::release_maintenance_file();
 			self::clear_upgrade_state();
 			return;
@@ -103,7 +108,31 @@ final class PDX_Recovery {
 	}
 
 	public static function plugin_dir(): string {
-		return WP_PLUGIN_DIR . '/' . self::PLUGIN_FOLDER;
+		if ( defined( 'PDX_DIR' ) && is_string( PDX_DIR ) && '' !== PDX_DIR ) {
+			return self::normalize_path( self::untrailingslashit( PDX_DIR ) );
+		}
+
+		return self::normalize_path( WP_PLUGIN_DIR . '/' . self::PLUGIN_FOLDER );
+	}
+
+	public static function canonical_plugin_dir(): string {
+		return self::normalize_path( WP_PLUGIN_DIR . '/' . self::PLUGIN_FOLDER );
+	}
+
+	private static function normalize_path( string $path ): string {
+		if ( function_exists( 'wp_normalize_path' ) ) {
+			return wp_normalize_path( $path );
+		}
+
+		return str_replace( '\\', '/', $path );
+	}
+
+	private static function untrailingslashit( string $path ): string {
+		if ( function_exists( 'untrailingslashit' ) ) {
+			return untrailingslashit( $path );
+		}
+
+		return rtrim( $path, "/\\" );
 	}
 
 	public static function release_maintenance_file(): void {
@@ -143,7 +172,7 @@ final class PDX_Recovery {
 		delete_option( self::STATE_OPTION );
 	}
 
-	public static function restore_from_backup(): bool {
+	public static function should_restore_from_backup(): bool {
 		$state  = self::get_upgrade_state();
 		$backup = isset( $state['backup'] ) ? (string) $state['backup'] : '';
 		if ( ! $backup || ! is_dir( $backup ) ) {
@@ -153,9 +182,35 @@ final class PDX_Recovery {
 			return false;
 		}
 
+		$current = self::read_version_from_main( self::plugin_dir() . '/' . self::MAIN_FILE );
+		$backup_v = self::read_version_from_main( $backup . '/' . self::MAIN_FILE );
+
+		if ( $current && $backup_v && version_compare( $backup_v, $current, '<' ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	public static function restore_from_backup(): bool {
+		if ( ! self::should_restore_from_backup() ) {
+			return false;
+		}
+
+		$state  = self::get_upgrade_state();
+		$backup = isset( $state['backup'] ) ? (string) $state['backup'] : '';
+
 		$target = self::plugin_dir();
 		self::delete_dir( $target );
 		return self::copy_dir( $backup, $target );
+	}
+
+	private static function read_version_from_main( string $main_file ): string {
+		if ( ! is_readable( $main_file ) ) {
+			return '';
+		}
+		$data = get_file_data( $main_file, [ 'Version' => 'Version' ], 'plugin' );
+		return ! empty( $data['Version'] ) ? (string) $data['Version'] : '';
 	}
 
 	private static function read_header_version(): string {

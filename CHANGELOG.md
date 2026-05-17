@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## 8.2.1 — 2026-05-17
+
+**Critical updater fix — wp-admin update not applying new version**
+
+- `plugin_dir()`, backup, verify, and rollback now use the **live** install path (`PDX_DIR`), not a hardcoded `wp-content/plugins/paxdesign-toolbar/` folder
+- `verify_install` reads the WordPress install **destination** (where files were written), fixing false version-mismatch rollbacks
+- `plugin_basename()` prefers the canonical folder when present so `update_plugins` targets the correct directory
+- Auto-migrates versioned folders (`paxdesign-toolbar-x.y.z`) to `paxdesign-toolbar/` before upgrade
+- Recovery no longer restores an **older** backup over a newer partial install; skips restore while upgrade is in progress
+- `is_upgrade_successful()` no longer reports success when the version did not change
+- Updates panel shows install path and non-canonical folder warning
+
+**Install:** `releases/paxdesign-toolbar-8.2.1.zip` — tag `v8.2.1`
+
+**If 8.2.0 never applied:** update to **8.2.1** via FTP (upload ZIP) or wp-admin once on **8.2.0+** with this fix.
+
 ## 8.2.0 — 2026-05-17
 
 **Intelligence engine & scan UX**

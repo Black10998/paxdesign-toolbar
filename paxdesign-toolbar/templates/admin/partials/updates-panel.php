@@ -31,6 +31,17 @@ $maint_url = wp_nonce_url(
 				<dt>Installed version</dt>
 				<dd><code><?php echo esc_html( $status['installed'] ); ?></code></dd>
 			</div>
+			<?php if ( ! empty( $status['install_dir'] ) ) : ?>
+			<div class="pdx-updates-meta__row">
+				<dt>Install path</dt>
+				<dd><code><?php echo esc_html( $status['install_dir'] ); ?></code></dd>
+			</div>
+			<?php endif; ?>
+			<?php if ( isset( $status['uses_canonical_dir'] ) && ! $status['uses_canonical_dir'] ) : ?>
+			<div class="pdx-updates-notice pdx-updates-notice--warn">
+				<?php esc_html_e( 'Plugin is running from a non-standard folder. PaxDesign will migrate it to wp-content/plugins/paxdesign-toolbar/ on the next admin load before updating.', 'paxdesign-toolbar' ); ?>
+			</div>
+			<?php endif; ?>
 			<div class="pdx-updates-meta__row">
 				<dt>Latest available</dt>
 				<dd>
