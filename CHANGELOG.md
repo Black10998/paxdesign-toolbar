@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## 7.1.4 — 2026-05-17
+
+**Hostinger / shared-hosting update fix** — no longer depends on WordPress moving the plugin into `upgrade-temp-backup`.
+
+### Updater
+- Root cause: `upgrader_source_selection` was deleting the live plugin before WordPress could back it up
+- Skip core `temp_backup` move (fails on Hostinger) via `upgrader_package_options`; use copy-based backup instead
+- Fallback backup paths: `wp-content/upgrade`, `uploads/pdx-upgrades`, system temp
+- Native PHP copy fallback when `copy_dir()` / Filesystem API is limited
+- Update continues with a clear notice if backup cannot be created (no hard fail)
+- Cleans stray `paxdesign-toolbar-*` folders; always releases `.maintenance` on failure
+
+**Install:** `releases/paxdesign-toolbar-7.1.4.zip` — tag `v7.1.4`
+
 ## 7.1.3 — 2026-05-17
 
 **Production-grade GitHub updater** — maintenance recovery, safer installs, and transparent update checks.

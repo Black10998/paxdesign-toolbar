@@ -31,9 +31,11 @@ class PDX_Updater {
 		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'inject_update' ] );
 		add_filter( 'plugins_api', [ $this, 'plugins_api' ], 20, 3 );
 		add_filter( 'http_request_args', [ $this, 'http_request_args' ], 10, 2 );
+		add_filter( 'upgrader_package_options', [ $this, 'filter_package_options' ], 10, 1 );
+		add_filter( 'upgrader_pre_install', [ $this, 'backup_before_install' ], 5, 2 );
 		add_filter( 'upgrader_source_selection', [ $this, 'fix_github_source' ], 10, 4 );
-		add_filter( 'upgrader_pre_install', [ $this, 'backup_before_install' ], 10, 2 );
 		add_filter( 'upgrader_post_install', [ $this, 'verify_install' ], 10, 3 );
+		add_filter( 'upgrader_install_package_result', [ $this, 'on_install_package_result' ], 10, 2 );
 
 		add_action( 'plugins_loaded', [ $this, 'bootstrap_recovery' ], 1 );
 		add_action( 'admin_init', [ $this, 'maybe_cleanup_stale_maintenance' ] );
@@ -119,8 +121,8 @@ class PDX_Updater {
 			return $cached;
 		}
 
-		$url  = 'https://api.github.com/repos/' . self::GITHUB_REPO . '/releases/latest';
-		$res  = wp_remote_get(
+		$url = 'https://api.github.com/repos/' . self::GITHUB_REPO . '/releases/latest';
+		$res = wp_remote_get(
 			$url,
 			[
 				'timeout' => self::HTTP_TIMEOUT,
@@ -268,38 +270,121 @@ class PDX_Updater {
 		return $args;
 	}
 
+	/**
+	 * WordPress 6.3+ move_dir() into upgrade-temp-backup often fails on shared hosting.
+	 * We use our own copy-based backup and skip core temp_backup moves for this plugin.
+	 *
+	 * @param array<string, mixed> $options
+	 * @return array<string, mixed>
+	 */
+	public function filter_package_options( array $options ): array {
+		if ( empty( $options['hook_extra'] ) || ! is_array( $options['hook_extra'] ) ) {
+			return $options;
+		}
+
+		if ( ! $this->is_our_plugin( $options['hook_extra'] ) ) {
+			return $options;
+		}
+
+		if ( ! empty( $options['hook_extra']['temp_backup'] ) ) {
+			$options['hook_extra']['pdx_temp_backup_skipped'] = $options['hook_extra']['temp_backup'];
+			unset( $options['hook_extra']['temp_backup'] );
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Normalize extracted ZIP folder only — never touch the live plugin directory here.
+	 *
+	 * @param string|\WP_Error $source
+	 * @return string|\WP_Error
+	 */
 	public function fix_github_source( $source, $remote_source, $upgrader, $hook_extra ) {
-		if ( ! $this->is_our_plugin( is_array( $hook_extra ) ? $hook_extra : null ) ) {
+		if ( is_wp_error( $source ) || ! $this->is_our_plugin( is_array( $hook_extra ) ? $hook_extra : null ) ) {
+			return $source;
+		}
+
+		if ( ! $this->init_filesystem() ) {
 			return $source;
 		}
 
 		global $wp_filesystem;
-		if ( ! $wp_filesystem ) {
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-			WP_Filesystem();
-		}
 
-		$target = $this->plugin_dir();
-		if ( $source === $target ) {
+		$source = $this->locate_plugin_root_in_source( (string) $source );
+		if ( is_wp_error( $source ) ) {
 			return $source;
 		}
 
-		if ( $wp_filesystem->exists( $target ) ) {
-			$wp_filesystem->delete( $target, true );
+		$parent     = trailingslashit( dirname( $source ) );
+		$normalized = $parent . self::PLUGIN_FOLDER;
+
+		if ( $source === $normalized ) {
+			return $source;
 		}
 
-		$moved = $wp_filesystem->move( $source, $target, true );
-		if ( $moved ) {
-			return $target;
+		if ( $wp_filesystem->exists( $normalized ) ) {
+			$wp_filesystem->delete( $normalized, true );
 		}
 
-		return $source;
+		if ( $wp_filesystem->move( $source, $normalized, true ) ) {
+			return $normalized;
+		}
+
+		return new WP_Error(
+			'pdx_source_rename_failed',
+			__( 'Could not prepare the update package folder as paxdesign-toolbar.', 'paxdesign-toolbar' )
+		);
+	}
+
+	/**
+	 * @return string|\WP_Error
+	 */
+	private function locate_plugin_root_in_source( string $source ) {
+		global $wp_filesystem;
+
+		$main = trailingslashit( $source ) . 'paxdesign-toolbar.php';
+		if ( $wp_filesystem->exists( $main ) ) {
+			return untrailingslashit( $source );
+		}
+
+		$dirlist = $wp_filesystem->dirlist( $source );
+		if ( ! is_array( $dirlist ) ) {
+			return new WP_Error(
+				'pdx_invalid_package',
+				__( 'Update package could not be read.', 'paxdesign-toolbar' )
+			);
+		}
+
+		foreach ( array_keys( $dirlist ) as $name ) {
+			if ( 'paxdesign-toolbar.php' === $name ) {
+				return untrailingslashit( $source );
+			}
+
+			$candidate = trailingslashit( $source ) . $name;
+			if ( empty( $dirlist[ $name ]['type'] ) || 'd' !== $dirlist[ $name ]['type'] ) {
+				continue;
+			}
+
+			$nested_main = trailingslashit( $candidate ) . 'paxdesign-toolbar.php';
+			if ( $wp_filesystem->exists( $nested_main ) ) {
+				return untrailingslashit( $candidate );
+			}
+		}
+
+		return new WP_Error(
+			'pdx_invalid_package',
+			__( 'Update package must contain a paxdesign-toolbar folder with paxdesign-toolbar.php.', 'paxdesign-toolbar' )
+		);
 	}
 
 	public function backup_before_install( $return, $hook_extra ) {
-		if ( ! $this->is_our_plugin( is_array( $hook_extra ) ? $hook_extra : null ) ) {
+		if ( is_wp_error( $return ) || ! $this->is_our_plugin( is_array( $hook_extra ) ? $hook_extra : null ) ) {
 			return $return;
 		}
+
+		$this->init_filesystem();
+		$this->ensure_upgrade_directories();
 
 		$this->set_state(
 			[
@@ -309,36 +394,41 @@ class PDX_Updater {
 			]
 		);
 
-		$backup_dir = WP_CONTENT_DIR . '/upgrade/pdx-toolbar-backup';
-		$this->delete_directory( $backup_dir );
+		$this->cleanup_failed_backups();
 
-		if ( ! $this->copy_directory( $this->plugin_dir(), $backup_dir ) ) {
-			return new WP_Error(
-				'pdx_backup_failed',
-				__( 'Could not create a backup before updating PaxDesign Toolbar.', 'paxdesign-toolbar' )
+		$backup_path = $this->create_copy_backup();
+		$state       = $this->get_state();
+
+		if ( $backup_path ) {
+			$state['backup']        = $backup_path;
+			$state['backup_skipped'] = false;
+			unset( $state['backup_error'] );
+		} else {
+			$state['backup_skipped'] = true;
+			$state['backup_error']   = __(
+				'Automatic backup could not be created (permissions). The update will continue without a rollback copy.',
+				'paxdesign-toolbar'
 			);
 		}
 
-		$state = $this->get_state();
-		$state['backup'] = $backup_dir;
 		$this->set_state( $state );
 
 		return $return;
 	}
 
 	public function verify_install( $response, $hook_extra, $result ) {
-		if ( is_wp_error( $response ) ) {
-			$this->maybe_rollback( $hook_extra );
+		if ( ! $this->is_our_plugin( is_array( $hook_extra ) ? $hook_extra : null ) ) {
 			return $response;
 		}
 
-		if ( ! $this->is_our_plugin( is_array( $hook_extra ) ? $hook_extra : null ) ) {
+		if ( is_wp_error( $response ) ) {
+			$this->handle_failed_upgrade( $hook_extra );
 			return $response;
 		}
 
 		$main_file = $this->plugin_dir() . '/paxdesign-toolbar.php';
 		if ( ! is_readable( $main_file ) ) {
-			$this->maybe_rollback( $hook_extra );
+			$this->handle_failed_upgrade( $hook_extra );
 			return new WP_Error(
 				'pdx_invalid_package',
 				__( 'Update package is missing paxdesign-toolbar.php.', 'paxdesign-toolbar' )
@@ -352,24 +442,40 @@ class PDX_Updater {
 		);
 
 		if ( empty( $plugin_data['Version'] ) ) {
-			$this->maybe_rollback( $hook_extra );
+			$this->handle_failed_upgrade( $hook_extra );
 			return new WP_Error(
 				'pdx_invalid_version',
 				__( 'Updated package does not contain a valid plugin version.', 'paxdesign-toolbar' )
 			);
 		}
 
+		$this->remove_versioned_plugin_folders();
+
 		return $response;
+	}
+
+	/**
+	 * @param array<string, mixed>|\WP_Error $result
+	 * @return array<string, mixed>|\WP_Error
+	 */
+	public function on_install_package_result( $result, $hook_extra ) {
+		if ( ! $this->is_our_plugin( is_array( $hook_extra ) ? $hook_extra : null ) ) {
+			return $result;
+		}
+
+		if ( is_wp_error( $result ) ) {
+			$this->handle_failed_upgrade( $hook_extra );
+		}
+
+		$this->release_maintenance_mode();
+
+		return $result;
 	}
 
 	public function on_upgrade_complete( $upgrader, $hook_extra ): void {
 		$this->release_maintenance_mode();
 
-		if ( ! is_array( $hook_extra ) ) {
-			return;
-		}
-
-		if ( ! $this->is_our_plugin( $hook_extra ) ) {
+		if ( ! is_array( $hook_extra ) || ! $this->is_our_plugin( $hook_extra ) ) {
 			return;
 		}
 
@@ -379,27 +485,32 @@ class PDX_Updater {
 		}
 
 		if ( $failed ) {
-			$this->maybe_rollback( $hook_extra );
-			$this->clear_all_caches();
+			$this->handle_failed_upgrade( $hook_extra );
 			return;
 		}
 
 		$this->clear_all_caches();
-		$this->delete_directory( WP_CONTENT_DIR . '/upgrade/pdx-toolbar-backup' );
+		$this->cleanup_failed_backups();
+		$this->remove_versioned_plugin_folders();
 		$this->set_state( [] );
 	}
 
 	public function bootstrap_recovery(): void {
 		$this->maybe_cleanup_stale_maintenance();
+
+		$state = $this->get_state();
+		if ( empty( $state['upgrading'] ) ) {
+			return;
+		}
+
+		if ( ! empty( $state['started'] ) && ( time() - (int) $state['started'] ) > 900 ) {
+			$this->handle_failed_upgrade( null );
+		}
 	}
 
 	public function maybe_cleanup_stale_maintenance(): void {
 		$file = $this->maintenance_file();
-		if ( ! $file ) {
-			return;
-		}
-
-		if ( ! $this->is_maintenance_stale( $file ) ) {
+		if ( ! $file || ! $this->is_maintenance_stale( $file ) ) {
 			return;
 		}
 
@@ -426,20 +537,144 @@ class PDX_Updater {
 	/**
 	 * @param array<string, mixed>|null $hook_extra
 	 */
+	private function handle_failed_upgrade( ?array $hook_extra = null ): void {
+		$this->release_maintenance_mode();
+		$this->maybe_rollback( $hook_extra );
+		$this->clear_all_caches();
+		$this->cleanup_failed_backups();
+
+		$state = $this->get_state();
+		unset( $state['upgrading'] );
+		$this->set_state( $state );
+	}
+
+	/**
+	 * @param array<string, mixed>|null $hook_extra
+	 */
 	private function maybe_rollback( ?array $hook_extra = null ): void {
 		if ( ! $this->is_our_plugin( $hook_extra ) ) {
 			return;
 		}
 
-		$state = $this->get_state();
-		$backup = $state['backup'] ?? '';
+		$state  = $this->get_state();
+		$backup = isset( $state['backup'] ) ? (string) $state['backup'] : '';
+
 		if ( ! $backup || ! is_dir( $backup ) ) {
 			return;
 		}
 
 		$target = $this->plugin_dir();
 		$this->delete_directory( $target );
-		$this->copy_directory( (string) $backup, $target );
+		$this->copy_directory( $backup, $target );
+	}
+
+	/**
+	 * @return list<string>
+	 */
+	private function backup_dir_candidates(): array {
+		$uploads = wp_upload_dir();
+		$base    = isset( $uploads['basedir'] ) ? (string) $uploads['basedir'] : WP_CONTENT_DIR . '/uploads';
+
+		return array_values(
+			array_unique(
+				[
+					WP_CONTENT_DIR . '/upgrade/pdx-toolbar-backup',
+					WP_CONTENT_DIR . '/uploads/pdx-upgrades/backup',
+					$base . '/pdx-upgrades/backup',
+					trailingslashit( get_temp_dir() ) . 'pdx-toolbar-backup',
+				]
+			)
+		);
+	}
+
+	private function create_copy_backup(): ?string {
+		$source = $this->plugin_dir();
+		if ( ! is_dir( $source ) ) {
+			return null;
+		}
+
+		foreach ( $this->backup_dir_candidates() as $dir ) {
+			$this->delete_directory( $dir );
+
+			if ( ! wp_mkdir_p( $dir ) ) {
+				continue;
+			}
+
+			$this->chmod_dir( $dir );
+
+			if ( $this->copy_directory( $source, $dir ) ) {
+				return $dir;
+			}
+
+			$this->delete_directory( $dir );
+		}
+
+		return null;
+	}
+
+	private function cleanup_failed_backups(): void {
+		foreach ( $this->backup_dir_candidates() as $dir ) {
+			if ( is_dir( $dir ) ) {
+				$this->delete_directory( $dir );
+			}
+		}
+	}
+
+	/**
+	 * Remove wrongly named folders like paxdesign-toolbar-7.1.4 left in wp-plugins.
+	 */
+	private function remove_versioned_plugin_folders(): void {
+		$plugins_dir = WP_PLUGIN_DIR;
+		if ( ! is_dir( $plugins_dir ) ) {
+			return;
+		}
+
+		$pattern = $plugins_dir . '/paxdesign-toolbar-*';
+		foreach ( glob( $pattern ) as $path ) {
+			if ( ! is_dir( $path ) ) {
+				continue;
+			}
+			if ( basename( $path ) === self::PLUGIN_FOLDER ) {
+				continue;
+			}
+			$this->delete_directory( $path );
+		}
+	}
+
+	private function ensure_upgrade_directories(): void {
+		$dirs = [
+			WP_CONTENT_DIR . '/upgrade',
+			WP_CONTENT_DIR . '/upgrade-temp-backup',
+			WP_CONTENT_DIR . '/upgrade-temp-backup/plugins',
+			WP_CONTENT_DIR . '/uploads/pdx-upgrades',
+		];
+
+		foreach ( $dirs as $dir ) {
+			wp_mkdir_p( $dir );
+			$this->chmod_dir( $dir );
+		}
+	}
+
+	private function init_filesystem(): bool {
+		if ( ! function_exists( 'WP_Filesystem' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		ob_start();
+		$credentials = request_filesystem_credentials( '' );
+		ob_end_clean();
+
+		if ( false === $credentials ) {
+			$credentials = [];
+		}
+
+		return (bool) WP_Filesystem( $credentials );
+	}
+
+	private function chmod_dir( string $dir ): void {
+		if ( defined( 'FS_CHMOD_DIR' ) ) {
+			@chmod( $dir, FS_CHMOD_DIR ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
 	}
 
 	private function maintenance_file(): ?string {
@@ -496,28 +731,86 @@ class PDX_Updater {
 	}
 
 	private function copy_directory( string $from, string $to ): bool {
+		if ( ! is_dir( $from ) ) {
+			return false;
+		}
+
 		if ( ! function_exists( 'copy_dir' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/file.php';
 		}
-		if ( ! function_exists( 'WP_Filesystem' ) ) {
-			WP_Filesystem();
-		}
+
+		$this->init_filesystem();
 		wp_mkdir_p( $to );
-		return (bool) copy_dir( $from, $to );
+		$this->chmod_dir( $to );
+
+		if ( function_exists( 'copy_dir' ) ) {
+			$result = copy_dir( $from, $to );
+			if ( true === $result || is_array( $result ) ) {
+				if ( is_readable( $to . '/paxdesign-toolbar.php' ) ) {
+					return true;
+				}
+			}
+		}
+
+		return $this->native_copy_directory( $from, $to );
+	}
+
+	private function native_copy_directory( string $from, string $to ): bool {
+		$from = wp_normalize_path( $from );
+		$to   = wp_normalize_path( $to );
+
+		if ( ! wp_mkdir_p( $to ) ) {
+			return false;
+		}
+
+		$iterator = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $from, RecursiveDirectoryIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::SELF_FIRST
+		);
+
+		foreach ( $iterator as $item ) {
+			$sub_path = substr( wp_normalize_path( $item->getPathname() ), strlen( $from ) + 1 );
+			$target   = $to . '/' . $sub_path;
+
+			if ( $item->isDir() ) {
+				if ( ! wp_mkdir_p( $target ) ) {
+					return false;
+				}
+				$this->chmod_dir( $target );
+			} elseif ( ! copy( $item->getPathname(), $target ) ) {
+				return false;
+			}
+		}
+
+		return is_readable( $to . '/paxdesign-toolbar.php' );
 	}
 
 	private function delete_directory( string $dir ): void {
 		if ( ! $dir || ! is_dir( $dir ) ) {
 			return;
 		}
-		if ( ! function_exists( 'WP_Filesystem' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-			WP_Filesystem();
-		}
+
+		$this->init_filesystem();
 		global $wp_filesystem;
-		if ( $wp_filesystem ) {
-			$wp_filesystem->delete( $dir, true );
+
+		if ( $wp_filesystem && $wp_filesystem->delete( $dir, true ) ) {
+			return;
 		}
+
+		$iterator = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator( $dir, RecursiveDirectoryIterator::SKIP_DOTS ),
+			RecursiveIteratorIterator::CHILD_FIRST
+		);
+
+		foreach ( $iterator as $item ) {
+			if ( $item->isDir() ) {
+				@rmdir( $item->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			} else {
+				@unlink( $item->getPathname() ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			}
+		}
+
+		@rmdir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 	}
 
 	public function handle_check_updates(): void {
@@ -530,8 +823,8 @@ class PDX_Updater {
 		$status = $this->get_status( true );
 
 		$redirect_args = [
-			'page'          => PDX_SLUG,
-			'pdx_checked'   => '1',
+			'page'        => PDX_SLUG,
+			'pdx_checked' => '1',
 		];
 
 		if ( ! empty( $status['error'] ) ) {
@@ -554,7 +847,7 @@ class PDX_Updater {
 		wp_safe_redirect(
 			add_query_arg(
 				[
-					'page'                 => PDX_SLUG,
+					'page'                  => PDX_SLUG,
 					'pdx_maintenance_fixed' => '1',
 				],
 				admin_url( 'admin.php' )
