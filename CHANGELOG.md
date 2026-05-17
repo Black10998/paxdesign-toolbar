@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## 7.1.6 — 2026-05-17
+
+**TrustCheck intelligence pipeline** — real data, consistent scoring, explicit failures.
+
+### TrustCheck / Intelligence
+- DNS (Google DoH), RDAP with parent-domain fallback, SSL Labs polling, OTX + URLhaus threat feeds
+- Risk score aligned with verdict; `insufficient_data` when sources fail (no fake “critical” + 0 score)
+- Server-side summary and recommendations from `build_narrative()`
+- `source_status` per source; UI shows errors instead of misleading “Clean”
+- Geolocation resolves domain → IP before lookup
+
+**Install:** `releases/paxdesign-toolbar-7.1.6.zip` — tag `v7.1.6`
+
 ## 7.1.5 — 2026-05-17
 
 **Duplicate plugin folder fix** — only one `paxdesign-toolbar` install in Plugins.

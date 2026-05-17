@@ -20,50 +20,122 @@ class PDX_Intelligence {
 	 */
 	public function full_scan( string $target, bool $paid = false ): array {
 		$start  = microtime( true );
+		$target = strtolower( trim( $target ) );
 		$report = [
-			'target'     => $target,
-			'scan_id'    => 'scan-' . substr( bin2hex( random_bytes( 6 ) ), 0, 10 ),
-			'timestamp'  => gmdate( 'c' ),
-			'paid'       => $paid,
-			'sources'    => [],
-			'risk'       => [],
-			'timeline'   => [],
-			'indicators' => [],
+			'target'         => $target,
+			'scan_id'        => 'scan-' . substr( bin2hex( random_bytes( 6 ) ), 0, 10 ),
+			'timestamp'      => gmdate( 'c' ),
+			'paid'           => $paid,
+			'sources'        => [],
+			'source_status'  => [],
+			'risk'           => [],
+			'timeline'       => [],
+			'indicators'     => [],
 		];
 
-		// Always-free sources
-		$rdap = $this->fetch_rdap( $target );
-		if ( $rdap ) {
-			$report['sources']['rdap'] = $this->parse_rdap( $rdap );
-			$report['timeline']        = array_merge( $report['timeline'], $this->extract_timeline( $rdap ) );
+		// RDAP / WHOIS
+		$rdap = $this->fetch_rdap_resolved( $target );
+		$report['source_status']['rdap'] = $rdap['status'];
+		if ( ! empty( $rdap['data'] ) ) {
+			$report['sources']['rdap'] = $this->parse_rdap( $rdap['data'] );
+			if ( ! empty( $rdap['queried'] ) && $rdap['queried'] !== $target ) {
+				$report['sources']['rdap']['note'] = sprintf(
+					'Registration data for parent zone %s (subdomain RDAP unavailable).',
+					$rdap['queried']
+				);
+			}
+			$report['timeline'] = array_merge( $report['timeline'], $this->extract_timeline( $rdap['data'] ) );
 		}
 
-		$ssl = $this->fetch_ssl( $target );
-		if ( $ssl ) {
-			$report['sources']['ssl'] = $this->parse_ssl( $ssl );
+		// DNS (Google DoH)
+		$dns = $this->fetch_dns( $target );
+		$report['source_status']['dns'] = $dns['status'];
+		if ( ! empty( $dns['data'] ) ) {
+			$report['sources']['dns'] = $dns['data'];
 		}
 
-		// Paid sources
+		// SSL Labs (with polling)
+		$ssl = $this->fetch_ssl_polled( $target );
+		$report['source_status']['ssl'] = $ssl['status'];
+		if ( ! empty( $ssl['data'] ) ) {
+			$report['sources']['ssl'] = $this->parse_ssl( $ssl['data'] );
+			if ( ! empty( $ssl['message'] ) ) {
+				$report['sources']['ssl']['note'] = $ssl['message'];
+			}
+		}
+
+		// Geolocation from resolved A/AAAA record (free)
+		$resolved_ip = $this->resolve_host_ip( $target );
+		if ( $resolved_ip ) {
+			$geo = $this->fetch_geo( $resolved_ip );
+			if ( $geo ) {
+				$report['sources']['geolocation'] = $geo;
+				$report['sources']['geo']         = $geo;
+				$report['source_status']['geo']   = [ 'state' => 'ok', 'message' => 'Resolved via ' . $resolved_ip ];
+			} else {
+				$report['source_status']['geo'] = [ 'state' => 'error', 'message' => 'Geolocation lookup failed for ' . $resolved_ip ];
+			}
+		} else {
+			$report['source_status']['geo'] = [ 'state' => 'error', 'message' => 'Could not resolve host to an IP address.' ];
+		}
+
+		// Free + paid threat intelligence (OTX, URLhaus; VT when paid + key)
+		$threat = $this->fetch_threat_intel( $target, $paid );
+		$report['source_status']['threat'] = $threat['status'];
+		if ( ! empty( $threat['data'] ) ) {
+			$report['sources']['threat']     = $threat['data'];
+			$report['sources']['virustotal'] = $threat['data']['virustotal'] ?? null;
+			if ( ! empty( $threat['data']['virustotal'] ) ) {
+				$report['indicators'] = array_merge( $report['indicators'], $this->extract_iocs( $threat['data']['virustotal'] ) );
+			}
+		}
+
 		if ( $paid ) {
-			$geo = $this->fetch_geo( $target );
-			if ( $geo ) $report['sources']['geolocation'] = $geo;
-
 			$vt = $this->fetch_virustotal( $target );
 			if ( $vt ) {
+				$vt_threat = $this->map_vt_to_threat( $vt );
 				$report['sources']['virustotal'] = $vt;
-				$report['indicators'] = array_merge( $report['indicators'], $this->extract_iocs( $vt ) );
+				if ( empty( $report['sources']['threat'] ) ) {
+					$report['sources']['threat'] = $vt_threat;
+				} else {
+					$report['sources']['threat']['malicious']  = max( (int) $report['sources']['threat']['malicious'], (int) $vt_threat['malicious'] );
+					$report['sources']['threat']['suspicious'] = max( (int) $report['sources']['threat']['suspicious'], (int) $vt_threat['suspicious'] );
+					$report['sources']['threat']['harmless']   = max( (int) $report['sources']['threat']['harmless'], (int) $vt_threat['harmless'] );
+					$report['sources']['threat']['virustotal'] = $vt;
+					$report['sources']['threat']['feeds']      = array_values(
+						array_unique(
+							array_merge(
+								(array) ( $report['sources']['threat']['feeds'] ?? [] ),
+								(array) ( $vt_threat['feeds'] ?? [] )
+							)
+						)
+					);
+				}
+				$report['source_status']['threat'] = [ 'state' => 'ok', 'message' => 'VirusTotal + open feeds' ];
+				$report['indicators']              = array_merge( $report['indicators'], $this->extract_iocs( $vt ) );
 			}
 
-			$shodan = $this->fetch_shodan( $target );
-			if ( $shodan ) $report['sources']['shodan'] = $shodan;
+			$shodan = $this->fetch_shodan( $resolved_ip ?: $target );
+			if ( $shodan ) {
+				$report['sources']['shodan']           = $shodan;
+				$report['source_status']['shodan']     = [ 'state' => 'ok', 'message' => 'Host data retrieved' ];
+			} else {
+				$report['source_status']['shodan'] = [ 'state' => 'skipped', 'message' => 'Shodan API key missing or host not indexed.' ];
+			}
 
 			$hunter = $this->fetch_hunter( $target );
-			if ( $hunter ) $report['sources']['hunter'] = $hunter;
+			if ( $hunter ) {
+				$report['sources']['hunter']       = $hunter;
+				$report['source_status']['hunter'] = [ 'state' => 'ok', 'message' => 'Email discovery complete' ];
+			}
 		}
 
-		// Risk scoring
-		$report['risk']     = $this->compute_risk( $report['sources'] );
-		$report['duration'] = round( microtime( true ) - $start, 3 );
+		$report['risk']           = $this->compute_risk( $report['sources'], $report['source_status'] );
+		$report['confidence']     = $this->compute_confidence( $report['source_status'] );
+		$narrative                = $this->build_narrative( $target, $report );
+		$report['ai_summary']     = $narrative['summary'];
+		$report['recommendations'] = $narrative['recommendations'];
+		$report['duration']       = round( microtime( true ) - $start, 3 );
 
 		return $report;
 	}
@@ -71,13 +143,72 @@ class PDX_Intelligence {
 	/* ── RDAP ───────────────────────────────────────────── */
 
 	public function fetch_rdap( string $domain ): ?array {
-		$resp = wp_remote_get(
-			'https://rdap.org/domain/' . rawurlencode( $domain ),
-			[ 'timeout' => 10 ]
-		);
-		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) return null;
-		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
-		return is_array( $body ) ? $body : null;
+		$result = $this->fetch_rdap_resolved( $domain );
+		return $result['data'] ?? null;
+	}
+
+	/**
+	 * RDAP with parent-domain fallback for subdomains (e.g. juice-shop.herokuapp.com).
+	 *
+	 * @return array{data:?array,status:array,queried:string}
+	 */
+	public function fetch_rdap_resolved( string $domain ): array {
+		$tried   = $this->rdap_lookup_candidates( $domain );
+		$last_err = 'RDAP lookup failed.';
+
+		foreach ( $tried as $candidate ) {
+			$resp = wp_remote_get(
+				'https://rdap.org/domain/' . rawurlencode( $candidate ),
+				[
+					'timeout' => 12,
+					'headers' => [ 'Accept' => 'application/rdap+json, application/json' ],
+				]
+			);
+
+			if ( is_wp_error( $resp ) ) {
+				$last_err = $resp->get_error_message();
+				continue;
+			}
+
+			$code = (int) wp_remote_retrieve_response_code( $resp );
+			if ( 200 !== $code ) {
+				$last_err = "RDAP HTTP {$code} for {$candidate}";
+				continue;
+			}
+
+			$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+			if ( ! is_array( $body ) || empty( $body['ldhName'] ) ) {
+				$last_err = 'Invalid RDAP response.';
+				continue;
+			}
+
+			return [
+				'data'    => $body,
+				'queried' => $candidate,
+				'status'  => [
+					'state'   => 'ok',
+					'message' => $candidate === $domain ? 'Registration data retrieved.' : "Parent zone {$candidate} used.",
+				],
+			];
+		}
+
+		return [
+			'data'    => null,
+			'queried' => $domain,
+			'status'  => [ 'state' => 'error', 'message' => $last_err ],
+		];
+	}
+
+	/**
+	 * @return list<string>
+	 */
+	private function rdap_lookup_candidates( string $domain ): array {
+		$candidates = [ $domain ];
+		$parts      = explode( '.', $domain );
+		if ( count( $parts ) > 2 ) {
+			$candidates[] = implode( '.', array_slice( $parts, -2 ) );
+		}
+		return array_values( array_unique( $candidates ) );
 	}
 
 	private function parse_rdap( array $rdap ): array {
@@ -139,35 +270,322 @@ class PDX_Intelligence {
 	/* ── SSL Labs ───────────────────────────────────────── */
 
 	public function fetch_ssl( string $domain ): ?array {
-		$url  = 'https://api.ssllabs.com/api/v3/analyze?host=' . rawurlencode( $domain ) . '&fromCache=on&maxAge=24&all=done';
-		$resp = wp_remote_get( $url, [ 'timeout' => 12 ] );
-		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) return null;
-		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
-		return is_array( $body ) ? $body : null;
+		$result = $this->fetch_ssl_polled( $domain );
+		return $result['data'] ?? null;
+	}
+
+	/**
+	 * Poll SSL Labs until READY, ERROR, or attempt limit.
+	 *
+	 * @return array{data:?array,status:array,message?:string}
+	 */
+	public function fetch_ssl_polled( string $domain ): array {
+		$url      = 'https://api.ssllabs.com/api/v3/analyze?host=' . rawurlencode( $domain ) . '&fromCache=on&maxAge=24&all=done';
+		$attempts = 6;
+		$body     = null;
+		$last_err = 'SSL Labs assessment unavailable.';
+
+		for ( $i = 0; $i < $attempts; $i++ ) {
+			$resp = wp_remote_get( $url, [ 'timeout' => 20 ] );
+			if ( is_wp_error( $resp ) ) {
+				$last_err = $resp->get_error_message();
+				break;
+			}
+
+			$code = (int) wp_remote_retrieve_response_code( $resp );
+			if ( 200 !== $code ) {
+				$last_err = "SSL Labs HTTP {$code}";
+				break;
+			}
+
+			$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+			if ( ! is_array( $body ) ) {
+				$last_err = 'Invalid SSL Labs response.';
+				break;
+			}
+
+			$status = strtoupper( (string) ( $body['status'] ?? '' ) );
+			if ( in_array( $status, [ 'READY', 'ERROR' ], true ) ) {
+				if ( 'ERROR' === $status ) {
+					return [
+						'data'    => $body,
+						'status'  => [ 'state' => 'error', 'message' => $body['statusMessage'] ?? 'SSL Labs returned an error.' ],
+						'message' => $body['statusMessage'] ?? null,
+					];
+				}
+				return [
+					'data'   => $body,
+					'status' => [ 'state' => 'ok', 'message' => 'Assessment complete.' ],
+				];
+			}
+
+			if ( $i < $attempts - 1 ) {
+				sleep( 3 );
+				$url = 'https://api.ssllabs.com/api/v3/analyze?host=' . rawurlencode( $domain ) . '&startNew=on&all=done';
+			}
+		}
+
+		if ( is_array( $body ) ) {
+			return [
+				'data'    => $body,
+				'status'  => [ 'state' => 'partial', 'message' => 'Assessment still in progress; partial data shown.' ],
+				'message' => 'SSL Labs scan did not finish in time. Retry for a full grade.',
+			];
+		}
+
+		return [
+			'data'   => null,
+			'status' => [ 'state' => 'error', 'message' => $last_err ],
+		];
 	}
 
 	private function parse_ssl( array $ssl ): array {
 		$endpoints = [];
+		$issuer    = null;
+		$subject   = null;
+		$valid_from = null;
+		$valid_to   = null;
+
 		foreach ( $ssl['endpoints'] ?? [] as $ep ) {
+			$cert = $ep['details']['cert'] ?? [];
+			if ( ! $issuer && ! empty( $cert['issuerLabel'] ) ) {
+				$issuer = $cert['issuerLabel'];
+			}
+			if ( ! $subject && ! empty( $cert['subject'] ) ) {
+				$subject = $cert['subject'];
+			}
+			if ( ! empty( $cert['notBefore'] ) ) {
+				$valid_from = substr( (string) $cert['notBefore'], 0, 10 );
+			}
+			if ( ! empty( $cert['notAfter'] ) ) {
+				$valid_to = substr( (string) $cert['notAfter'], 0, 10 );
+			}
+
 			$endpoints[] = [
-				'ip'      => $ep['ipAddress']    ?? null,
-				'grade'   => $ep['grade']         ?? 'N/A',
-				'status'  => $ep['statusMessage'] ?? 'Unknown',
+				'ip'           => $ep['ipAddress'] ?? null,
+				'grade'        => $ep['grade'] ?? 'N/A',
+				'status'       => $ep['statusMessage'] ?? 'Unknown',
 				'has_warnings' => ! empty( $ep['hasWarnings'] ),
 			];
 		}
 
-		$best_grade = 'N/A';
+		$best_grade = null;
 		foreach ( $endpoints as $ep ) {
-			if ( $ep['grade'] !== 'N/A' ) { $best_grade = $ep['grade']; break; }
+			if ( ! empty( $ep['grade'] ) && 'N/A' !== $ep['grade'] ) {
+				$best_grade = $ep['grade'];
+				break;
+			}
+		}
+
+		$days_remaining = null;
+		if ( $valid_to ) {
+			$days_remaining = (int) floor( ( strtotime( $valid_to ) - time() ) / 86400 );
 		}
 
 		return [
-			'label'     => 'SSL / TLS',
-			'status'    => $ssl['status'] ?? 'UNKNOWN',
-			'grade'     => $best_grade,
-			'endpoints' => $endpoints,
-			'protocol'  => $ssl['protocol'] ?? null,
+			'label'          => 'SSL / TLS',
+			'status'         => $ssl['status'] ?? 'UNKNOWN',
+			'grade'          => $best_grade,
+			'assessed'       => null !== $best_grade,
+			'endpoints'      => $endpoints,
+			'protocol'       => $ssl['protocol'] ?? null,
+			'issuer'         => $issuer,
+			'subject'        => $subject,
+			'valid_from'     => $valid_from,
+			'valid_to'       => $valid_to,
+			'days_remaining' => $days_remaining,
+		];
+	}
+
+	/**
+	 * DNS via Google DoH — structured for TrustCheck UI.
+	 *
+	 * @return array{data:?array,status:array}
+	 */
+	public function fetch_dns( string $domain ): array {
+		$types   = [ 'A', 'AAAA', 'MX', 'TXT', 'NS', 'CAA' ];
+		$records = [ 'a' => [], 'aaaa' => [], 'mx' => [], 'txt' => [], 'ns' => [], 'caa' => [] ];
+		$errors  = 0;
+
+		foreach ( $types as $type ) {
+			$resp = wp_remote_get(
+				'https://dns.google/resolve?name=' . rawurlencode( $domain ) . '&type=' . $type,
+				[ 'timeout' => 8, 'headers' => [ 'Accept' => 'application/dns-json' ] ]
+			);
+
+			if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+				++$errors;
+				continue;
+			}
+
+			$data = json_decode( wp_remote_retrieve_body( $resp ), true );
+			if ( empty( $data['Answer'] ) || ! is_array( $data['Answer'] ) ) {
+				continue;
+			}
+
+			foreach ( $data['Answer'] as $rec ) {
+				$value = (string) ( $rec['data'] ?? '' );
+				if ( '' === $value ) {
+					continue;
+				}
+				$key = strtolower( $type );
+				if ( 'a' === $key || 'aaaa' === $key ) {
+					$records[ $key ][] = $value;
+				} elseif ( 'mx' === $key ) {
+					$records['mx'][] = preg_replace( '/^\d+\s+/', '', $value );
+				} else {
+					$records[ $key ][] = $value;
+				}
+			}
+		}
+
+		foreach ( $records['txt'] as $txt ) {
+			if ( stripos( $txt, 'v=spf1' ) !== false ) {
+				$records['spf'] = $txt;
+			}
+			if ( stripos( $txt, 'v=DMARC1' ) !== false ) {
+				$records['dmarc'] = $txt;
+			}
+		}
+
+		$has_any = ! empty( $records['a'] ) || ! empty( $records['aaaa'] ) || ! empty( $records['mx'] )
+			|| ! empty( $records['ns'] ) || ! empty( $records['txt'] );
+
+		if ( ! $has_any ) {
+			return [
+				'data'   => null,
+				'status' => [ 'state' => 'error', 'message' => 'No DNS records returned from resolver.' ],
+			];
+		}
+
+		$records['label'] = 'DNS';
+		return [
+			'data'   => $records,
+			'status' => [
+				'state'   => $errors > 0 ? 'partial' : 'ok',
+				'message' => $errors > 0 ? 'Some record types could not be queried.' : 'DNS records retrieved.',
+			],
+		];
+	}
+
+	/**
+	 * Resolve hostname to first A or AAAA address.
+	 */
+	public function resolve_host_ip( string $host ): ?string {
+		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			return $host;
+		}
+
+		foreach ( [ 'A', 'AAAA' ] as $type ) {
+			$resp = wp_remote_get(
+				'https://dns.google/resolve?name=' . rawurlencode( $host ) . '&type=' . $type,
+				[ 'timeout' => 6, 'headers' => [ 'Accept' => 'application/dns-json' ] ]
+			);
+			if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+				continue;
+			}
+			$data = json_decode( wp_remote_retrieve_body( $resp ), true );
+			foreach ( $data['Answer'] ?? [] as $rec ) {
+				$ip = (string) ( $rec['data'] ?? '' );
+				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+					return $ip;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Open-source threat feeds (OTX, URLhaus) + optional VirusTotal when paid.
+	 *
+	 * @return array{data:?array,status:array}
+	 */
+	public function fetch_threat_intel( string $target, bool $paid ): array {
+		$feeds    = [];
+		$malicious = 0;
+		$suspicious = 0;
+		$errors   = 0;
+
+		// AlienVault OTX (no API key required for indicator summary)
+		$otx = wp_remote_get(
+			'https://otx.alienvault.com/api/v1/indicators/domain/' . rawurlencode( $target ) . '/general',
+			[ 'timeout' => 10, 'headers' => [ 'User-Agent' => 'PaxDesign-Toolbar/' . PDX_VERSION ] ]
+		);
+		if ( ! is_wp_error( $otx ) && 200 === (int) wp_remote_retrieve_response_code( $otx ) ) {
+			$odata = json_decode( wp_remote_retrieve_body( $otx ), true );
+			$pulse = (int) ( $odata['pulse_info']['count'] ?? 0 );
+			if ( $pulse > 0 ) {
+				$suspicious += min( 5, $pulse );
+				$feeds[] = "OTX ({$pulse} pulses)";
+			} else {
+				$feeds[] = 'OTX (0 pulses)';
+			}
+		} else {
+			++$errors;
+		}
+
+		// URLhaus host lookup
+		$urlhaus = wp_remote_post(
+			'https://urlhaus-api.abuse.ch/v1/host/',
+			[
+				'timeout' => 10,
+				'body'    => [ 'host' => $target ],
+				'headers' => [ 'User-Agent' => 'PaxDesign-Toolbar/' . PDX_VERSION ],
+			]
+		);
+		if ( ! is_wp_error( $urlhaus ) && 200 === (int) wp_remote_retrieve_response_code( $urlhaus ) ) {
+			$udata = json_decode( wp_remote_retrieve_body( $urlhaus ), true );
+			if ( 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_count'] ) ) {
+				$malicious += (int) $udata['url_count'];
+				$feeds[]     = 'URLhaus (' . (int) $udata['url_count'] . ' URLs)';
+			} else {
+				$feeds[] = 'URLhaus (clean)';
+			}
+		} else {
+			++$errors;
+		}
+
+		$data = [
+			'label'      => 'Threat Intelligence',
+			'malicious'  => $malicious,
+			'suspicious' => $suspicious,
+			'harmless'   => 0,
+			'feeds'      => $feeds,
+			'checked'    => true,
+			'sources'    => array_filter( [ 'OTX', 'URLhaus' ] ),
+		];
+
+		if ( $errors >= 2 ) {
+			return [
+				'data'   => null,
+				'status' => [ 'state' => 'error', 'message' => 'Threat feed queries failed. Check outbound HTTPS from the server.' ],
+			];
+		}
+
+		return [
+			'data'   => $data,
+			'status' => [
+				'state'   => $errors > 0 ? 'partial' : 'ok',
+				'message' => $malicious > 0 ? 'Malicious indicators found in open feeds.' : 'No malicious hits in open feeds.',
+			],
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $vt
+	 * @return array<string, mixed>
+	 */
+	private function map_vt_to_threat( array $vt ): array {
+		return [
+			'label'      => 'Threat Intelligence',
+			'malicious'  => (int) ( $vt['malicious'] ?? 0 ),
+			'suspicious' => (int) ( $vt['suspicious'] ?? 0 ),
+			'harmless'   => (int) ( $vt['harmless'] ?? 0 ),
+			'feeds'      => array_merge( [ 'VirusTotal' ], (array) ( $vt['categories'] ?? [] ) ),
+			'categories' => $vt['categories'] ?? [],
+			'checked'    => true,
+			'virustotal' => $vt,
 		];
 	}
 
@@ -304,65 +722,225 @@ class PDX_Intelligence {
 
 	/**
 	 * Compute a 0-100 risk score and risk matrix from aggregated sources.
+	 *
+	 * @param array<string, mixed>                   $sources
+	 * @param array<string, array{state?:string}>    $source_status
 	 */
-	public function compute_risk( array $sources ): array {
-		$score    = 0;
-		$factors  = [];
-		$verdict  = 'unknown';
+	public function compute_risk( array $sources, array $source_status = [] ): array {
+		$score   = 0;
+		$factors = [];
 
-		// SSL grade
-		$ssl_grade = $sources['ssl']['grade'] ?? 'N/A';
-		$grade_map = [ 'A+' => 0, 'A' => 5, 'A-' => 8, 'B' => 20, 'C' => 35, 'D' => 50, 'E' => 65, 'F' => 80, 'T' => 70, 'M' => 60, 'N/A' => 15 ];
-		$ssl_risk  = $grade_map[ $ssl_grade ] ?? 15;
-		$score    += $ssl_risk;
-		if ( $ssl_risk > 0 ) {
-			$factors[] = [ 'factor' => 'SSL Grade', 'value' => $ssl_grade, 'risk' => $ssl_risk, 'weight' => 'medium' ];
+		// SSL grade — only when assessment completed
+		$ssl = $sources['ssl'] ?? [];
+		if ( ! empty( $ssl['assessed'] ) && ! empty( $ssl['grade'] ) ) {
+			$grade_map = [ 'A+' => 0, 'A' => 5, 'A-' => 8, 'B' => 20, 'C' => 35, 'D' => 50, 'E' => 65, 'F' => 80, 'T' => 70, 'M' => 60 ];
+			$ssl_grade = $ssl['grade'];
+			$ssl_risk  = $grade_map[ $ssl_grade ] ?? 20;
+			$score    += $ssl_risk;
+			if ( $ssl_risk > 0 ) {
+				$factors[] = [ 'factor' => 'SSL Grade', 'value' => $ssl_grade, 'risk' => $ssl_risk, 'weight' => 'medium' ];
+			}
 		}
 
-		// Domain age
+		// Domain age (RDAP)
 		$age_days = $sources['rdap']['age_days'] ?? null;
-		if ( $age_days !== null ) {
-			if ( $age_days < 30 )       { $score += 30; $factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 30, 'weight' => 'high' ]; }
-			elseif ( $age_days < 180 )  { $score += 15; $factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 15, 'weight' => 'medium' ]; }
-			elseif ( $age_days < 365 )  { $score += 5;  $factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 5,  'weight' => 'low' ]; }
+		if ( null !== $age_days ) {
+			if ( $age_days < 30 ) {
+				$score    += 30;
+				$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 30, 'weight' => 'high' ];
+			} elseif ( $age_days < 180 ) {
+				$score    += 15;
+				$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 15, 'weight' => 'medium' ];
+			} elseif ( $age_days < 365 ) {
+				$score    += 5;
+				$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 5, 'weight' => 'low' ];
+			}
 		}
 
-		// VirusTotal
-		if ( isset( $sources['virustotal'] ) ) {
-			$mal = (int) $sources['virustotal']['malicious'];
-			$sus = (int) $sources['virustotal']['suspicious'];
-			if ( $mal > 5 )      { $score += 40; $factors[] = [ 'factor' => 'VirusTotal Detections', 'value' => "{$mal} malicious", 'risk' => 40, 'weight' => 'critical' ]; }
-			elseif ( $mal > 0 )  { $score += 25; $factors[] = [ 'factor' => 'VirusTotal Detections', 'value' => "{$mal} malicious", 'risk' => 25, 'weight' => 'high' ]; }
-			elseif ( $sus > 0 )  { $score += 10; $factors[] = [ 'factor' => 'VirusTotal Suspicious', 'value' => "{$sus} suspicious", 'risk' => 10, 'weight' => 'medium' ]; }
+		// Threat intelligence (aggregated + VT)
+		$threat = $sources['threat'] ?? [];
+		$mal    = (int) ( $threat['malicious'] ?? $sources['virustotal']['malicious'] ?? 0 );
+		$sus    = (int) ( $threat['suspicious'] ?? $sources['virustotal']['suspicious'] ?? 0 );
+		if ( $mal > 5 ) {
+			$score    += 40;
+			$factors[] = [ 'factor' => 'Threat Feed Detections', 'value' => "{$mal} malicious", 'risk' => 40, 'weight' => 'critical' ];
+		} elseif ( $mal > 0 ) {
+			$score    += 25;
+			$factors[] = [ 'factor' => 'Threat Feed Detections', 'value' => "{$mal} malicious", 'risk' => 25, 'weight' => 'high' ];
+		} elseif ( $sus > 0 ) {
+			$score    += 12;
+			$factors[] = [ 'factor' => 'Threat Feed Suspicious', 'value' => "{$sus} suspicious", 'risk' => 12, 'weight' => 'medium' ];
 		}
 
-		// Shodan open ports / vulns
+		// Shodan
 		if ( isset( $sources['shodan'] ) ) {
 			$vulns = count( $sources['shodan']['vulns'] ?? [] );
 			$ports = count( $sources['shodan']['ports'] ?? [] );
-			if ( $vulns > 0 )   { $score += min( 30, $vulns * 8 ); $factors[] = [ 'factor' => 'Known CVEs', 'value' => "{$vulns} CVEs", 'risk' => min( 30, $vulns * 8 ), 'weight' => 'critical' ]; }
-			if ( $ports > 20 )  { $score += 10; $factors[] = [ 'factor' => 'Open Ports', 'value' => "{$ports} ports", 'risk' => 10, 'weight' => 'medium' ]; }
+			if ( $vulns > 0 ) {
+				$risk_v = min( 30, $vulns * 8 );
+				$score += $risk_v;
+				$factors[] = [ 'factor' => 'Known CVEs', 'value' => "{$vulns} CVEs", 'risk' => $risk_v, 'weight' => 'critical' ];
+			}
+			if ( $ports > 20 ) {
+				$score    += 10;
+				$factors[] = [ 'factor' => 'Open Ports', 'value' => "{$ports} ports", 'risk' => 10, 'weight' => 'medium' ];
+			}
 		}
 
-		// Hosting flag
+		// Hosting / CDN (low weight)
 		if ( ! empty( $sources['geolocation']['hosting'] ) ) {
-			$score += 5;
-			$factors[] = [ 'factor' => 'Hosting Provider IP', 'value' => 'Yes', 'risk' => 5, 'weight' => 'low' ];
+			$score    += 3;
+			$factors[] = [ 'factor' => 'Hosting Provider IP', 'value' => 'Yes', 'risk' => 3, 'weight' => 'low' ];
+		}
+
+		// Missing email auth (informational risk)
+		$dns = $sources['dns'] ?? [];
+		if ( ! empty( $dns ) && empty( $dns['spf'] ) && ! empty( $dns['mx'] ) ) {
+			$score    += 5;
+			$factors[] = [ 'factor' => 'Email Auth', 'value' => 'No SPF', 'risk' => 5, 'weight' => 'low' ];
 		}
 
 		$score = min( 100, max( 0, $score ) );
 
-		if ( $score >= 75 )      $verdict = 'critical';
-		elseif ( $score >= 50 )  $verdict = 'high';
-		elseif ( $score >= 25 )  $verdict = 'medium';
-		elseif ( $score >= 10 )  $verdict = 'low';
-		else                     $verdict = 'clean';
+		$ok_sources = 0;
+		foreach ( [ 'rdap', 'dns', 'ssl', 'threat' ] as $key ) {
+			if ( ( $source_status[ $key ]['state'] ?? '' ) === 'ok' ) {
+				++$ok_sources;
+			}
+		}
+
+		if ( 0 === $ok_sources && empty( $factors ) ) {
+			$verdict = 'insufficient_data';
+		} elseif ( $score >= 75 ) {
+			$verdict = 'critical';
+		} elseif ( $score >= 50 ) {
+			$verdict = 'high';
+		} elseif ( $score >= 25 ) {
+			$verdict = 'medium';
+		} elseif ( $score >= 10 ) {
+			$verdict = 'low';
+		} else {
+			$verdict = 'clean';
+		}
+
+		$labels = [
+			'clean'             => 'Clean',
+			'low'               => 'Low Risk',
+			'medium'            => 'Medium Risk',
+			'high'              => 'High Risk',
+			'critical'          => 'Critical',
+			'insufficient_data' => 'Insufficient Data',
+		];
 
 		return [
-			'score'   => $score,
-			'verdict' => $verdict,
-			'factors' => $factors,
-			'label'   => ucfirst( $verdict ),
+			'score'      => $score,
+			'verdict'    => $verdict,
+			'factors'    => $factors,
+			'label'      => $labels[ $verdict ] ?? ucfirst( $verdict ),
+			'confidence' => $this->compute_confidence( $source_status ),
+		];
+	}
+
+	/**
+	 * @param array<string, array{state?:string}> $source_status
+	 */
+	public function compute_confidence( array $source_status ): int {
+		$weights = [ 'rdap' => 25, 'dns' => 25, 'ssl' => 25, 'threat' => 25 ];
+		$total   = 0;
+
+		foreach ( $weights as $key => $weight ) {
+			$state = $source_status[ $key ]['state'] ?? 'error';
+			if ( 'ok' === $state ) {
+				$total += $weight;
+			} elseif ( 'partial' === $state ) {
+				$total += (int) round( $weight * 0.5 );
+			}
+		}
+
+		return min( 100, max( 0, $total ) );
+	}
+
+	/**
+	 * Server-side narrative aligned with computed risk (no contradictory client text).
+	 *
+	 * @param array<string, mixed> $report
+	 * @return array{summary:string,recommendations:list<string>}
+	 */
+	public function build_narrative( string $target, array $report ): array {
+		$risk    = $report['risk'] ?? [];
+		$score   = (int) ( $risk['score'] ?? 0 );
+		$verdict = (string) ( $risk['verdict'] ?? 'insufficient_data' );
+		$sources = $report['sources'] ?? [];
+		$status  = $report['source_status'] ?? [];
+		$recs    = [];
+
+		$verdict_phrases = [
+			'clean'             => 'no significant risk indicators were identified from available intelligence sources',
+			'low'               => 'low-level risk indicators were identified',
+			'medium'            => 'moderate risk indicators require review',
+			'high'              => 'high-risk indicators were detected',
+			'critical'          => 'critical risk indicators were detected',
+			'insufficient_data' => 'insufficient intelligence was collected to produce a reliable risk assessment',
+		];
+
+		$phrase = $verdict_phrases[ $verdict ] ?? $verdict_phrases['insufficient_data'];
+		$parts  = [ sprintf( 'Analysis of %s: %s.', $target, $phrase ) ];
+
+		if ( 'insufficient_data' !== $verdict ) {
+			$parts[] = sprintf( 'Composite risk score: %d/100 (%s).', $score, $risk['label'] ?? $verdict );
+		}
+
+		if ( ! empty( $sources['rdap']['age_days'] ) ) {
+			$age = (int) $sources['rdap']['age_days'];
+			if ( $age < 90 ) {
+				$parts[] = "Domain registration age is {$age} days.";
+				$recs[]  = 'Treat recently registered infrastructure with heightened scrutiny.';
+			}
+		}
+
+		if ( ! empty( $sources['ssl']['grade'] ) && ! empty( $sources['ssl']['assessed'] ) ) {
+			$parts[] = 'SSL/TLS grade: ' . $sources['ssl']['grade'] . '.';
+			if ( ! in_array( $sources['ssl']['grade'], [ 'A+', 'A' ], true ) ) {
+				$recs[] = 'Review TLS configuration and enable HSTS where appropriate.';
+			}
+		} elseif ( ( $status['ssl']['state'] ?? '' ) === 'error' ) {
+			$parts[] = 'SSL Labs assessment could not be completed.';
+			$recs[]  = 'Retry SSL assessment or verify the host presents a valid HTTPS certificate.';
+		}
+
+		$threat = $sources['threat'] ?? [];
+		if ( ! empty( $threat['malicious'] ) ) {
+			$parts[] = (int) $threat['malicious'] . ' malicious indicator(s) reported by threat feeds.';
+			$recs[]  = 'Block or isolate traffic to this target pending further investigation.';
+		} elseif ( ( $status['threat']['state'] ?? '' ) === 'ok' ) {
+			$parts[] = 'Open threat feeds reported no malicious hits for this target.';
+		} elseif ( ( $status['threat']['state'] ?? '' ) === 'error' ) {
+			$parts[] = 'Threat feed queries failed — reputation is unknown, not verified clean.';
+			$recs[]  = 'Configure outbound HTTPS and API keys, then re-run the scan.';
+		}
+
+		if ( ( $status['rdap']['state'] ?? '' ) === 'error' ) {
+			$recs[] = 'WHOIS/RDAP lookup failed; registration ownership could not be verified.';
+		}
+		if ( ( $status['dns']['state'] ?? '' ) === 'error' ) {
+			$recs[] = 'DNS resolution failed from this server; verify resolver connectivity.';
+		}
+
+		if ( ! empty( $report['anomalies'] ) ) {
+			$recs[] = 'Investigate detected anomalies against baseline scan history.';
+		}
+
+		if ( 'insufficient_data' === $verdict ) {
+			$recs[] = 'Do not treat this target as safe until more intelligence sources return data.';
+		} elseif ( empty( $recs ) && in_array( $verdict, [ 'clean', 'low' ], true ) ) {
+			$recs[] = 'Continue routine monitoring; no immediate containment action indicated.';
+		} elseif ( empty( $recs ) && $score >= 50 ) {
+			$recs[] = 'Conduct deeper investigation before trusting this target in production.';
+		}
+
+		return [
+			'summary'         => implode( ' ', $parts ),
+			'recommendations' => array_values( array_unique( $recs ) ),
 		];
 	}
 

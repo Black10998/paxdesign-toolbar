@@ -630,17 +630,30 @@
     function renderTrustResult(container, data, domain) {
       var targetType = detectTargetType(domain);
       var risk      = data.risk      || {};
-      var score     = risk.score     || 0;
-      var verdict   = risk.verdict   || 'unknown';
-      var rdap      = (data.sources && data.sources.rdap) || {};
-      var ssl       = (data.sources && data.sources.ssl)  || {};
-      var dns       = (data.sources && data.sources.dns)  || {};
-      var threat    = (data.sources && data.sources.threat) || {};
-      var geo       = (data.sources && data.sources.geo)  || {};
-      var hibp      = (data.sources && data.sources.hibp) || {};
+      var score     = risk.score     != null ? risk.score : 0;
+      var verdict   = risk.verdict   || 'insufficient_data';
+      var src       = data.sources   || {};
+      var rdap      = src.rdap       || {};
+      var ssl       = src.ssl        || {};
+      var dns       = src.dns        || {};
+      var threat    = src.threat     || {};
+      var vt        = src.virustotal || {};
+      if (!threat.checked && vt.malicious !== undefined) {
+        threat = {
+          malicious: vt.malicious,
+          suspicious: vt.suspicious,
+          harmless: vt.harmless,
+          feeds: ['VirusTotal'],
+          categories: vt.categories || [],
+          checked: true
+        };
+      }
+      var geo       = src.geo || src.geolocation || {};
+      var hibp      = src.hibp || {};
+      var srcStatus = data.source_status || {};
       var anomalies = data.anomalies  || [];
       var behavioral= data.behavioral || [];
-      var confidence= data.confidence || risk.confidence || 0;
+      var confidence= data.confidence != null ? data.confidence : (risk.confidence || 0);
 
       /* Filter risk factors that don't apply to this target type */
       if (risk.factors && targetType === 'email') {
@@ -656,8 +669,15 @@
         });
       }
 
-      var scoreColor = (verdict === 'clean' || verdict === 'low') ? 'var(--pdx-green)' : verdict === 'medium' ? 'var(--pdx-yellow)' : 'var(--pdx-red)';
-      var verdictLabel = verdict === 'clean' ? 'Clean' : verdict === 'low' ? 'Low Risk' : verdict === 'medium' ? 'Medium Risk' : verdict === 'high' ? 'High Risk' : 'Critical';
+      var scoreColor = (verdict === 'clean' || verdict === 'low') ? 'var(--pdx-green)' : verdict === 'medium' ? 'var(--pdx-yellow)' : verdict === 'insufficient_data' ? 'var(--pdx-lo)' : 'var(--pdx-red)';
+      var verdictLabel = risk.label || (
+        verdict === 'clean' ? 'Clean' :
+        verdict === 'low' ? 'Low Risk' :
+        verdict === 'medium' ? 'Medium Risk' :
+        verdict === 'high' ? 'High Risk' :
+        verdict === 'insufficient_data' ? 'Insufficient Data' :
+        'Critical'
+      );
 
       var html = '<div class="pdx-result">';
 
@@ -687,7 +707,7 @@
       '</div>';
 
       /* ── Confidence bar ── */
-      if (confidence) {
+      if (confidence > 0) {
         html += '<div class="pdx-confidence-bar">' +
           '<span class="pdx-confidence-label">Confidence</span>' +
           '<div class="pdx-confidence-track"><div class="pdx-confidence-fill" style="width:' + confidence + '%"></div></div>' +
@@ -806,14 +826,14 @@
       /* ── Intelligence Sources ── */
       html += '<div class="pdx-section"><div class="pdx-section-title">Intelligence Sources</div>';
       var sources = [
-        { name: 'RDAP / WHOIS Registry',    status: rdap.registrar ? 'ok' : 'warn',    note: rdap.registrar ? 'Data retrieved' : 'No data' },
-        { name: 'SSL Labs Assessment',       status: ssl.grade ? 'ok' : 'warn',         note: ssl.grade ? 'Grade ' + ssl.grade : 'Not assessed' },
-        { name: 'DNS Resolver',              status: (dns.a && dns.a.length) ? 'ok' : 'warn', note: (dns.a && dns.a.length) ? dns.a.length + ' records' : 'No records' },
-        { name: 'Threat Intelligence Feeds', status: threat.malicious ? 'warn' : 'ok', note: threat.malicious ? 'Flagged' : 'Clean' },
+        { name: 'RDAP / WHOIS Registry',    status: (srcStatus.rdap && srcStatus.rdap.state) || (rdap.registrar ? 'ok' : 'err'),    note: (srcStatus.rdap && srcStatus.rdap.message) || (rdap.registrar ? 'Data retrieved' : 'Unavailable') },
+        { name: 'SSL Labs Assessment',       status: (srcStatus.ssl && srcStatus.ssl.state) || (ssl.assessed ? 'ok' : 'err'),         note: ssl.assessed ? ('Grade ' + ssl.grade) : ((srcStatus.ssl && srcStatus.ssl.message) || 'Not assessed') },
+        { name: 'DNS Resolver',              status: (srcStatus.dns && srcStatus.dns.state) || ((dns.a && dns.a.length) ? 'ok' : 'err'), note: (dns.a && dns.a.length) ? (dns.a.length + ' A record(s)') : ((srcStatus.dns && srcStatus.dns.message) || 'No records') },
+        { name: 'Threat Intelligence Feeds', status: (srcStatus.threat && srcStatus.threat.state === 'error') ? 'err' : (!threat.checked ? 'err' : (threat.malicious > 0 ? 'warn' : (threat.suspicious > 0 ? 'warn' : 'ok'))), note: (srcStatus.threat && srcStatus.threat.state === 'error') ? (srcStatus.threat.message || 'Feed query failed') : (!threat.checked ? 'Not checked' : (threat.malicious > 0 ? (threat.malicious + ' malicious') : (threat.suspicious > 0 ? (threat.suspicious + ' suspicious') : 'No malicious hits (open feeds)'))) },
       ];
       sources.forEach(function(s) {
         html += '<div class="pdx-source-row">' +
-          '<div class="pdx-source-dot" style="background:' + (s.status === 'ok' ? 'var(--pdx-green)' : 'var(--pdx-yellow)') + '"></div>' +
+          '<div class="pdx-source-dot" style="background:' + (s.status === 'ok' ? 'var(--pdx-green)' : s.status === 'err' ? 'var(--pdx-red)' : 'var(--pdx-yellow)') + '"></div>' +
           '<span class="pdx-source-name">' + escHtml(s.name) + '</span>' +
           '<span class="pdx-source-status pdx-source-status--' + s.status + '">' + escHtml(s.note) + '</span>' +
         '</div>';
@@ -2950,7 +2970,7 @@
     function generateSummary(type, target, data) {
       var risk      = data.risk      || {};
       var score     = risk.score     || 0;
-      var verdict   = risk.verdict   || 'unknown';
+      var verdict   = risk.verdict   || 'insufficient_data';
       var anomalies = data.anomalies || [];
       var rdap      = (data.sources && data.sources.rdap) || {};
       var ssl       = (data.sources && data.sources.ssl)  || {};
@@ -2960,7 +2980,9 @@
         : verdict === 'low'    ? 'low-level risk indicators present'
         : verdict === 'medium' ? 'moderate risk indicators requiring attention'
         : verdict === 'high'   ? 'high-risk indicators detected'
-        : 'critical threat indicators identified';
+        : verdict === 'critical' ? 'critical risk indicators detected'
+        : verdict === 'insufficient_data' ? 'insufficient intelligence was collected for a reliable assessment'
+        : 'risk assessment completed with limited source coverage';
 
       if (type === 'email') {
         var breached = (data.sources && data.sources.hibp && data.sources.hibp.breached);
@@ -3071,8 +3093,9 @@
         if (threat2.malicious) recs.push('Quarantine and remove this file immediately. Conduct a full endpoint investigation.');
         else recs.push('Continue monitoring — a clean result does not guarantee safety for all environments.');
       }
+      if (!recs.length && risk.verdict === 'insufficient_data') recs.push('Re-run the scan after verifying server outbound HTTPS and API connectivity.');
       if (!recs.length && risk.score > 50) recs.push('Elevated risk score detected. Conduct further investigation before trusting this target.');
-      if (!recs.length) recs.push('No immediate action required. Continue routine monitoring.');
+      if (!recs.length && (risk.verdict === 'clean' || risk.verdict === 'low')) recs.push('No immediate action required. Continue routine monitoring.');
       return recs;
     }
 
