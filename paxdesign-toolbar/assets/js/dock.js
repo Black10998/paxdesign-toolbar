@@ -34,7 +34,58 @@
     liveActivity: [],
     queueStats: {},
     memoryItems: [],
+    panelState: {},
   };
+
+  var PANEL_ANIM_MS = 280;
+
+  function panelStateStorageKey(moduleId) {
+    var uid = (typeof PDX_CONFIG !== 'undefined' && PDX_CONFIG.userId) ? String(PDX_CONFIG.userId) : '0';
+    return 'pdx_panel_v1_' + uid + '_' + moduleId;
+  }
+
+  function savePanelState(moduleId, payload) {
+    if (!moduleId || !payload) return;
+    try {
+      var data = Object.assign({ savedAt: Date.now() }, payload);
+      sessionStorage.setItem(panelStateStorageKey(moduleId), JSON.stringify(data));
+      state.panelState[moduleId] = data;
+    } catch (e) {}
+  }
+
+  function loadPanelState(moduleId) {
+    if (state.panelState[moduleId]) return state.panelState[moduleId];
+    try {
+      var raw = sessionStorage.getItem(panelStateStorageKey(moduleId));
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearPanelState(moduleId) {
+    try {
+      sessionStorage.removeItem(panelStateStorageKey(moduleId));
+    } catch (e) {}
+    delete state.panelState[moduleId];
+  }
+
+  function prependRestoreBanner(container, moduleId, target, onRerun) {
+    if (!container) return;
+    var bar = document.createElement('div');
+    bar.className = 'pdx-session-restore';
+    bar.innerHTML =
+      '<span>Restored <strong>' + escHtml(target || 'result') + '</strong> from this session</span>' +
+      '<button type="button" class="pdx-btn-ghost pdx-btn-sm pdx-session-rerun">Run again</button>';
+    var rerun = bar.querySelector('.pdx-session-rerun');
+    if (rerun) {
+      rerun.addEventListener('click', function () {
+        clearPanelState(moduleId);
+        if (onRerun) onRerun();
+      });
+    }
+    container.insertBefore(bar, container.firstChild);
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -147,9 +198,17 @@
       if (state.commandPaletteOpen) closeCommandPalette();
       state.activeModule = moduleId;
       _panelFocusReturn = document.activeElement;
-      backdrop.classList.add('is-open');
-      panel.classList.add('is-open');
       panel.setAttribute('aria-hidden', 'false');
+      backdrop.classList.add('is-entering');
+      panel.classList.add('is-entering');
+      requestAnimationFrame(function () {
+        backdrop.classList.add('is-open');
+        panel.classList.add('is-open');
+        requestAnimationFrame(function () {
+          backdrop.classList.remove('is-entering');
+          panel.classList.remove('is-entering');
+        });
+      });
       lockBodyScroll();
 
       // Hide dock on mobile so it doesn't overlap the panel (unless admin disabled it).
@@ -172,7 +231,8 @@
         injectCloseBtnGlobal();
         focusPanel();
         var _body = panel.querySelector('.pdx-ph-body');
-        if (_body) _body.scrollTop = 0;
+        if (_body && !state._skipPanelScrollReset) _body.scrollTop = 0;
+        state._skipPanelScrollReset = false;
       }).catch(function() {
         // Fallback: render with whatever state we have.
         if (state.activeModule !== moduleId || !panel.classList.contains('is-open')) return;
@@ -184,15 +244,22 @@
     }
 
     function closePanel() {
+      if (panel.classList.contains('pdx-panel--closing')) return;
       if (state._paypalPoll) {
         clearInterval(state._paypalPoll);
         state._paypalPoll = null;
       }
-      state.activeModule = null;
+      panel.classList.add('pdx-panel--closing');
+      backdrop.classList.add('pdx-panel--closing');
       backdrop.classList.remove('is-open');
       panel.classList.remove('is-open');
       panel.setAttribute('aria-hidden', 'true');
       unlockBodyScroll();
+      setTimeout(function () {
+        panel.classList.remove('pdx-panel--closing');
+        backdrop.classList.remove('pdx-panel--closing');
+        state.activeModule = null;
+      }, PANEL_ANIM_MS);
 
       if (_panelFocusReturn && _panelFocusReturn.focus) {
         try { _panelFocusReturn.focus(); } catch (e) {}
@@ -481,6 +548,23 @@
       document.getElementById('pdx-trust-input').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') runTrustScan();
       });
+      restoreTrustPanel();
+    }
+
+    function restoreTrustPanel() {
+      var saved = loadPanelState('trust');
+      if (!saved || saved.view !== 'result' || !saved.data) return;
+      var input = document.getElementById('pdx-trust-input');
+      var result = document.getElementById('pdx-trust-result');
+      if (input && saved.target) input.value = saved.target;
+      if (!result) return;
+      state._skipPanelScrollReset = true;
+      renderTrustResult(result, saved.data, saved.target);
+      prependRestoreBanner(result, 'trust', saved.target, function () {
+        var inp = document.getElementById('pdx-trust-input');
+        if (inp && saved.target) inp.value = saved.target;
+        runTrustScan();
+      });
     }
 
     function runTrustScan() {
@@ -490,6 +574,7 @@
       if (!input || !result) return;
       var domain = input.value.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
       if (!domain) return;
+      clearPanelState('trust');
 
       var trustStages = [
         { label: 'Initializing intelligence pipeline',    detail: 'Loading analysis modules and threat databases',              duration: 520 },
@@ -530,6 +615,12 @@
     function finalizeTrustResult(result, data, domain) {
       if (!data) { result.innerHTML = '<div class="pdx-error">Scan failed. Check the domain and try again.</div>'; return; }
       renderTrustResult(result, data, domain);
+      savePanelState('trust', {
+        view: 'result',
+        target: domain,
+        data: data,
+        paymentRequired: data.error === 'payment_required',
+      });
       addToScanHistory('trust', domain, data.risk);
       renderScanHistory('trust');
       if (data.workspace_id) showNotif('Scan saved to workspace', 'info');
@@ -825,6 +916,23 @@
 
       document.getElementById('pdx-osint-btn').addEventListener('click', runOsintScan);
       document.getElementById('pdx-osint-input').addEventListener('keydown', function(e) { if (e.key === 'Enter') runOsintScan(); });
+      restoreOsintPanel();
+    }
+
+    function restoreOsintPanel() {
+      var saved = loadPanelState('osint');
+      if (!saved || saved.view !== 'result' || !saved.data) return;
+      var input = document.getElementById('pdx-osint-input');
+      var result = document.getElementById('pdx-osint-result');
+      if (input && saved.target) input.value = saved.target;
+      if (!result) return;
+      state._skipPanelScrollReset = true;
+      renderOsintResult(result, saved.data, saved.target);
+      prependRestoreBanner(result, 'osint', saved.target, function () {
+        var inp = document.getElementById('pdx-osint-input');
+        if (inp && saved.target) inp.value = saved.target;
+        runOsintScan();
+      });
     }
 
     function runOsintScan() {
@@ -834,6 +942,7 @@
       if (!input || !result) return;
       var target = input.value.trim();
       if (!target) return;
+      clearPanelState('osint');
 
       var osintStages = [
         { label: 'Initializing OSINT agent network',      detail: 'Spinning up distributed intelligence collectors',          duration: 540 },
@@ -1066,6 +1175,12 @@
       html += rawSection('Raw Response', data);
 
       html += '</div>';
+      savePanelState('osint', {
+        view: 'result',
+        target: target,
+        data: data,
+        paymentRequired: data.error === 'payment_required',
+      });
       container.innerHTML = html;
 
       var expBtn = container.querySelector('.pdx-export-btn');
@@ -3083,6 +3198,7 @@
 
         applyLayout();
         injectCloseBtnGlobal();
+        injectPanelDragHandle();
 
         // Strip any leftover inline styles — CSS owns all geometry.
         ['top','bottom','left','right','transform','height','max-height','width'].forEach(function(p) {
@@ -3130,46 +3246,48 @@
         setTimeout(function() { applyLayout(); check(); }, 400);
       });
 
-      // ── Swipe to close ───────────────────────────────────
+      // ── Swipe to close (header/handle only — never steal content scroll) ──
       if (!swipeClose) return;
 
-      var tsX = 0, tsY = 0, tsMoved = false;
+      var tsX = 0, tsY = 0, dismissGesture = false;
       var isUnderHeader = (dockPos === 'under-header');
 
-      panel.addEventListener('touchstart', function(e) {
+      function touchInDismissZone(target) {
+        return !!(target && target.closest && (
+          target.closest('.pdx-panel-drag-handle') ||
+          target.closest('.pdx-ph-hd') ||
+          target.closest('.pdx-panel-close') ||
+          target.closest('.pdx-mobile-close')
+        ));
+      }
+
+      panel.addEventListener('touchstart', function (e) {
         if (!e.touches.length) return;
         tsX = e.touches[0].clientX;
         tsY = e.touches[0].clientY;
-        tsMoved = false;
+        dismissGesture = touchInDismissZone(e.target);
       }, { passive: true });
 
-      panel.addEventListener('touchmove', function(e) {
-        tsMoved = true;
-        // Walk up from touch target to find a scrollable child.
-        // #pdx-panel no longer scrolls — .pdx-ph-body is the real scroller.
-        var el = e.target;
-        while (el && el !== panel) {
-          var ov = window.getComputedStyle(el).overflowY;
-          if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight) return;
-          el = el.parentElement;
-        }
-        // No scrollable child — check dismiss boundary using .pdx-ph-body.
-        var scroller = panel.querySelector('.pdx-ph-body') || panel;
-        var dy = e.touches[0].clientY - tsY;
-        var atTop    = scroller.scrollTop <= 0;
-        var atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
-        if (isUnderHeader  && atTop    && dy < 0) e.preventDefault();
-        if (!isUnderHeader && atBottom && dy > 0) e.preventDefault();
-      }, { passive: false });
-
-      panel.addEventListener('touchend', function(e) {
-        if (!e.changedTouches.length || !tsMoved) return;
+      panel.addEventListener('touchend', function (e) {
+        if (!dismissGesture || !e.changedTouches.length) return;
         var endX = e.changedTouches[0].clientX;
         var endY = e.changedTouches[0].clientY;
-        var dx   = Math.abs(endX - tsX);
-        var dy   = isUnderHeader ? (tsY - endY) : (endY - tsY);
-        if (dy > 60 && dx < dy * 0.6) closePanel();
+        var dx = Math.abs(endX - tsX);
+        var dy = isUnderHeader ? (tsY - endY) : (endY - tsY);
+        if (dy > 100 && dx < dy * 0.55) closePanel();
+        dismissGesture = false;
       }, { passive: true });
+    }
+
+    function injectPanelDragHandle() {
+      if (!panel.querySelector('.pdx-panel-drag-handle')) {
+        var handle = document.createElement('div');
+        handle.type = 'button';
+        handle.className = 'pdx-panel-drag-handle';
+        handle.setAttribute('aria-label', 'Drag to close panel');
+        inner.insertBefore(handle, inner.firstChild);
+        handle.addEventListener('click', closePanel);
+      }
     }
 
 
@@ -4080,6 +4198,11 @@
       html += rawSection('Raw Response', data);
       html += '</div>';
       res.innerHTML = html;
+      savePanelState('investigation', {
+        view: 'result',
+        target: value,
+        data: data,
+      });
 
       var graphBtn = document.getElementById('pdx-corr-graph-btn');
       if (graphBtn) graphBtn.addEventListener('click', function() {

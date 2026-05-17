@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Sync plugin version
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          sed -i "s/Version:.*/Version:      ${VER}/" paxdesign-toolbar/paxdesign-toolbar.php
+          sed -i "s/define( 'PDX_VERSION'.*/define( 'PDX_VERSION',   '${VER}' );/" paxdesign-toolbar/paxdesign-toolbar.php
+
+      - name: Build ZIP
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          STAGING="/tmp/pdx-release"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING/paxdesign-toolbar"
+          rsync -a --exclude='.git' --exclude='.github' --exclude='releases' --exclude='scripts' --exclude='node_modules' --exclude='.cursor' \
+            paxdesign-toolbar/ "$STAGING/paxdesign-toolbar/"
+          mkdir -p releases
+          (cd "$STAGING" && zip -rq "$GITHUB_WORKSPACE/releases/paxdesign-toolbar-${VER}.zip" paxdesign-toolbar)
+          sha256sum "releases/paxdesign-toolbar-${VER}.zip" | tee "releases/paxdesign-toolbar-${VER}.zip.sha256"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            releases/paxdesign-toolbar-${{ steps.ver.outputs.version }}.zip
+            releases/paxdesign-toolbar-${{ steps.ver.outputs.version }}.zip.sha256
+          generate_release_notes: true

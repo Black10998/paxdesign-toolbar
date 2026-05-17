@@ -26,7 +26,8 @@ body.wp-admin .pdx-admin-wrap {
 
 /* ─── Sidebar ───────────────────────────────────────────── */
 .pdx-sidebar {
-  width: var(--pdx-sidebar-w);
+  width: var(--pdx-sidebar-w, 220px);
+  max-width: 220px;
   flex-shrink: 0;
   background: var(--pdx-bg-elev);
   border-right: 1px solid var(--pdx-border);
@@ -89,8 +90,9 @@ body.wp-admin .pdx-admin-wrap {
 .pdx-sidebar__link {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
   border-radius: var(--pdx-radius);
   color: var(--pdx-text-muted);
   text-decoration: none;
@@ -459,6 +461,22 @@ table.widefat td {
   background: var(--pdx-accent);
 }
 
+.pdx-toggle--sm .pdx-toggle__track {
+  width: 34px;
+  height: 18px;
+}
+
+.pdx-toggle--sm .pdx-toggle__track::after {
+  width: 12px;
+  height: 12px;
+  top: 2px;
+  left: 2px;
+}
+
+.pdx-toggle--sm input:checked + .pdx-toggle__track::after {
+  transform: translateX(16px);
+}
+
 /* ─── Legacy admin compat ───────────────────────────────── */
 .pdx-admin-wrap .wrap {
   margin: 0;
@@ -544,11 +562,16 @@ body.pdx-admin-app #adminmenu li.toplevel_page_paxdesign-toolbar.wp-menu-open .w
   max-height: 100%;
 }
 
-.pdx-card,
-.pdx-admin-main,
+.pdx-admin-main {
+  overflow-x: hidden;
+}
+
+.pdx-card {
+  overflow: hidden;
+}
+
 .pdx-sidebar {
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow-x: hidden;
 }
 
 .pdx-card__body {
@@ -564,9 +587,9 @@ body.pdx-admin-app #adminmenu li.toplevel_page_paxdesign-toolbar.wp-menu-open .w
 
 .pdx-module-card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--pdx-border);
   border-radius: var(--pdx-radius);
   background: var(--pdx-bg-elev);
@@ -602,6 +625,11 @@ body.pdx-admin-app #adminmenu li.toplevel_page_paxdesign-toolbar.wp-menu-open .w
 .pdx-module-card__info {
   flex: 1;
   min-width: 0;
+}
+
+.pdx-module-card .pdx-toggle {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .pdx-module-card__info strong {

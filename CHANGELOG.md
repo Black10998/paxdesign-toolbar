@@ -1,5 +1,28 @@
 # Changelog
 
+## 7.1.0 — 2026-05-16
+
+**Production foundation** — scroll, state, motion, updates.
+
+### Panel UX
+- Single-scroll architecture for analysis panels (desktop/tablet/mobile)
+- Smooth panel open/close fade + slide; reduced-motion respected
+- Touch: swipe-to-close only from header/drag handle (no content scroll hijack)
+- Session restore for Trust/OSINT/Investigation results via `sessionStorage` per user
+
+### Visual
+- GitHub-style minimal palette: yellow accent only on primary actions and key indicators
+- Calmer metrics, badges, and chips (no rainbow AI look)
+
+### Admin
+- Compact sidebar links, `pdx-toggle--sm` for module cards, aligned enable toggles
+
+### Updates
+- GitHub release updater — one-click **Update** in WordPress Plugins screen
+- CI workflow publishes ZIP on `v*` tags
+
+**Install:** `releases/paxdesign-toolbar-7.1.0.zip` — tag `v7.1.0`
+
 ## 7.0.0 — 2026-05-16
 
 **Production foundation** — faster interactions, unified intelligence UX, cleanup.

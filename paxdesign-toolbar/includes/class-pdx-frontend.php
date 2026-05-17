@@ -50,6 +50,13 @@ class PDX_Frontend {
 			PDX_VERSION
 		);
 
+		wp_enqueue_style(
+			'pdx-panel-scroll',
+			PDX_URL . 'assets/css/pdx-panel-scroll.css',
+			[ 'pdx-dock-ui' ],
+			PDX_VERSION
+		);
+
 		// Use defer strategy (WP 6.3+) so the script always runs after the DOM is ready.
 		// Falls back to in_footer=true on older WordPress, which is safe because
 		// dock.js wraps its init in a DOMContentLoaded guard.
@@ -132,6 +139,8 @@ class PDX_Frontend {
 			'modules'          => $enabled,
 			'restUrl'          => esc_url( rest_url( 'pdx/v1' ) ),
 			'nonce'            => wp_create_nonce( 'wp_rest' ),
+			'userId'           => get_current_user_id(),
+			'isLoggedIn'       => is_user_logged_in(),
 		];
 	}
 

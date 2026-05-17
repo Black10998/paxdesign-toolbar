@@ -1,0 +1,109 @@
+/**
+ * Panel scroll architecture v7.1 — single scroll container, no nested traps.
+ */
+
+#pdx-panel.is-open {
+  display: flex;
+  flex-direction: column;
+}
+
+#pdx-panel-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+#pdx-panel .pdx-ph {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
+#pdx-panel .pdx-ph-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+/* Analysis results: scroll only in .pdx-ph-body */
+#pdx-panel .pdx-ph-body .pdx-result,
+#pdx-panel .pdx-ph-body .pdx-evidence-body,
+#pdx-panel .pdx-ph-body .pdx-output-body,
+#pdx-panel .pdx-ph-body .pdx-kv-grid {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+#pdx-panel .pdx-ph-body .pdx-dp-log {
+  max-height: min(160px, 28vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Chat keeps internal message scroller */
+#pdx-panel .pdx-ph--chat .pdx-ph-body {
+  overflow: hidden;
+}
+
+#pdx-panel .pdx-ph--chat .pdx-chat-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile bottom sheet */
+#pdx-root[data-mobile-dock^="bottom"] #pdx-panel.is-open {
+  display: flex;
+  flex-direction: column;
+}
+
+#pdx-root[data-mobile-dock^="bottom"] #pdx-panel .pdx-ph-body {
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+}
+
+.pdx-panel-drag-handle {
+  flex-shrink: 0;
+  height: 20px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.pdx-panel-drag-handle::before {
+  content: '';
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 8px auto 4px;
+  border-radius: 2px;
+  background: var(--pdx-border, #30363d);
+}
+
+.pdx-session-restore {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--pdx-text-muted, #8b949e);
+  background: var(--pdx-bg-muted, #21262d);
+  border: 1px solid var(--pdx-border, #30363d);
+  border-radius: var(--pdx-radius, 6px);
+}
+
+.pdx-session-restore strong {
+  color: var(--pdx-text, #e6edf3);
+  font-weight: 600;
+}

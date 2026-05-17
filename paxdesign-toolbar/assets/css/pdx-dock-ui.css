@@ -540,3 +540,106 @@
 .pdx-feed-dot--active {
   animation: pdx-pulse 1.4s ease infinite;
 }
+
+/* ─── v7.1: panel open/close motion ──────────────────────── */
+#pdx-backdrop {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+#pdx-backdrop.is-open {
+  opacity: 1;
+}
+
+#pdx-panel {
+  opacity: 0;
+  transition:
+    transform 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s ease;
+}
+
+#pdx-panel.is-open {
+  opacity: 1;
+}
+
+#pdx-panel.pdx-panel--closing {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pdx-panel,
+  #pdx-backdrop {
+    transition: none;
+  }
+}
+
+/* ─── v7.1: serious / minimal (GitHub-like) ──────────────── */
+.pdx-cap-tag,
+.pdx-ioc-chip,
+.pdx-ioc-chip-v5,
+.pdx-tag {
+  background: var(--pdx-bg-muted);
+  border: 1px solid var(--pdx-border);
+  color: var(--pdx-text-muted);
+}
+
+.pdx-metric-card {
+  background: var(--pdx-bg-elev);
+  border: 1px solid var(--pdx-border);
+}
+
+.pdx-metric-value {
+  color: var(--pdx-text);
+}
+
+.pdx-metric-label {
+  color: var(--pdx-text-subtle);
+}
+
+.pdx-badge {
+  background: var(--pdx-bg-muted);
+  border: 1px solid var(--pdx-border);
+  color: var(--pdx-text-muted);
+}
+
+.pdx-badge--critical,
+.pdx-badge--high {
+  border-color: var(--pdx-danger);
+  color: var(--pdx-danger);
+}
+
+.pdx-scan-complete-dot,
+.pdx-module-status-dot--online {
+  background: var(--pdx-accent);
+}
+
+.pdx-btn-primary {
+  background: var(--pdx-accent);
+  color: var(--pdx-on-accent, #0d1117);
+  border: 1px solid transparent;
+}
+
+.pdx-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.pdx-btn-ghost,
+.pdx-btn-sm {
+  background: var(--pdx-bg-muted);
+  border: 1px solid var(--pdx-border);
+  color: var(--pdx-text);
+}
+
+.pdx-report-summary,
+.pdx-evidence-section,
+.pdx-deep-pipeline {
+  border-color: var(--pdx-border);
+}
+
+.pdx-ph-title svg {
+  stroke: var(--pdx-text-muted);
+}
+
+.pdx-ph-title .pdx-module-status-dot--online {
+  background: var(--pdx-accent);
+}
