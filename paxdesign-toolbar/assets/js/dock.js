@@ -72,7 +72,7 @@
 
   function prependRestoreBanner(container, moduleId, target, onRerun) {
     if (!container) return;
-    var bar = document.createElement('motion');
+    var bar = document.createElement('div');
     bar.className = 'pdx-session-restore';
     bar.innerHTML =
       '<span>Restored <strong>' + escHtml(target || 'result') + '</strong> from this session</span>' +
@@ -1174,7 +1174,7 @@
       /* ── Raw data (collapsed) ── */
       html += rawSection('Raw Response', data);
 
-      html += '</motion>';
+      html += '</div>';
       savePanelState('osint', {
         view: 'result',
         target: target,
@@ -3281,7 +3281,7 @@
 
     function injectPanelDragHandle() {
       if (!panel.querySelector('.pdx-panel-drag-handle')) {
-        var handle = document.createElement('motion');
+        var handle = document.createElement('div');
         handle.type = 'button';
         handle.className = 'pdx-panel-drag-handle';
         handle.setAttribute('aria-label', 'Drag to close panel');
