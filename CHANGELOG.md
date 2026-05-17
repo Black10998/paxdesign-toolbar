@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## 8.4.3 — 2026-05-17
+
+**Updater architecture fix — stable WordPress update notifications**
+
+- Plugin basename now always matches the loaded install path (fixes update row key mismatch with canonical folder)
+- `inject_update()` correctly sets both `response` and `no_update` transients; no silent early-return leaving stale data
+- Duplicate versioned folder basenames pruned from update transients; active plugin list repaired on activate/upgrade
+- `is_our_plugin()` no longer returns true for unrelated upgrades when hook data is missing
+- Post-upgrade/activate cache refresh calls `wp_update_plugins()` so available updates rebuild immediately
+- Activation hook keeps update metadata in sync without breaking active plugin state
+
+**Install:** `releases/paxdesign-toolbar-8.4.3.zip` — tag `v8.4.3`
+
 ## 8.4.2 — 2026-05-17
 
 **Dock icon polish — unified toolbar/sidebar colors**

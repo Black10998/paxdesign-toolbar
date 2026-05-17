@@ -59,18 +59,80 @@ class PDX_Updater {
 		// so the next admin page load reflects the newly installed version.
 		add_action( 'upgrader_process_complete', [ $this, 'flush_release_transient_on_upgrade' ], 1000, 2 );
 		add_action( 'deleted_plugin', [ $this, 'on_deleted_plugin' ], 10, 2 );
+		add_action( 'activated_plugin', [ $this, 'on_activated_plugin' ], 10, 2 );
 
 		add_action( 'admin_post_pdx_check_updates', [ $this, 'handle_check_updates' ] );
 		add_action( 'admin_post_pdx_clear_maintenance', [ $this, 'handle_clear_maintenance' ] );
 	}
 
+	/**
+	 * Basename for the plugin copy loaded in this request (must match Plugins screen row key).
+	 */
 	public function plugin_basename(): string {
+		return plugin_basename( $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE );
+	}
+
+	/**
+	 * Basename for the canonical install path (wp-content/plugins/paxdesign-toolbar/).
+	 */
+	public function canonical_plugin_basename(): string {
 		$canonical_main = $this->canonical_plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
-		if ( is_readable( $canonical_main ) && $this->is_our_plugin_header_file( $canonical_main ) ) {
+		if ( is_readable( $canonical_main ) ) {
 			return plugin_basename( $canonical_main );
 		}
 
-		return plugin_basename( PDX_DIR . self::PLUGIN_MAIN_FILE );
+		return $this->plugin_basename();
+	}
+
+	/**
+	 * Every installed copy of PaxDesign on disk (canonical + versioned duplicates).
+	 *
+	 * @return list<string>
+	 */
+	public function all_plugin_basenames(): array {
+		$basenames = [ $this->plugin_basename() ];
+
+		$canonical = $this->canonical_plugin_basename();
+		if ( ! in_array( $canonical, $basenames, true ) ) {
+			$basenames[] = $canonical;
+		}
+
+		$patterns = [
+			WP_PLUGIN_DIR . '/paxdesign-toolbar-*',
+			WP_PLUGIN_DIR . '/' . self::PLUGIN_FOLDER . '/paxdesign-toolbar-*',
+		];
+
+		foreach ( $patterns as $pattern ) {
+			foreach ( glob( $pattern, GLOB_ONLYDIR ) ?: [] as $dir ) {
+				$main = $dir . '/' . self::PLUGIN_MAIN_FILE;
+				if ( ! is_readable( $main ) || ! $this->is_our_plugin_header_file( $main ) ) {
+					continue;
+				}
+				$basename = plugin_basename( $main );
+				if ( ! in_array( $basename, $basenames, true ) ) {
+					$basenames[] = $basename;
+				}
+			}
+		}
+
+		return $basenames;
+	}
+
+	public function is_plugin_basename_ours( string $basename ): bool {
+		return in_array( $basename, $this->all_plugin_basenames(), true );
+	}
+
+	/**
+	 * Installed version from the live plugin file header (never a stale in-memory constant).
+	 */
+	public function get_installed_version(): string {
+		$main = $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
+		$ver  = $this->read_plugin_version( $main );
+		if ( '' !== $ver && '0.0.0' !== $ver ) {
+			return $ver;
+		}
+
+		return defined( 'PDX_VERSION' ) ? (string) PDX_VERSION : '0.0.0';
 	}
 
 	/**
@@ -100,27 +162,93 @@ class PDX_Updater {
 	 * @param array<string, mixed>|null $hook_extra
 	 */
 	private function is_our_plugin( ?array $hook_extra = null, ?string $plugin_basename = null ): bool {
-		$basename = $plugin_basename ?? $this->plugin_basename();
-		if ( ! $hook_extra ) {
+		$ours = $this->all_plugin_basenames();
+
+		if ( null !== $plugin_basename ) {
+			return in_array( $plugin_basename, $ours, true );
+		}
+
+		if ( ! is_array( $hook_extra ) || empty( $hook_extra ) ) {
+			return false;
+		}
+
+		if ( ! empty( $hook_extra['plugin'] ) && in_array( (string) $hook_extra['plugin'], $ours, true ) ) {
 			return true;
 		}
-		if ( ! empty( $hook_extra['plugin'] ) && $hook_extra['plugin'] === $basename ) {
-			return true;
-		}
+
 		if ( ! empty( $hook_extra['plugins'] ) && is_array( $hook_extra['plugins'] ) ) {
 			foreach ( $hook_extra['plugins'] as $plugin ) {
-				if ( $plugin === $basename ) {
+				if ( in_array( (string) $plugin, $ours, true ) ) {
 					return true;
 				}
 			}
 		}
+
 		return false;
 	}
 
-	public function clear_all_caches(): void {
+	public function clear_release_cache(): void {
 		delete_transient( self::CACHE_KEY );
+	}
+
+	public function clear_all_caches(): void {
+		$this->clear_release_cache();
+		$this->invalidate_plugin_update_transient();
+	}
+
+	/**
+	 * Drop WordPress plugin update metadata so the next check rebuilds from inject_update().
+	 */
+	public function invalidate_plugin_update_transient(): void {
 		delete_site_transient( 'update_plugins' );
-		wp_cache_delete( 'plugins', 'plugins' );
+		$this->flush_plugin_cache();
+	}
+
+	/**
+	 * After upgrades/activation: refresh GitHub metadata and rebuild core update transients.
+	 */
+	public function refresh_plugin_update_metadata(): void {
+		$this->clear_release_cache();
+		$this->invalidate_plugin_update_transient();
+
+		if ( function_exists( 'wp_update_plugins' ) ) {
+			wp_update_plugins();
+		}
+	}
+
+	/**
+	 * Remove duplicate PaxDesign entries from update transients (wrong folder basenames).
+	 *
+	 * @param object $transient update_plugins site transient.
+	 */
+	/**
+	 * @return list<string>
+	 */
+	private function update_transient_basenames(): array {
+		return array_values(
+			array_unique(
+				[
+					$this->plugin_basename(),
+					$this->preferred_active_basename(),
+				]
+			)
+		);
+	}
+
+	private function prune_stale_update_transient_keys( object $transient ): void {
+		$keep = $this->update_transient_basenames();
+
+		foreach ( $this->all_plugin_basenames() as $basename ) {
+			if ( in_array( $basename, $keep, true ) ) {
+				continue;
+			}
+			if ( isset( $transient->response ) && is_array( $transient->response ) ) {
+				unset( $transient->response[ $basename ] );
+			}
+			if ( isset( $transient->no_update ) && is_array( $transient->no_update ) ) {
+				unset( $transient->no_update[ $basename ] );
+			}
+		}
 	}
 
 	/**
@@ -138,9 +266,7 @@ class PDX_Updater {
 		$state        = $this->get_state();
 		$backup       = ! empty( $state['backup'] ) && is_dir( (string) $state['backup'] );
 
-		$install_dir = $this->plugin_dir();
-		$header_ver  = $this->read_plugin_version( $install_dir . '/' . self::PLUGIN_MAIN_FILE );
-		$installed   = ( '' !== $header_ver && '0.0.0' !== $header_ver ) ? $header_ver : PDX_VERSION;
+		$installed = $this->get_installed_version();
 
 		return [
 			'installed'            => $installed,
@@ -344,17 +470,19 @@ class PDX_Updater {
 			return $transient;
 		}
 
-		$plugin = $this->plugin_basename();
+		$this->prune_stale_update_transient_keys( $transient );
 
-		if ( isset( $transient->response ) && is_array( $transient->response ) && isset( $transient->response[ $plugin ] ) ) {
-			$transient->response[ $plugin ] = $this->sanitize_update_object( $transient->response[ $plugin ] );
-			if ( ! $this->update_object_is_valid( $transient->response[ $plugin ] ) ) {
-				unset( $transient->response[ $plugin ] );
+		foreach ( $this->update_transient_basenames() as $plugin ) {
+			if ( isset( $transient->response ) && is_array( $transient->response ) && isset( $transient->response[ $plugin ] ) ) {
+				$transient->response[ $plugin ] = $this->sanitize_update_object( $transient->response[ $plugin ] );
+				if ( ! $this->update_object_is_valid( $transient->response[ $plugin ] ) ) {
+					unset( $transient->response[ $plugin ] );
+				}
 			}
-		}
 
-		if ( isset( $transient->no_update ) && is_array( $transient->no_update ) && isset( $transient->no_update[ $plugin ] ) ) {
-			$transient->no_update[ $plugin ] = $this->sanitize_update_object( $transient->no_update[ $plugin ] );
+			if ( isset( $transient->no_update ) && is_array( $transient->no_update ) && isset( $transient->no_update[ $plugin ] ) ) {
+				$transient->no_update[ $plugin ] = $this->sanitize_update_object( $transient->no_update[ $plugin ] );
+			}
 		}
 
 		return $transient;
@@ -422,26 +550,37 @@ class PDX_Updater {
 			return $transient;
 		}
 
-		// fetch_release() always returns a fully normalized array — no nulls.
+		if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+			$transient->response = [];
+		}
+		if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
+			$transient->no_update = [];
+		}
+
+		$installed_ver = $this->get_installed_version();
+
+		$this->prune_stale_update_transient_keys( $transient );
+
 		$release = $this->fetch_release( false );
 		if ( '' !== $release['error'] || '' === $release['version'] || '' === $release['package'] ) {
+			foreach ( $this->update_transient_basenames() as $plugin ) {
+				unset( $transient->response[ $plugin ] );
+			}
 			return $transient;
 		}
 
-		// Read the installed version from the file header — never trust the in-memory constant,
-		// which may reflect a previously-loaded version if WordPress loaded the plugin from a
-		// different path than the canonical directory.
-		$installed_ver = $this->read_plugin_version( $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE );
-		if ( '' === $installed_ver || '0.0.0' === $installed_ver ) {
-			$installed_ver = PDX_VERSION;
-		}
+		$up_to_date = version_compare( $installed_ver, $release['version'], '>=' );
 
-		if ( version_compare( $installed_ver, $release['version'], '>=' ) ) {
-			return $transient;
+		foreach ( $this->update_transient_basenames() as $plugin ) {
+			$offer = $this->build_update_offer( $release, $plugin );
+			if ( $up_to_date ) {
+				unset( $transient->response[ $plugin ] );
+				$transient->no_update[ $plugin ] = $offer;
+			} else {
+				unset( $transient->no_update[ $plugin ] );
+				$transient->response[ $plugin ] = $offer;
+			}
 		}
-
-		$plugin = $this->plugin_basename();
-		$transient->response[ $plugin ] = $this->build_update_offer( $release, $plugin );
 
 		return $transient;
 	}
@@ -628,7 +767,7 @@ class PDX_Updater {
 			[
 				'upgrading' => true,
 				'started'   => time(),
-				'from'      => PDX_VERSION,
+				'from'      => $this->get_installed_version(),
 				'target'    => $target_version,
 			]
 		);
@@ -799,7 +938,24 @@ class PDX_Updater {
 		if ( ! is_array( $hook_extra ) || ! $this->is_our_plugin( $hook_extra ) ) {
 			return;
 		}
-		$this->clear_all_caches();
+		$this->maybe_repair_active_plugins_list();
+		$this->refresh_plugin_update_metadata();
+	}
+
+	/**
+	 * Keep activation state and update metadata aligned with the loaded plugin basename.
+	 *
+	 * @param string $plugin       Plugin basename.
+	 * @param bool   $network_wide Network activation flag.
+	 */
+	public function on_activated_plugin( $plugin, $network_wide ): void {
+		if ( ! is_string( $plugin ) || ! $this->is_plugin_basename_ours( $plugin ) ) {
+			return;
+		}
+
+		$this->maybe_repair_active_plugins_list();
+		$this->clear_release_cache();
+		$this->invalidate_plugin_update_transient();
 	}
 
 	public function maybe_cleanup_duplicate_plugins_admin(): void {
@@ -922,7 +1078,7 @@ class PDX_Updater {
 		$this->cleanup_upgrade_artifacts();
 
 		if ( $success || $this->plugin_passes_health_check() ) {
-			$this->clear_all_caches();
+			$this->refresh_plugin_update_metadata();
 			$current_backup = isset( $this->get_state()['backup'] ) ? (string) $this->get_state()['backup'] : '';
 			$next_state     = [
 				'deferred_cleanup' => true,
@@ -934,7 +1090,7 @@ class PDX_Updater {
 			$this->set_state( $next_state );
 		} else {
 			$this->maybe_rollback( $hook_extra );
-			$this->clear_all_caches();
+			$this->refresh_plugin_update_metadata();
 			$this->cleanup_failed_backups();
 			$state = $this->get_state();
 			unset( $state['upgrading'] );
@@ -1503,8 +1659,17 @@ class PDX_Updater {
 		return is_plugin_active( $basename );
 	}
 
+	private function preferred_active_basename(): string {
+		$canonical_main = $this->canonical_plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
+		if ( is_readable( $canonical_main ) && $this->is_our_plugin_header_file( $canonical_main ) ) {
+			return plugin_basename( $canonical_main );
+		}
+
+		return $this->plugin_basename();
+	}
+
 	private function maybe_repair_active_plugins_list(): void {
-		$correct = $this->plugin_basename();
+		$correct = $this->preferred_active_basename();
 		$active  = (array) get_option( 'active_plugins', [] );
 		$changed = false;
 		$has_ok  = in_array( $correct, $active, true );
@@ -1513,17 +1678,19 @@ class PDX_Updater {
 			if ( $basename === $correct ) {
 				continue;
 			}
-			if ( ! $this->is_versioned_plugin_basename( $basename ) ) {
+			if ( ! $this->is_plugin_basename_ours( (string) $basename ) ) {
 				continue;
 			}
 			unset( $active[ $index ] );
 			$changed = true;
 		}
 
+		if ( ! $has_ok && is_readable( $this->canonical_plugin_dir() . '/' . self::PLUGIN_MAIN_FILE ) ) {
+			$active[] = $correct;
+			$changed  = true;
+		}
+
 		if ( $changed ) {
-			if ( ! $has_ok && is_readable( PDX_DIR . self::PLUGIN_MAIN_FILE ) ) {
-				$active[] = $correct;
-			}
 			update_option( 'active_plugins', array_values( array_unique( $active ) ) );
 			$this->flush_plugin_cache();
 		}
@@ -1799,7 +1966,7 @@ class PDX_Updater {
 		}
 		check_admin_referer( 'pdx_check_updates' );
 
-		$this->clear_all_caches();
+		$this->refresh_plugin_update_metadata();
 		$status = $this->get_status( true );
 
 		$redirect_args = [
