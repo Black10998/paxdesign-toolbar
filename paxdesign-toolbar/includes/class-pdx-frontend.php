@@ -72,9 +72,16 @@ class PDX_Frontend {
 		);
 
 		wp_enqueue_style(
+			'pdx-icons',
+			PDX_URL . 'assets/css/pdx-icons.css',
+			[ 'pdx-intel-activity' ],
+			$this->asset_version( 'assets/css/pdx-icons.css' )
+		);
+
+		wp_enqueue_style(
 			'pdx-module-chrome',
 			PDX_URL . 'assets/css/pdx-module-chrome.css',
-			[ 'pdx-intel-activity' ],
+			[ 'pdx-icons' ],
 			$this->asset_version( 'assets/css/pdx-module-chrome.css' )
 		);
 

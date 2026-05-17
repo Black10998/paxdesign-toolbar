@@ -544,7 +544,11 @@
     }
 
     function modIcon(moduleId) {
-      return svgIcon(normalizeModuleId(moduleId));
+      var id = normalizeModuleId(moduleId);
+      if (typeof win.pdxModuleIcon === 'function') {
+        return win.pdxModuleIcon(id);
+      }
+      return svgIcon(id);
     }
 
     function renderPhishingIntelHero(forensics, urlFx, phish) {
@@ -1028,7 +1032,7 @@
 
       html += '<div class="pdx-report-summary">' +
         '<div class="pdx-report-summary-header">' +
-          '<span class="pdx-report-summary-icon">' + svgIcon('shield') + '</span>' +
+          '<span class="pdx-report-summary-icon">' + svgIcon('report-trust') + '</span>' +
           '<span class="pdx-report-summary-title">Intelligence Summary</span>' +
         '</div>' +
         '<div class="pdx-report-summary-text">' + escHtml(summaryText) + '</div>' +
@@ -1208,17 +1212,17 @@
       var srcKeys = Object.keys(sources);
       /* Friendly labels and field renderers per source type */
       var srcMeta = {
-        rdap:    { label: 'Domain Registration (RDAP/WHOIS)', icon: 'folder' },
-        whois:   { label: 'WHOIS Record',                     icon: 'folder' },
-        ssl:     { label: 'SSL / TLS Certificate',            icon: 'shield' },
-        dns:     { label: 'DNS Infrastructure',               icon: 'link'   },
-        geo:     { label: 'Geolocation & Network',            icon: 'search' },
-        vt:      { label: 'VirusTotal Analysis',              icon: 'alert'  },
-        shodan:  { label: 'Shodan Infrastructure',            icon: 'grid'   },
-        hibp:    { label: 'Data Breach Check (HIBP)',         icon: 'alert'  },
-        hunter:  { label: 'Email Discovery (Hunter.io)',      icon: 'user'   },
-        abuse:   { label: 'Abuse.ch Intelligence',            icon: 'alert'  },
-        threat:  { label: 'Threat Intelligence Feeds',        icon: 'alert'  },
+        rdap:    { label: 'Domain Registration (RDAP/WHOIS)', icon: 'rdap' },
+        whois:   { label: 'WHOIS Record',                     icon: 'whois' },
+        ssl:     { label: 'SSL / TLS Certificate',            icon: 'ssl-cert' },
+        dns:     { label: 'DNS Infrastructure',               icon: 'dns-records' },
+        geo:     { label: 'Geolocation & Network',            icon: 'geo-pin' },
+        vt:      { label: 'VirusTotal Analysis',              icon: 'virus-scan' },
+        shodan:  { label: 'Shodan Infrastructure',            icon: 'shodan-radar' },
+        hibp:    { label: 'Data Breach Check (HIBP)',         icon: 'breach-check' },
+        hunter:  { label: 'Email Discovery (Hunter.io)',      icon: 'email-hunter' },
+        abuse:   { label: 'Abuse.ch Intelligence',            icon: 'abuse-ch' },
+        threat:  { label: 'Threat Intelligence Feeds',        icon: 'threat-feed' },
       };
       srcKeys.forEach(function(key) {
         var src = sources[key];
@@ -1247,6 +1251,7 @@
         if (!rows.length && !src.error) return;
         html += '<div class="pdx-evidence-section">' +
           '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            (meta.icon ? '<span class="pdx-evidence-icon">' + svgIcon(meta.icon) + '</span>' : '') +
             escHtml(label) +
             (src.error ? ' <span class="pdx-badge pdx-badge--err">Error</span>' : '') +
             ' <span class="pdx-evidence-toggle-arrow">▼</span>' +
@@ -1303,7 +1308,7 @@
         var pwPrice    = (paywall.price    != null) ? parseFloat(paywall.price).toFixed(2) : '0.00';
         var pwCurrency = paywall.currency  || 'USD';
         html += '<div class="pdx-paywall">' +
-          '<div class="pdx-paywall-icon">' + svgIcon('shield') + '</div>' +
+          '<div class="pdx-paywall-icon">' + svgIcon('lock-paywall') + '</div>' +
           '<div class="pdx-paywall-title">Full Intelligence Report</div>' +
           '<div class="pdx-paywall-desc">' + escHtml(safeStr(paywall.message)) + '</div>' +
           '<div class="pdx-paywall-locked"><strong>Locked sources:</strong> ' + escHtml((paywall.locked_sources || []).join(', ')) + '</div>' +
@@ -1329,7 +1334,7 @@
 
       html += '<div class="pdx-report-summary">' +
         '<div class="pdx-report-summary-header">' +
-          '<span class="pdx-report-summary-icon">' + svgIcon('search') + '</span>' +
+          '<span class="pdx-report-summary-icon">' + svgIcon('report-osint') + '</span>' +
           '<span class="pdx-report-summary-title">Intelligence Summary</span>' +
         '</div>' +
         '<div class="pdx-report-summary-text">' + escHtml(summaryText) + '</div>' +
@@ -1793,7 +1798,7 @@
         (r.final_output ? 'Final output generated.' : 'See execution trace for step-level outputs.');
 
       html += '<div class="pdx-report-summary">' +
-        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('layers') + '</span>' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('report-builder') + '</span>' +
         '<span class="pdx-report-summary-title">Execution Summary</span></div>' +
         '<div class="pdx-report-summary-text">' + escHtml(builderSummary) + '</div>' +
       '</div>';
@@ -1815,7 +1820,7 @@
       panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('pipeline') + '<span>Agent Pipeline</span>' +
+            '<div class="pdx-ph-title">' + modIcon('pipeline') + '<span>Agent Pipeline</span>' +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Orchestrator ready"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Orchestrate multi-agent task chains with role-based agents, intelligent handoffs, and full execution traces. Each agent specializes in a distinct function within the pipeline.</div>' +
@@ -1880,7 +1885,7 @@
       if (!state.pipelineTrace.length) return '<div class="pdx-tab-pane"><div class="pdx-empty">No pipeline runs yet.</div></div>';
       var html = '<div class="pdx-tab-pane">';
       state.pipelineTrace.forEach(function(t) {
-        html += '<div class="pdx-trace-item"><div class="pdx-trace-agent">' + svgIcon('user') + escHtml(t.name || t.agent) + '</div><div class="pdx-trace-output">' + escHtml(t.output || '').replace(/\n/g,'<br>') + '</div></div>';
+        html += '<div class="pdx-trace-item"><div class="pdx-trace-agent">' + svgIcon('agent-trace') + escHtml(t.name || t.agent) + '</div><div class="pdx-trace-output">' + escHtml(t.output || '').replace(/\n/g,'<br>') + '</div></div>';
       });
       html += '</div>';
       return html;
@@ -1982,7 +1987,7 @@
           var tokens    = t.tokens_used || t.tokens || '';
           html += '<div class="pdx-evidence-section">' +
             '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
-              svgIcon('user') +
+              svgIcon('agent-trace') +
               '<span style="margin-left:6px">' + escHtml(agentName) + '</span>' +
               (role ? '<span class="pdx-tag" style="margin-left:6px">' + escHtml(role) + '</span>' : '') +
               (tokens ? '<span class="pdx-tag" style="margin-left:4px">' + tokens + ' tokens</span>' : '') +
@@ -2015,7 +2020,7 @@
         (r.final_output ? 'Final synthesized output available below.' : 'See agent trace for individual outputs.');
 
       html += '<div class="pdx-report-summary">' +
-        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('pipeline') + '</span>' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('report-pipeline') + '</span>' +
         '<span class="pdx-report-summary-title">Orchestration Summary</span></div>' +
         '<div class="pdx-report-summary-text">' + escHtml(pipelineSummary) + '</div>' +
       '</div>';
@@ -2206,7 +2211,7 @@
         (obstacles.length ? '. ' + obstacles.length + ' potential obstacle' + (obstacles.length !== 1 ? 's' : '') + ' detected — review before execution' : '') + '.';
 
       html += '<div class="pdx-report-summary">' +
-        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('grid') + '</span>' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('report-automation') + '</span>' +
         '<span class="pdx-report-summary-title">Task Analysis Summary</span></div>' +
         '<div class="pdx-report-summary-text">' + escHtml(autoSummary) + '</div>' +
       '</div>';
@@ -2393,7 +2398,7 @@
         : 'Connection failed' + (data.error ? ': ' + safeStr(data.error) : '.') + ' Verify the endpoint URL, authentication credentials, and network accessibility.';
 
       html += '<div class="pdx-report-summary">' +
-        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('link') + '</span>' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('report-connectors') + '</span>' +
         '<span class="pdx-report-summary-title">Connection Summary</span></div>' +
         '<div class="pdx-report-summary-text">' + escHtml(connSummary) + '</div>' +
       '</div>';
@@ -2636,11 +2641,11 @@
       panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>' + escHtml(mod.label || 'Module') + '</span></div>' +
+            '<div class="pdx-ph-title">' + modIcon(modId) + '<span>' + escHtml(mod.label || 'Module') + '</span></div>' +
           '</div>' +
           '<div class="pdx-ph-body">' +
             '<div class="pdx-paywall">' +
-              '<div class="pdx-paywall-icon">' + svgIcon('shield') + '</div>' +
+              '<div class="pdx-paywall-icon">' + svgIcon('lock-paywall') + '</div>' +
               '<div class="pdx-paywall-title">Premium Access</div>' +
               '<div class="pdx-paywall-desc">' + escHtml(desc) + '</div>' +
               '<div class="pdx-paywall-price">' +
@@ -2956,12 +2961,21 @@
         logEl.scrollTop = logEl.scrollHeight;
       }
 
+      function findingIconKey(finding) {
+        if (finding && finding.icon) return finding.icon;
+        var t = String((finding && (finding.type || finding.severity)) || 'info').toLowerCase();
+        if (t === 'critical' || t === 'error') return 'alert-octagon';
+        if (t === 'warn' || t === 'warning') return 'alert';
+        if (t === 'ok' || t === 'success') return 'check';
+        return 'info';
+      }
+
       function showFinding(finding) {
         if (!findingsEl) return;
         var el = document.createElement('div');
         el.className = 'pdx-dp-finding pdx-dp-finding--' + (finding.type || 'info');
         el.innerHTML =
-          '<span class="pdx-dp-finding-icon">' + svgIcon(finding.icon || 'alert') + '</span>' +
+          '<span class="pdx-dp-finding-icon">' + svgIcon(findingIconKey(finding)) + '</span>' +
           '<div class="pdx-dp-finding-body">' +
             '<div class="pdx-dp-finding-label">' + escHtml(finding.label) + '</div>' +
             (finding.value ? '<div class="pdx-dp-finding-value">' + escHtml(finding.value) + '</div>' : '') +
@@ -3555,22 +3569,17 @@
     }
 
     function svgIcon(name) {
+      if (typeof win.pdxIcon === 'function') {
+        return win.pdxIcon(name);
+      }
+      if (typeof win.pdxActionIcon === 'function') {
+        var action = win.pdxActionIcon(name);
+        if (action) return action;
+      }
       if (typeof win.pdxModuleIcon === 'function') {
         return win.pdxModuleIcon(name);
       }
-      var icons = {
-        shield:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-        search:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-3.5-3.5"/></svg>',
-        alert:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-        user:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6"/></svg>',
-        layers:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
-        pipeline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><path d="M7 12h4l4-5M7 12l4 1 4 4"/></svg>',
-        grid:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v6M14.5 17h6"/></svg>',
-        link:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
-        plus:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
-        folder:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
-      };
-      return icons[name] || icons.shield;
+      return '';
     }
 
     /* ── Mobile ───────────────────────────────────────────── */
@@ -3837,7 +3846,7 @@
       overlay.innerHTML =
         '<div class="pdx-cmd-box" role="dialog" aria-label="Command palette">' +
           '<div class="pdx-cmd-search-row">' +
-            svgIcon('search') +
+            svgIcon('cmd-search') +
             '<input id="pdx-cmd-input" class="pdx-cmd-input" type="text" placeholder="Search modules, workspaces, IOCs…" autocomplete="off" spellcheck="false"/>' +
             '<kbd class="pdx-cmd-esc">Esc</kbd>' +
           '</div>' +
@@ -3881,7 +3890,7 @@
       if (!items.length) { container.innerHTML = '<div class="pdx-cmd-empty">No results</div>'; return; }
       container.innerHTML = items.map(function(item, i) {
         return '<div class="pdx-cmd-item' + (i === selectedIdx ? ' is-selected' : '') + '" data-idx="' + i + '">' +
-          '<span class="pdx-cmd-icon">' + svgIcon(item.icon || 'shield') + '</span>' +
+          '<span class="pdx-cmd-icon">' + svgIcon(item.icon || 'info') + '</span>' +
           '<span class="pdx-cmd-label">' + escHtml(item.label) + '</span>' +
           '<span class="pdx-cmd-desc">' + escHtml(item.description || '') + '</span>' +
           '<span class="pdx-cmd-type">' + escHtml(item.type || '') + '</span>' +
@@ -4369,7 +4378,7 @@
       panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>Billing & Plans</span></div>' +
+            '<div class="pdx-ph-title">' + svgIcon('billing') + '<span>Billing & Plans</span></div>' +
             '<div class="pdx-ph-desc">Manage your subscription, view credit balance, and upgrade your plan to unlock additional modules, higher rate limits, and enterprise features.</div>' +
             '<div class="pdx-module-caps"><span class="pdx-cap-tag">Plan Management</span><span class="pdx-cap-tag">Credit Balance</span><span class="pdx-cap-tag">Usage Analytics</span><span class="pdx-cap-tag">Invoices</span></div>' +
           '</div>' +
@@ -4645,7 +4654,7 @@
         (edges.length > 5 ? 'This indicator has significant infrastructure connections — investigate related nodes for further context.' : 'Limited connections found — indicator may be isolated or newly observed.');
 
       html += '<div class="pdx-report-summary">' +
-        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('link') + '</span>' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('report-correlation') + '</span>' +
         '<span class="pdx-report-summary-title">Correlation Summary</span></div>' +
         '<div class="pdx-report-summary-text">' + escHtml(corrSummary) + '</div>' +
       '</div>';
@@ -4773,7 +4782,7 @@
         (catKeys.length > 1 ? 'Events span ' + catKeys.length + ' categories: ' + catKeys.join(', ') + '.' : '');
 
       html += '<div class="pdx-report-summary">' +
-        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('search') + '</span>' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('report-timeline') + '</span>' +
         '<span class="pdx-report-summary-title">Timeline Summary</span></div>' +
         '<div class="pdx-report-summary-text">' + escHtml(tlSummary) + '</div>' +
       '</div>';
@@ -5078,7 +5087,7 @@
         (cves.some(function(c){ return c.exploit_available; }) ? 'At least one exploit is publicly available — prioritize patching.' : 'No public exploits confirmed in this result set.');
 
       html += '<div class="pdx-report-summary">' +
-        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('alert') + '</span>' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('report-cve') + '</span>' +
         '<span class="pdx-report-summary-title">Vulnerability Summary</span></div>' +
         '<div class="pdx-report-summary-text">' + escHtml(cveSummary) + '</div>' +
       '</div>';
@@ -5167,7 +5176,7 @@
           : 'No known vulnerabilities matched in this scan.');
 
       html += '<div class="pdx-report-summary">' +
-        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('grid') + '</span>' +
+        '<div class="pdx-report-summary-header"><span class="pdx-report-summary-icon">' + svgIcon('report-attack-surface') + '</span>' +
         '<span class="pdx-report-summary-title">Attack Surface Summary</span></div>' +
         '<div class="pdx-report-summary-text">' + escHtml(surfSummary) + '</div>' +
         (vulns.length ? '<div class="pdx-report-recs"><div class="pdx-report-recs-title">Recommendations</div><ul class="pdx-report-recs-list">' +

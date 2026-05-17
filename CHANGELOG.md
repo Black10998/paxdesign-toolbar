@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## 8.5.1 — 2026-05-17
+
+**SVG icon system — unique transparent action icons**
+
+### Icon system
+- Split **module dock icons** (`pdx-mod-icon`) from **action/UI icons** (`pdx-icon`) — removed legacy aliasing that reused the same glyph for different buttons (e.g. shared `folder`, `shield`, `alert` across unrelated actions).
+- Each report summary, OSINT evidence source, paywall, billing header, command-palette result, connector type, and pipeline finding has its own modern stroke SVG.
+- New `pdx-icons.css`: transparent icons (no background boxes), consistent stroke width/size on desktop dock and mobile, full red (`#f85149`) for danger/warning/risk icons.
+- `create` module icon no longer uses a semi-transparent background rectangle.
+- PHP `PDX_Icons::icon_html()` mirrors JS; REST command search and connector definitions use unique icon slugs.
+
+**Install:** `releases/paxdesign-toolbar-8.5.1.zip` — tag `v8.5.1`
+
 ## 8.5.0 — 2026-05-17
 
 **Canonical install path — fixes duplicate `paxdesign-toolbar-x.y.z` folders (Hostinger 409)**

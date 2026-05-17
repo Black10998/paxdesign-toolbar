@@ -669,14 +669,14 @@ class PDX_REST_API {
 
 	private function get_connector_definitions(): array {
 		return [
-			[ 'id' => 'rest_api',   'label' => 'REST API',       'icon' => 'link',     'description' => 'Connect to any REST endpoint with Bearer auth.' ],
-			[ 'id' => 'webhook',    'label' => 'Webhook',         'icon' => 'zap',      'description' => 'Send events to external webhook URLs.' ],
-			[ 'id' => 'openai',     'label' => 'OpenAI',          'icon' => 'cpu',      'description' => 'GPT-4 and embedding models.' ],
-			[ 'id' => 'slack',      'label' => 'Slack',           'icon' => 'message',  'description' => 'Post messages to Slack channels.' ],
-			[ 'id' => 'airtable',   'label' => 'Airtable',        'icon' => 'grid',     'description' => 'Read/write Airtable bases.' ],
-			[ 'id' => 'notion',     'label' => 'Notion',          'icon' => 'file',     'description' => 'Sync data with Notion databases.' ],
-			[ 'id' => 'github',     'label' => 'GitHub',          'icon' => 'code',     'description' => 'Trigger workflows and read repo data.' ],
-			[ 'id' => 'zapier',     'label' => 'Zapier',          'icon' => 'zap',      'description' => 'Trigger Zapier zaps via webhooks.' ],
+			[ 'id' => 'rest_api',   'label' => 'REST API',       'icon' => 'connector-rest',    'description' => 'Connect to any REST endpoint with Bearer auth.' ],
+			[ 'id' => 'webhook',    'label' => 'Webhook',         'icon' => 'connector-webhook', 'description' => 'Send events to external webhook URLs.' ],
+			[ 'id' => 'openai',     'label' => 'OpenAI',          'icon' => 'connector-openai',  'description' => 'GPT-4 and embedding models.' ],
+			[ 'id' => 'slack',      'label' => 'Slack',           'icon' => 'connector-slack',   'description' => 'Post messages to Slack channels.' ],
+			[ 'id' => 'airtable',   'label' => 'Airtable',        'icon' => 'connector-airtable','description' => 'Read/write Airtable bases.' ],
+			[ 'id' => 'notion',     'label' => 'Notion',          'icon' => 'connector-notion',  'description' => 'Sync data with Notion databases.' ],
+			[ 'id' => 'github',     'label' => 'GitHub',          'icon' => 'connector-github',  'description' => 'Trigger workflows and read repo data.' ],
+			[ 'id' => 'zapier',     'label' => 'Zapier',          'icon' => 'connector-zapier',  'description' => 'Trigger Zapier zaps via webhooks.' ],
 		];
 	}
 
@@ -1211,21 +1211,21 @@ class PDX_REST_API {
 		if ( strlen( $q ) >= 2 ) {
 			$ws = PDX_Workspace::search( $q, 5 );
 			foreach ( $ws as $w ) {
-				$results[] = [ 'type' => 'workspace', 'id' => $w['ws_id'], 'label' => $w['title'], 'description' => $w['module'] . ' · ' . $w['ws_type'], 'icon' => 'folder' ];
+				$results[] = [ 'type' => 'workspace', 'id' => $w['ws_id'], 'label' => $w['title'], 'description' => $w['module'] . ' · ' . $w['ws_type'], 'icon' => 'workspace-folder' ];
 			}
 			// IOC search
 			$iocs = PDX_Correlation::search( $q, 5 );
 			foreach ( $iocs as $ioc ) {
-				$results[] = [ 'type' => 'ioc', 'id' => $ioc['ioc_type'] . ':' . $ioc['ioc_value'], 'label' => $ioc['ioc_value'], 'description' => $ioc['ioc_type'] . ' · ' . $ioc['source'], 'icon' => 'alert' ];
+				$results[] = [ 'type' => 'ioc', 'id' => $ioc['ioc_type'] . ':' . $ioc['ioc_value'], 'label' => $ioc['ioc_value'], 'description' => $ioc['ioc_type'] . ' · ' . $ioc['source'], 'icon' => 'ioc-threat' ];
 			}
 		}
 
 		// Static commands
 		$static = [
-			[ 'type' => 'action', 'id' => 'new_scan',         'label' => 'New TrustCheck Scan',    'description' => 'Run a domain intelligence scan', 'icon' => 'shield' ],
-			[ 'type' => 'action', 'id' => 'new_investigation', 'label' => 'New Investigation',      'description' => 'Open investigation board',       'icon' => 'search' ],
-			[ 'type' => 'action', 'id' => 'open_workspace',   'label' => 'Open Workspaces',         'description' => 'Browse saved projects',           'icon' => 'folder' ],
-			[ 'type' => 'action', 'id' => 'view_audit',       'label' => 'View Audit Log',          'description' => 'Platform activity log',           'icon' => 'shield' ],
+			[ 'type' => 'action', 'id' => 'new_scan',          'label' => 'New TrustCheck Scan', 'description' => 'Run a domain intelligence scan', 'icon' => 'scan-new' ],
+			[ 'type' => 'action', 'id' => 'new_investigation', 'label' => 'New Investigation',   'description' => 'Open investigation board',       'icon' => 'investigation-new' ],
+			[ 'type' => 'action', 'id' => 'open_workspace',    'label' => 'Open Workspaces',     'description' => 'Browse saved projects',          'icon' => 'workspace-folder' ],
+			[ 'type' => 'action', 'id' => 'view_audit',        'label' => 'View Audit Log',      'description' => 'Platform activity log',          'icon' => 'audit-log' ],
 		];
 		foreach ( $static as $cmd ) {
 			if ( ! $q || stripos( $cmd['label'], $q ) !== false ) $results[] = $cmd;

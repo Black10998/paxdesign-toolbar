@@ -334,7 +334,7 @@ class PDX_Admin {
 
 	/** SVG helper used in module template */
 	public function get_svg_icon_html( string $name ): string {
-		return PDX_Icons::module_html( $name );
+		return PDX_Icons::icon_html( $name );
 	}
 
 	private function menu_icon(): string {
