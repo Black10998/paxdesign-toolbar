@@ -615,35 +615,62 @@ class PDX_Updater {
 	}
 
 	public function maybe_cleanup_stale_maintenance(): void {
-		$file = $this->maintenance_file();
-		if ( ! $file ) {
-			return;
-		}
+		try {
+			$file = $this->maintenance_file();
+			if ( ! $file ) {
+				return;
+			}
 
-		$state = $this->get_state();
-		if ( empty( $state['upgrading'] ) ) {
-			$this->release_maintenance_mode();
-			return;
-		}
+			$state = $this->get_state();
+			if ( empty( $state['upgrading'] ) ) {
+				$this->release_maintenance_mode();
+				return;
+			}
 
-		if ( $this->is_maintenance_stale( $file ) ) {
-			$this->release_maintenance_mode();
+			if ( $this->is_maintenance_stale( $file ) ) {
+				$this->release_maintenance_mode();
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] maybe_cleanup_stale_maintenance: ' . $e->getMessage() );
+			}
 		}
 	}
 
+	/**
+	 * Remove WordPress maintenance mode file — never call WP_Upgrader methods (not public API).
+	 */
 	public function release_maintenance_mode(): void {
-		if ( ! function_exists( 'WP_Filesystem' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/file.php';
-		}
+		try {
+			if ( class_exists( 'PDX_Recovery', false ) ) {
+				PDX_Recovery::release_maintenance_file();
+				return;
+			}
 
-		if ( class_exists( 'WP_Upgrader' ) ) {
-			require_once ABSPATH . 'wp-admin/includes/class-wp-upgrader.php';
-			$upgrader = new WP_Upgrader();
-			$upgrader->release_maintenance_mode();
+			$this->unlink_maintenance_file();
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] release_maintenance_mode: ' . $e->getMessage() );
+			}
+		}
+	}
+
+	/**
+	 * Delete ABSPATH/.maintenance when present (safe on all WP versions).
+	 */
+	private function unlink_maintenance_file(): void {
+		if ( ! defined( 'ABSPATH' ) ) {
+			return;
 		}
 
 		$file = ABSPATH . '.maintenance';
-		if ( file_exists( $file ) ) {
+		if ( ! is_file( $file ) ) {
+			return;
+		}
+
+		if ( function_exists( 'wp_delete_file' ) ) {
+			wp_delete_file( $file );
+		} else {
 			@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
 
@@ -693,20 +720,27 @@ class PDX_Updater {
 
 		register_shutdown_function(
 			function (): void {
-				if ( $this->upgrade_finalized ) {
-					$this->release_maintenance_mode();
-					return;
-				}
-
-				$state = $this->get_state();
-				if ( empty( $state['upgrading'] ) ) {
-					if ( $this->maintenance_file() ) {
+				try {
+					if ( $this->upgrade_finalized ) {
 						$this->release_maintenance_mode();
+						return;
 					}
-					return;
-				}
 
-				$this->finalize_upgrade_transaction( $this->is_upgrade_successful(), null );
+					$state = $this->get_state();
+					if ( empty( $state['upgrading'] ) ) {
+						if ( $this->maintenance_file() ) {
+							$this->release_maintenance_mode();
+						}
+						return;
+					}
+
+					$this->finalize_upgrade_transaction( $this->is_upgrade_successful(), null );
+				} catch ( Throwable $e ) {
+					if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+						error_log( '[PDX] upgrade_shutdown_guard: ' . $e->getMessage() );
+					}
+					$this->release_maintenance_mode();
+				}
 			}
 		);
 	}

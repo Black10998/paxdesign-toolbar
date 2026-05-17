@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## 8.1.3 — 2026-05-17
+
+**Critical updater fix — maintenance mode cleanup**
+
+- Removed invalid `WP_Upgrader::release_maintenance_mode()` call (fatal on wp-admin plugin update)
+- Maintenance cleanup now only deletes `ABSPATH/.maintenance` via `PDX_Recovery::release_maintenance_file()` / `wp_delete_file()`
+- Shutdown and stale-maintenance hooks wrapped in try/catch so cleanup cannot fatal again
+
+**Install:** `releases/paxdesign-toolbar-8.1.3.zip` — tag `v8.1.3`
+
 ## 8.1.2 — 2026-05-17
 
 **Production updater hotfix (wp-admin 7.x → 8.x)**

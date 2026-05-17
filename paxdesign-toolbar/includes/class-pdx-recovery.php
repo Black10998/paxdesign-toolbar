@@ -101,11 +101,28 @@ final class PDX_Recovery {
 	}
 
 	public static function release_maintenance_file(): void {
-		$file = ABSPATH . '.maintenance';
-		if ( is_file( $file ) ) {
-			@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		try {
+			if ( ! defined( 'ABSPATH' ) ) {
+				return;
+			}
+
+			$file = ABSPATH . '.maintenance';
+			if ( ! is_file( $file ) ) {
+				return;
+			}
+
+			if ( function_exists( 'wp_delete_file' ) ) {
+				wp_delete_file( $file );
+			} else {
+				@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			}
+
+			clearstatcache( true, ABSPATH );
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] release_maintenance_file: ' . $e->getMessage() );
+			}
 		}
-		clearstatcache( true, ABSPATH );
 	}
 
 	/**
