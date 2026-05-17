@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## 7.1.8 — 2026-05-17
+
+**Production-grade updater finalization** — seamless updates on Hostinger without manual cleanup.
+
+### Updater
+- Single `finalize_upgrade_transaction()` exit point: maintenance release, artifact cleanup, rollback
+- Explicit `temp_backup => false` (disables WP 6.3 move_dir to `upgrade-temp-backup` that fails on shared hosting)
+- Pre-cleans `upgrade-temp-backup` and `wp-content/upgrade/paxdesign-toolbar*` before install
+- Deferred duplicate-folder consolidation until `shutdown` (avoids file-lock races during `post_install`)
+- Shutdown guard: always releases `.maintenance` if upgrade aborts mid-request
+- Reconciles false `WP_Error` when plugin files updated successfully (cleanup-only failures)
+- Clears stale `.maintenance` immediately when no upgrade is in progress
+
+**Install:** `releases/paxdesign-toolbar-7.1.8.zip` — tag `v7.1.8`
+
 ## 7.1.7 — 2026-05-17
 
 **Global target normalization** — fixes intelligence failures when URLs include query strings (e.g. `domain.com?utm_source=…`).

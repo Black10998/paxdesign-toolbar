@@ -18,9 +18,16 @@ class PDX_Updater {
 	private const STATE_OPTION        = 'pdx_updater_state';
 	private const CACHE_TTL           = 43200;
 	private const HTTP_TIMEOUT        = 45;
-	private const MAINTENANCE_MAX_AGE = 600;
+	private const MAINTENANCE_MAX_AGE       = 120;
+	private const MAINTENANCE_GRACE_ACTIVE = 90;
 
 	private static ?self $instance = null;
+
+	/** @var bool */
+	private bool $upgrade_shutdown_registered = false;
+
+	/** @var bool */
+	private bool $upgrade_finalized = false;
 
 	public static function instance(): self {
 		if ( null === self::$instance ) {
@@ -43,7 +50,9 @@ class PDX_Updater {
 		add_action( 'admin_init', [ $this, 'maybe_cleanup_stale_maintenance' ] );
 		add_action( 'admin_init', [ $this, 'maybe_cleanup_duplicate_plugins_admin' ] );
 		add_action( 'shutdown', [ $this, 'maybe_cleanup_stale_maintenance' ], 999 );
-		add_action( 'upgrader_process_complete', [ $this, 'on_upgrade_complete' ], 10, 2 );
+		add_action( 'shutdown', [ $this, 'run_deferred_upgrade_cleanup' ], 9998 );
+		add_action( 'upgrader_process_complete', [ $this, 'reconcile_upgrader_result' ], 5, 2 );
+		add_action( 'upgrader_process_complete', [ $this, 'on_upgrade_complete' ], 999, 2 );
 		add_action( 'deleted_plugin', [ $this, 'on_deleted_plugin' ], 10, 2 );
 
 		add_action( 'admin_post_pdx_check_updates', [ $this, 'handle_check_updates' ] );
@@ -290,10 +299,10 @@ class PDX_Updater {
 			return $options;
 		}
 
-		if ( ! empty( $options['hook_extra']['temp_backup'] ) ) {
-			$options['hook_extra']['pdx_temp_backup_skipped'] = $options['hook_extra']['temp_backup'];
-			unset( $options['hook_extra']['temp_backup'] );
-		}
+		// Explicitly disable WP 6.3+ temp_backup (move_dir to upgrade-temp-backup fails on Hostinger).
+		$options['hook_extra']['temp_backup'] = false;
+		$options['abort_if_destination_exists'] = false;
+		$options['clear_destination']           = true;
 
 		return $options;
 	}
@@ -401,6 +410,9 @@ class PDX_Updater {
 		$this->init_filesystem();
 		$this->ensure_upgrade_directories();
 
+		$this->upgrade_finalized           = false;
+		$this->upgrade_shutdown_registered = false;
+
 		$this->set_state(
 			[
 				'upgrading' => true,
@@ -410,6 +422,9 @@ class PDX_Updater {
 		);
 
 		$this->cleanup_failed_backups();
+		$this->cleanup_temp_backup_plugin_dir();
+		$this->cleanup_upgrade_working_dirs();
+		$this->register_upgrade_shutdown_guard();
 
 		$backup_path = $this->create_copy_backup();
 		$state       = $this->get_state();
@@ -464,11 +479,7 @@ class PDX_Updater {
 			);
 		}
 
-		if ( is_array( $result ) ) {
-			$this->consolidate_install_to_canonical_folder( $result );
-		}
-
-		$this->cleanup_duplicate_plugin_folders( true );
+		$this->schedule_deferred_upgrade_cleanup( $result );
 
 		return $response;
 	}
@@ -482,36 +493,47 @@ class PDX_Updater {
 			return $result;
 		}
 
-		if ( is_wp_error( $result ) ) {
-			$this->handle_failed_upgrade( $hook_extra );
+		if ( is_wp_error( $result ) && $this->is_upgrade_successful() ) {
+			return true;
 		}
-
-		$this->release_maintenance_mode();
 
 		return $result;
 	}
 
-	public function on_upgrade_complete( $upgrader, $hook_extra ): void {
-		$this->release_maintenance_mode();
-
+	/**
+	 * WordPress may set WP_Error on cleanup (temp_backup) even when files installed correctly.
+	 *
+	 * @param WP_Upgrader $upgrader
+	 * @param array<string, mixed> $hook_extra
+	 */
+	public function reconcile_upgrader_result( $upgrader, $hook_extra ): void {
 		if ( ! is_array( $hook_extra ) || ! $this->is_our_plugin( $hook_extra ) ) {
 			return;
 		}
 
-		$failed = false;
-		if ( is_object( $upgrader ) && isset( $upgrader->result ) && is_wp_error( $upgrader->result ) ) {
-			$failed = true;
-		}
-
-		if ( $failed ) {
-			$this->handle_failed_upgrade( $hook_extra );
+		if ( ! is_object( $upgrader ) || ! isset( $upgrader->result ) ) {
 			return;
 		}
 
-		$this->clear_all_caches();
-		$this->cleanup_failed_backups();
-		$this->cleanup_duplicate_plugin_folders( true );
-		$this->set_state( [] );
+		if ( is_wp_error( $upgrader->result ) && $this->is_upgrade_successful() ) {
+			$upgrader->result = true;
+		}
+	}
+
+	public function on_upgrade_complete( $upgrader, $hook_extra ): void {
+		if ( ! is_array( $hook_extra ) || ! $this->is_our_plugin( $hook_extra ) ) {
+			return;
+		}
+
+		$failed = is_object( $upgrader ) && isset( $upgrader->result ) && is_wp_error( $upgrader->result );
+		if ( $failed && $this->is_upgrade_successful() ) {
+			$failed = false;
+			if ( is_object( $upgrader ) ) {
+				$upgrader->result = true;
+			}
+		}
+
+		$this->finalize_upgrade_transaction( ! $failed, $hook_extra );
 	}
 
 	/**
@@ -539,25 +561,38 @@ class PDX_Updater {
 
 	public function bootstrap_recovery(): void {
 		$this->maybe_cleanup_stale_maintenance();
-		$this->cleanup_duplicate_plugin_folders();
 
 		$state = $this->get_state();
 		if ( empty( $state['upgrading'] ) ) {
+			$this->cleanup_duplicate_plugin_folders();
 			return;
 		}
 
 		if ( ! empty( $state['started'] ) && ( time() - (int) $state['started'] ) > 900 ) {
-			$this->handle_failed_upgrade( null );
+			$this->finalize_upgrade_transaction( $this->is_upgrade_successful(), null );
+			return;
+		}
+
+		if ( $this->is_upgrade_successful() ) {
+			$this->finalize_upgrade_transaction( true, null );
 		}
 	}
 
 	public function maybe_cleanup_stale_maintenance(): void {
 		$file = $this->maintenance_file();
-		if ( ! $file || ! $this->is_maintenance_stale( $file ) ) {
+		if ( ! $file ) {
 			return;
 		}
 
-		$this->release_maintenance_mode();
+		$state = $this->get_state();
+		if ( empty( $state['upgrading'] ) ) {
+			$this->release_maintenance_mode();
+			return;
+		}
+
+		if ( $this->is_maintenance_stale( $file ) ) {
+			$this->release_maintenance_mode();
+		}
 	}
 
 	public function release_maintenance_mode(): void {
@@ -575,20 +610,174 @@ class PDX_Updater {
 		if ( file_exists( $file ) ) {
 			@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		}
+
+		clearstatcache( true, ABSPATH );
+	}
+
+	/**
+	 * Single exit point for upgrade success/failure — maintenance, artifacts, rollback.
+	 *
+	 * @param array<string, mixed>|null $hook_extra
+	 */
+	private function finalize_upgrade_transaction( bool $success, ?array $hook_extra = null ): void {
+		if ( $this->upgrade_finalized ) {
+			$this->release_maintenance_mode();
+			return;
+		}
+		$this->upgrade_finalized = true;
+
+		$this->release_maintenance_mode();
+		$this->cleanup_upgrade_artifacts();
+
+		if ( $success || $this->is_upgrade_successful() ) {
+			$this->clear_all_caches();
+			$this->cleanup_failed_backups();
+			$this->set_state(
+				[
+					'deferred_cleanup' => true,
+					'last_success'     => time(),
+				]
+			);
+		} else {
+			$this->maybe_rollback( $hook_extra );
+			$this->clear_all_caches();
+			$this->cleanup_failed_backups();
+			$state = $this->get_state();
+			unset( $state['upgrading'] );
+			$this->set_state( $state );
+		}
+	}
+
+	private function register_upgrade_shutdown_guard(): void {
+		if ( $this->upgrade_shutdown_registered ) {
+			return;
+		}
+		$this->upgrade_shutdown_registered = true;
+		$this->upgrade_finalized           = false;
+
+		register_shutdown_function(
+			function (): void {
+				if ( $this->upgrade_finalized ) {
+					$this->release_maintenance_mode();
+					return;
+				}
+
+				$state = $this->get_state();
+				if ( empty( $state['upgrading'] ) ) {
+					if ( $this->maintenance_file() ) {
+						$this->release_maintenance_mode();
+					}
+					return;
+				}
+
+				$this->finalize_upgrade_transaction( $this->is_upgrade_successful(), null );
+			}
+		);
+	}
+
+	/**
+	 * Heavy filesystem work deferred until after WP_Upgrader releases locks.
+	 *
+	 * @param array<string, mixed> $result
+	 */
+	private function schedule_deferred_upgrade_cleanup( array $result ): void {
+		$state = $this->get_state();
+		$state['deferred_cleanup'] = true;
+		$state['install_result']   = [
+			'destination'       => $result['destination'] ?? '',
+			'local_destination' => $result['local_destination'] ?? '',
+		];
+		unset( $state['upgrading'] );
+		$this->set_state( $state );
+	}
+
+	public function run_deferred_upgrade_cleanup(): void {
+		$state = $this->get_state();
+		if ( empty( $state['deferred_cleanup'] ) ) {
+			return;
+		}
+
+		if ( ! empty( $state['install_result'] ) && is_array( $state['install_result'] ) ) {
+			$this->consolidate_install_to_canonical_folder( $state['install_result'] );
+		}
+
+		$this->cleanup_duplicate_plugin_folders( true );
+		$this->cleanup_upgrade_artifacts();
+		$this->release_maintenance_mode();
+
+		$keep = [];
+		if ( ! empty( $state['last_success'] ) ) {
+			$keep['last_success'] = (int) $state['last_success'];
+		}
+		$this->set_state( $keep );
+	}
+
+	private function cleanup_upgrade_artifacts(): void {
+		$this->cleanup_temp_backup_plugin_dir();
+		$this->cleanup_upgrade_working_dirs();
+	}
+
+	private function cleanup_temp_backup_plugin_dir(): void {
+		$base = WP_CONTENT_DIR . '/upgrade-temp-backup/plugins';
+		if ( ! is_dir( $base ) ) {
+			return;
+		}
+
+		foreach ( glob( $base . '/paxdesign-toolbar*' ) ?: [] as $path ) {
+			if ( is_dir( $path ) ) {
+				$this->delete_directory( $path );
+			}
+		}
+
+		// Remove empty plugins backup dir if nothing else is inside.
+		$entries = @scandir( $base ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( is_array( $entries ) && count( $entries ) <= 2 ) {
+			$this->delete_directory( $base );
+			$parent = dirname( $base );
+			$parent_entries = @scandir( $parent ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			if ( is_array( $parent_entries ) && count( $parent_entries ) <= 2 ) {
+				$this->delete_directory( $parent );
+			}
+		}
+	}
+
+	private function cleanup_upgrade_working_dirs(): void {
+		$upgrade = WP_CONTENT_DIR . '/upgrade';
+		if ( ! is_dir( $upgrade ) ) {
+			return;
+		}
+
+		foreach ( glob( $upgrade . '/paxdesign-toolbar*' ) ?: [] as $path ) {
+			if ( is_dir( $path ) ) {
+				$this->delete_directory( $path );
+			}
+		}
+	}
+
+	private function is_upgrade_successful(): bool {
+		$main = $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
+		if ( ! is_readable( $main ) ) {
+			return false;
+		}
+
+		$installed = $this->read_plugin_version( $main );
+		if ( '' === $installed || '0.0.0' === $installed ) {
+			return false;
+		}
+
+		$release = $this->fetch_release( false );
+		if ( ! is_array( $release ) || empty( $release['version'] ) ) {
+			return true;
+		}
+
+		return version_compare( $installed, $release['version'], '>=' );
 	}
 
 	/**
 	 * @param array<string, mixed>|null $hook_extra
 	 */
 	private function handle_failed_upgrade( ?array $hook_extra = null ): void {
-		$this->release_maintenance_mode();
-		$this->maybe_rollback( $hook_extra );
-		$this->clear_all_caches();
-		$this->cleanup_failed_backups();
-
-		$state = $this->get_state();
-		unset( $state['upgrading'] );
-		$this->set_state( $state );
+		$this->finalize_upgrade_transaction( false, $hook_extra );
 	}
 
 	/**
@@ -1002,7 +1191,7 @@ class PDX_Updater {
 
 		$state = $this->get_state();
 		if ( ! empty( $state['upgrading'] ) && ! empty( $state['started'] ) ) {
-			if ( ( time() - (int) $state['started'] ) < 120 ) {
+			if ( ( time() - (int) $state['started'] ) < self::MAINTENANCE_GRACE_ACTIVE ) {
 				return false;
 			}
 		}
