@@ -22,32 +22,30 @@ include __DIR__ . '/partials/header.php';
     $cat_modules = array_filter( $modules, static fn( $m ) => $m['category'] === $cat_key );
     if ( empty( $cat_modules ) ) continue;
   ?>
-  <div class="pdx-card">
-    <div class="pdx-card__header">
-      <h2><?php echo esc_html( $cat_label ); ?></h2>
-    </div>
-    <div class="pdx-card__body">
-      <div class="pdx-module-grid">
+  <section class="pdx-section">
+    <header class="pdx-section__head"><h2><?php echo esc_html( $cat_label ); ?></h2></header>
+    <div class="pdx-section__body">
+      <div class="pdx-module-list">
         <?php foreach ( $cat_modules as $id => $mod ) :
           $enabled = $s['modules'][ $id ] ?? true;
         ?>
-        <div class="pdx-module-card <?php echo $enabled ? 'is-enabled' : ''; ?>">
-          <div class="pdx-module-card__icon">
+        <div class="pdx-module-row <?php echo $enabled ? 'is-enabled' : ''; ?>">
+          <div class="pdx-module-row__icon">
             <?php echo $this->get_svg_icon_html( $mod['icon'] ); ?>
           </div>
-          <div class="pdx-module-card__info">
+          <div class="pdx-module-row__info">
             <strong><?php echo esc_html( $mod['label'] ); ?></strong>
             <span><?php echo esc_html( $mod['description'] ); ?></span>
           </div>
-          <label class="pdx-toggle pdx-toggle--sm">
-            <input type="checkbox" name="modules[<?php echo esc_attr( $id ); ?>]" value="1" <?php checked( $enabled ); ?>>
-            <span class="pdx-toggle__track"></span>
+          <label class="pdx-toggle pdx-toggle--sm pdx-settings-row__control">
+            <input type="checkbox" name="modules[<?php echo esc_attr( $id ); ?>]" value="1" <?php checked( $enabled ); ?> aria-label="<?php echo esc_attr( $mod['label'] ); ?>">
+            <span class="pdx-toggle__track" aria-hidden="true"></span>
           </label>
         </div>
         <?php endforeach; ?>
       </div>
     </div>
-  </div>
+  </section>
   <?php endforeach; ?>
 
   <div class="pdx-form-actions">

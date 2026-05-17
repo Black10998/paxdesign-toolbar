@@ -14,27 +14,31 @@ include __DIR__ . '/partials/header.php';
   <input type="hidden" name="action"  value="pdx_save">
   <input type="hidden" name="pdx_tab" value="roles">
 
-  <div class="pdx-card">
-    <div class="pdx-card__header"><h2>Visibility</h2></div>
-    <div class="pdx-card__body">
-      <label class="pdx-toggle">
-        <input type="checkbox" name="hide_for_logged_out" value="1" <?php checked( $s['hide_for_logged_out'] ); ?>>
-        <span class="pdx-toggle__track"></span>
-        <span class="pdx-toggle__label">Hide for logged-out visitors</span>
-      </label>
-      <div class="pdx-spacer"></div>
-      <label class="pdx-toggle">
-        <input type="checkbox" name="hide_for_logged_in" value="1" <?php checked( $s['hide_for_logged_in'] ); ?>>
-        <span class="pdx-toggle__track"></span>
-        <span class="pdx-toggle__label">Hide for logged-in users</span>
-      </label>
-    </div>
-  </div>
+  <section class="pdx-section">
+    <header class="pdx-section__head"><h2>Visibility</h2></header>
+    <div class="pdx-section__body">
+      <div class="pdx-settings-stack">
+        <?php
+        $name        = 'hide_for_logged_out';
+        $label       = 'Hide for logged-out visitors';
+        $description = '';
+        $checked     = $s['hide_for_logged_out'];
+        include __DIR__ . '/partials/settings-toggle.php';
 
-  <div class="pdx-card">
-    <div class="pdx-card__header"><h2>Role Access</h2></div>
-    <div class="pdx-card__body">
-      <p class="pdx-field-hint" style="margin-bottom:16px;">Select which roles can see the dock. Select "All visitors" to show to everyone regardless of role.</p>
+        $name        = 'hide_for_logged_in';
+        $label       = 'Hide for logged-in users';
+        $description = '';
+        $checked     = $s['hide_for_logged_in'];
+        include __DIR__ . '/partials/settings-toggle.php';
+        ?>
+      </div>
+    </div>
+  </section>
+
+  <section class="pdx-section">
+    <header class="pdx-section__head"><h2>Role Access</h2></header>
+    <div class="pdx-section__body">
+      <p class="pdx-field-hint" style="margin:0 0 var(--pdx-space-4)">Select which roles can see the dock. Select "All visitors" to show to everyone regardless of role.</p>
       <div class="pdx-role-grid">
         <label class="pdx-role-card <?php echo in_array( 'all', $show_to, true ) ? 'is-selected' : ''; ?>">
           <input type="checkbox" name="show_to_roles[]" value="all" <?php checked( in_array( 'all', $show_to, true ) ); ?>>
@@ -51,7 +55,7 @@ include __DIR__ . '/partials/header.php';
         <?php endforeach; ?>
       </div>
     </div>
-  </div>
+  </section>
 
   <div class="pdx-form-actions">
     <button type="submit" class="pdx-btn-primary">Save Changes</button>

@@ -87,6 +87,22 @@
   --pdx-text-muted: #8b949e;
   --pdx-text-subtle: #6e7681;
   --pdx-sidebar-w: 240px;
+  /* 8px spacing rhythm */
+  --pdx-space-1: 4px;
+  --pdx-space-2: 8px;
+  --pdx-space-3: 12px;
+  --pdx-space-4: 16px;
+  --pdx-space-5: 24px;
+  --pdx-space-6: 32px;
+  --pdx-content-max: 960px;
+}
+
+/* Frontend panel sizing */
+#pdx-root {
+  --pdx-panel-w-sm: clamp(320px, 92vw, 380px);
+  --pdx-panel-w-md: clamp(360px, 38vw, 440px);
+  --pdx-panel-w-lg: clamp(400px, 32vw, 480px);
+  --pdx-panel-scroll-pad: 16px 20px;
 }
 
 .pdx-admin-wrap[data-pdx-theme="light"] {

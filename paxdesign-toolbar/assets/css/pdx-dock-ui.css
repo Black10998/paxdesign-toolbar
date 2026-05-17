@@ -182,9 +182,37 @@
 }
 
 .pdx-ph-body {
-  padding: 14px 16px 20px;
+  padding: var(--pdx-panel-scroll-pad, 14px 16px 20px);
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   scrollbar-width: thin;
-  scrollbar-color: var(--pdx-border) transparent;
+  scrollbar-color: var(--pdx-text-subtle) transparent;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pdx-ph-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pdx-ph-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pdx-ph-body::-webkit-scrollbar-thumb {
+  background: var(--pdx-border);
+  border-radius: 999px;
+}
+
+.pdx-ph-body::-webkit-scrollbar-thumb:hover {
+  background: var(--pdx-text-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdx-ph-body {
+    scroll-behavior: auto;
+  }
 }
 
 /* ─── Typography & sections ───────────────────────────── */
@@ -462,7 +490,15 @@
   }
 
   #pdx-panel {
+    width: var(--pdx-panel-w-md);
+    max-height: 100dvh;
     border-radius: var(--pdx-radius-lg);
+  }
+
+  @media (min-width: 1200px) {
+    #pdx-panel {
+      width: var(--pdx-panel-w-lg);
+    }
   }
 
   #pdx-root[data-position="left"] #pdx-panel {
@@ -475,8 +511,20 @@
 }
 
 @media (max-width: 680px) {
+  #pdx-panel {
+    width: 100%;
+    max-width: 100%;
+    max-height: min(96dvh, calc(var(--pdx-panel-h-pct, 90) * 1dvh));
+    border-radius: 12px 12px 0 0;
+  }
+
   .pdx-ph-hd {
     padding-top: 12px;
+  }
+
+  .pdx-ph-body {
+    padding: 12px 14px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   #pdx-dock.pdx-dock--panel-open {
@@ -484,6 +532,23 @@
     pointer-events: none;
   }
 }
+
+/* Flatter result surfaces - less nested card chrome */
+.pdx-result,
+.pdx-ws-item,
+.pdx-worker-row,
+.pdx-activity-item,
+.pdx-cmd-item,
+.pdx-case-card,
+.pdx-conn-card {
+  border-radius: var(--pdx-radius);
+  box-shadow: none;
+}
+
+.pdx-deep-pipeline {
+  border-radius: var(--pdx-radius) !important;
+}
+
 
 /* ─── v7: responsive action feedback ─────────────────────── */
 .pdx-btn-primary,

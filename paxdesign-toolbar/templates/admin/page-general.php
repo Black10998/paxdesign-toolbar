@@ -12,25 +12,24 @@ include __DIR__ . '/partials/header.php';
   <input type="hidden" name="action"  value="pdx_save">
   <input type="hidden" name="pdx_tab" value="general">
 
-  <div class="pdx-card">
-    <div class="pdx-card__header">
-      <h2>Plugin Status</h2>
+  <section class="pdx-section">
+    <header class="pdx-section__head"><h2>Plugin Status</h2></header>
+    <div class="pdx-section__body">
+      <div class="pdx-settings-stack">
+        <?php
+        $name        = 'enabled';
+        $label       = 'Enable Utility Dock';
+        $description = 'When disabled, the dock is completely removed from the frontend.';
+        $checked     = $s['enabled'];
+        include __DIR__ . '/partials/settings-toggle.php';
+        ?>
+      </div>
     </div>
-    <div class="pdx-card__body">
-      <label class="pdx-toggle">
-        <input type="checkbox" name="enabled" value="1" <?php checked( $s['enabled'] ); ?>>
-        <span class="pdx-toggle__track"></span>
-        <span class="pdx-toggle__label">Enable Utility Dock</span>
-      </label>
-      <p class="pdx-field-hint">When disabled, the dock is completely removed from the frontend.</p>
-    </div>
-  </div>
+  </section>
 
-  <div class="pdx-card">
-    <div class="pdx-card__header">
-      <h2>Contact & CTA</h2>
-    </div>
-    <div class="pdx-card__body pdx-grid-2">
+  <section class="pdx-section">
+    <header class="pdx-section__head"><h2>Contact & CTA</h2></header>
+    <div class="pdx-section__body pdx-grid-2">
       <div class="pdx-field">
         <label for="contact_url">Contact Page URL</label>
         <input type="url" id="contact_url" name="contact_url"
@@ -51,7 +50,7 @@ include __DIR__ . '/partials/header.php';
                placeholder="Learn more">
       </div>
     </div>
-  </div>
+  </section>
 
   <div class="pdx-form-actions">
     <button type="submit" class="pdx-btn-primary">Save Changes</button>

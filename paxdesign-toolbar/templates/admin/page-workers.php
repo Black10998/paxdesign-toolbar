@@ -12,22 +12,22 @@ $workers = PDX_Worker::all();
 $stats   = PDX_Queue::queue_stats();
 ?>
 
-<div class="pdx-admin-cards">
-  <div class="pdx-admin-card">
-    <div class="pdx-admin-card-label">Total Workers</div>
-    <div class="pdx-admin-card-value"><?php echo count( $workers ); ?></div>
+<div class="pdx-stats-grid">
+  <div class="pdx-stat-card">
+    <div class="pdx-stat-card__label">Total Workers</div>
+    <div class="pdx-stat-card__value"><?php echo count( $workers ); ?></div>
   </div>
-  <div class="pdx-admin-card">
-    <div class="pdx-admin-card-label">Online</div>
-    <div class="pdx-admin-card-value" style="color:#10b981"><?php echo count( array_filter( $workers, fn($w) => $w['status'] === 'online' ) ); ?></div>
+  <div class="pdx-stat-card">
+    <div class="pdx-stat-card__label">Online</div>
+    <div class="pdx-stat-card__value" style="color:var(--pdx-accent)"><?php echo count( array_filter( $workers, fn($w) => $w['status'] === 'online' ) ); ?></div>
   </div>
-  <div class="pdx-admin-card">
-    <div class="pdx-admin-card-label">Queue: Running</div>
-    <div class="pdx-admin-card-value"><?php echo (int) ( $stats['running'] ?? 0 ); ?></div>
+  <div class="pdx-stat-card">
+    <div class="pdx-stat-card__label">Queue: Running</div>
+    <div class="pdx-stat-card__value"><?php echo (int) ( $stats['running'] ?? 0 ); ?></div>
   </div>
-  <div class="pdx-admin-card">
-    <div class="pdx-admin-card-label">Queue: Pending</div>
-    <div class="pdx-admin-card-value"><?php echo (int) ( $stats['queued'] ?? 0 ); ?></div>
+  <div class="pdx-stat-card">
+    <div class="pdx-stat-card__label">Queue: Pending</div>
+    <div class="pdx-stat-card__value"><?php echo (int) ( $stats['queued'] ?? 0 ); ?></div>
   </div>
 </div>
 

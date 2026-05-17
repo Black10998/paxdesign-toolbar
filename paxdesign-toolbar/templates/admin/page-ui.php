@@ -86,28 +86,26 @@ include __DIR__ . '/partials/header.php';
     </div>
     <div class="pdx-card__body">
 
-      <!-- Row 1: Enable + Breakpoint -->
-      <div class="pdx-grid-2" style="margin-bottom:20px">
-        <div class="pdx-field">
-          <label class="pdx-toggle">
-            <input type="checkbox" name="mobile_enabled" value="1" <?php checked( $s['mobile_enabled'] ); ?>>
-            <span class="pdx-toggle__track"></span>
-            <span class="pdx-toggle__label">Enable on mobile</span>
-          </label>
-          <p class="pdx-field-hint">When disabled, the dock is hidden below the breakpoint.</p>
-        </div>
+      <div class="pdx-settings-stack pdx-stack-section">
+        <?php
+        $name        = 'mobile_enabled';
+        $label       = 'Enable on mobile';
+        $description = 'When disabled, the dock is hidden below the breakpoint.';
+        $checked     = $s['mobile_enabled'];
+        include __DIR__ . '/partials/settings-toggle.php';
+        ?>
+      </div>
 
-        <div class="pdx-field">
-          <label for="mobile_breakpoint">Breakpoint (px)</label>
-          <input type="number" id="mobile_breakpoint" name="mobile_breakpoint"
-                 value="<?php echo esc_attr( $s['mobile_breakpoint'] ); ?>"
-                 min="320" max="1280" step="10">
-          <p class="pdx-field-hint">Viewport width where mobile layout activates. Default: 680.</p>
-        </div>
+      <div class="pdx-field pdx-stack-section">
+        <label for="mobile_breakpoint">Breakpoint (px)</label>
+        <input type="number" id="mobile_breakpoint" name="mobile_breakpoint"
+               value="<?php echo esc_attr( $s['mobile_breakpoint'] ); ?>"
+               min="320" max="1280" step="10">
+        <p class="pdx-field-hint">Viewport width where mobile layout activates. Default: 680.</p>
       </div>
 
       <!-- Row 2: Dock Position -->
-      <div class="pdx-field" style="margin-bottom:20px">
+      <div class="pdx-field pdx-stack-section">
         <label>Dock Position</label>
         <div class="pdx-radio-group">
           <?php foreach ( [
@@ -130,7 +128,7 @@ include __DIR__ . '/partials/header.php';
       </div>
 
       <!-- Row 3: Dock Height + Panel Height -->
-      <div class="pdx-grid-2" style="margin-bottom:20px">
+      <div class="pdx-grid-2 pdx-stack-section">
         <div class="pdx-field">
           <label for="mobile_dock_height">Dock Height (px)</label>
           <input type="number" id="mobile_dock_height" name="mobile_dock_height"
@@ -149,7 +147,7 @@ include __DIR__ . '/partials/header.php';
       </div>
 
       <!-- Row 4: Icon Size + Button Size -->
-      <div class="pdx-grid-2" style="margin-bottom:20px">
+      <div class="pdx-grid-2 pdx-stack-section">
         <div class="pdx-field">
           <label for="mobile_icon_size">Icon Size (px)</label>
           <input type="number" id="mobile_icon_size" name="mobile_icon_size"
@@ -168,7 +166,7 @@ include __DIR__ . '/partials/header.php';
       </div>
 
       <!-- Row 5: Spacing + Responsive Scaling -->
-      <div class="pdx-grid-2" style="margin-bottom:20px">
+      <div class="pdx-grid-2 pdx-stack-section">
         <div class="pdx-field">
           <label for="mobile_spacing">Panel Spacing</label>
           <select id="mobile_spacing" name="mobile_spacing">
@@ -194,43 +192,28 @@ include __DIR__ . '/partials/header.php';
         </div>
       </div>
 
-      <!-- Row 6: Behaviour toggles -->
-      <div class="pdx-grid-2" style="margin-bottom:20px">
-        <div class="pdx-field">
-          <label class="pdx-toggle">
-            <input type="checkbox" name="mobile_compact" value="1" <?php checked( $s['mobile_compact'] ?? false ); ?>>
-            <span class="pdx-toggle__track"></span>
-            <span class="pdx-toggle__label">Compact mode</span>
-          </label>
-          <p class="pdx-field-hint">Reduces button and icon sizes for very small screens.</p>
-        </div>
+      <div class="pdx-settings-stack">
+        <?php
+        $name = 'mobile_compact'; $label = 'Compact mode';
+        $description = 'Reduces button and icon sizes for very small screens.';
+        $checked = $s['mobile_compact'] ?? false;
+        include __DIR__ . '/partials/settings-toggle.php';
 
-        <div class="pdx-field">
-          <label class="pdx-toggle">
-            <input type="checkbox" name="mobile_safe_area" value="1" <?php checked( $s['mobile_safe_area'] ?? true ); ?>>
-            <span class="pdx-toggle__track"></span>
-            <span class="pdx-toggle__label">Respect safe area insets</span>
-          </label>
-          <p class="pdx-field-hint">Adds padding for iPhone notch and home indicator.</p>
-        </div>
+        $name = 'mobile_safe_area'; $label = 'Respect safe area insets';
+        $description = 'Adds padding for iPhone notch and home indicator.';
+        $checked = $s['mobile_safe_area'] ?? true;
+        include __DIR__ . '/partials/settings-toggle.php';
 
-        <div class="pdx-field">
-          <label class="pdx-toggle">
-            <input type="checkbox" name="mobile_swipe_close" value="1" <?php checked( $s['mobile_swipe_close'] ?? true ); ?>>
-            <span class="pdx-toggle__track"></span>
-            <span class="pdx-toggle__label">Swipe to close panel</span>
-          </label>
-          <p class="pdx-field-hint">Swipe up (top mode) or down (bottom mode) to dismiss the panel.</p>
-        </div>
+        $name = 'mobile_swipe_close'; $label = 'Swipe to close panel';
+        $description = 'Swipe up (top mode) or down (bottom mode) to dismiss the panel.';
+        $checked = $s['mobile_swipe_close'] ?? true;
+        include __DIR__ . '/partials/settings-toggle.php';
 
-        <div class="pdx-field">
-          <label class="pdx-toggle">
-            <input type="checkbox" name="mobile_hide_dock" value="1" <?php checked( $s['mobile_hide_dock'] ?? true ); ?>>
-            <span class="pdx-toggle__track"></span>
-            <span class="pdx-toggle__label">Hide dock when panel is open</span>
-          </label>
-          <p class="pdx-field-hint">Slides the dock out of view while a panel is open.</p>
-        </div>
+        $name = 'mobile_hide_dock'; $label = 'Hide dock when panel is open';
+        $description = 'Slides the dock out of view while a panel is open.';
+        $checked = $s['mobile_hide_dock'] ?? true;
+        include __DIR__ . '/partials/settings-toggle.php';
+        ?>
       </div>
 
     </div>

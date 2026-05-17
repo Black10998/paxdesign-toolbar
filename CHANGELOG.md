@@ -1,8 +1,25 @@
-# Changelog
+﻿# Changelog
 
-## 7.1.0 — 2026-05-16
+## 7.1.1 — 2026-05-17
 
-**Production foundation** — scroll, state, motion, updates.
+**Admin & frontend UX refinement** — enterprise settings layout on the v7.1 production baseline.
+
+### Admin
+- 8px spacing rhythm and flatter section surfaces (less dashboard card chrome)
+- Settings rows: label + description left, toggle right with proper alignment
+- Reusable `settings-toggle` partial; module list as structured rows
+- Stats use consistent `pdx-stat-card` grid; restored mobile sidebar backdrop + Escape close
+
+### Frontend dock
+- Responsive panel width tokens (`clamp` on desktop, `dvh` on mobile)
+- Premium scroll: smooth behavior, stable gutter, styled scrollbar, safe-area padding
+- Flatter result surfaces inside analysis panels
+
+**Install:** `releases/paxdesign-toolbar-7.1.1.zip` — tag `v7.1.1`
+
+## 7.1.0 ÔÇö 2026-05-16
+
+**Production foundation** ÔÇö scroll, state, motion, updates.
 
 ### Panel UX
 - Single-scroll architecture for analysis panels (desktop/tablet/mobile)
@@ -18,17 +35,17 @@
 - Compact sidebar links, `pdx-toggle--sm` for module cards, aligned enable toggles
 
 ### Updates
-- GitHub release updater — one-click **Update** in WordPress Plugins screen
+- GitHub release updater ÔÇö one-click **Update** in WordPress Plugins screen
 - CI workflow publishes ZIP on `v*` tags
 
-**Install:** `releases/paxdesign-toolbar-7.1.0.zip` — tag `v7.1.0`
+**Install:** `releases/paxdesign-toolbar-7.1.0.zip` ÔÇö tag `v7.1.0`
 
-## 7.0.0 — 2026-05-16
+## 7.0.0 ÔÇö 2026-05-16
 
-**Production foundation** — faster interactions, unified intelligence UX, cleanup.
+**Production foundation** ÔÇö faster interactions, unified intelligence UX, cleanup.
 
 ### Interaction & performance
-- `runIntelPipeline()` — parallel API + staged pipeline with instant button feedback
+- `runIntelPipeline()` ÔÇö parallel API + staged pipeline with instant button feedback
 - Faster pipeline timing (~32% shorter stages), 50ms timer ticks, rAF stage start
 - `pdx-btn--busy` / `pdx-btn--pressed` micro-interactions on all primary actions
 - Double-click guards on scan/run/correlate/build/pipeline/graph actions
@@ -42,11 +59,11 @@
 - Removed dead `animateScanStages()` and unused `.pdx-scanning` CSS
 - Removed duplicate WP admin flyout navigation (6.0.1)
 
-**Install:** `releases/paxdesign-toolbar-7.0.0.zip` — tag `v7.0.0`
+**Install:** `releases/paxdesign-toolbar-7.0.0.zip` ÔÇö tag `v7.0.0`
 
-## 6.0.1 — 2026-05-16
+## 6.0.1 ÔÇö 2026-05-16
 
-**UI/UX fixes** — overlay cleanup, admin scaling, single navigation layer.
+**UI/UX fixes** ÔÇö overlay cleanup, admin scaling, single navigation layer.
 
 ### Admin
 - Restore module/radio/role/chart component styles (SVG sizing, overflow guards)
@@ -60,9 +77,9 @@
 
 **Install:** `releases/paxdesign-toolbar-6.0.1.zip`
 
-## 6.0.0 — 2026-05-17
+## 6.0.0 ÔÇö 2026-05-17
 
-**Major UI/UX redesign** — GitHub-inspired design system, yellow brand accent (`#c2ff00`).
+**Major UI/UX redesign** ÔÇö GitHub-inspired design system, yellow brand accent (`#c2ff00`).
 
 ### Design system
 - New `pdx-tokens.css` (dark/light, shared tokens)
@@ -80,9 +97,9 @@
 - Refined dock rail, modals, command palette, notifications
 - Live pipeline running state (`pdx-dp--running`) + log highlights
 
-**Install:** `releases/paxdesign-toolbar-6.0.0.zip` — tag `v6.0.0`
+**Install:** `releases/paxdesign-toolbar-6.0.0.zip` ÔÇö tag `v6.0.0`
 
-## 5.0.1 — 2026-05-17
+## 5.0.1 ÔÇö 2026-05-17
 
 **Install:** use `releases/paxdesign-toolbar-5.0.1.zip` or tag `v5.0.1`.
 
@@ -107,3 +124,4 @@
 ## 5.0.0
 
 Initial v5 dock rebuild, state sync, and UI stabilization.
+

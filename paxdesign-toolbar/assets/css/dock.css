@@ -284,8 +284,9 @@ body.pdx-no-scroll { overflow: hidden !important; }
     bottom: 0;
     left: auto;
     right: auto;
-    width: 420px;
-    max-width: 100vw;
+    width: var(--pdx-panel-w-md, min(420px, calc(100vw - 80px)));
+    max-width: min(480px, calc(100vw - 48px));
+    max-height: 100dvh;
     border: 1px solid var(--pdx-border, rgba(255,255,255,.08));
     border-radius: 0;
     transition: transform .26s cubic-bezier(.4,0,.2,1);
@@ -345,7 +346,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 /* .pdx-ph-body is the ONLY scroll container in the panel.
    flex:1 + min-height:0 makes it fill remaining space without overflowing .pdx-ph. */
 .pdx-ph-body {
-  padding: 16px 20px;
+  padding: var(--pdx-panel-scroll-pad, 16px 20px);
   flex: 1;
   min-height: 0;
   display: flex;
@@ -355,6 +356,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 /* Chat panel: body is the flex container for messages + footer */
 .pdx-ph--chat .pdx-ph-body {
@@ -671,6 +674,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
 
 /* ─── Scan stages / progress ─────────────────────────────── */
+.pdx-scanning { padding: 16px 0; }
 
 /* ─── Result container ───────────────────────────────────── */
 .pdx-result { display: flex; flex-direction: column; gap: 12px; }
