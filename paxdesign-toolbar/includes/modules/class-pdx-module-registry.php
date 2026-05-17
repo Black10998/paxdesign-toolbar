@@ -19,7 +19,7 @@ class PDX_Module_Registry {
 
 		$this->register( 'trust', [
 			'label'         => 'TrustCheck',
-			'description'   => 'Multi-source domain intelligence: RDAP, SSL Labs, risk scoring, anomaly detection, behavioral analysis, and scan history.',
+			'description'   => 'Deep threat analysis: RDAP, DNS, SSL/TLS, threat feeds, URL forensics, redirect chains, phishing heuristics, and explainable risk scoring.',
 			'category'      => 'security',
 			'icon'          => 'shield',
 			'panel_type'    => 'tool',
@@ -27,7 +27,7 @@ class PDX_Module_Registry {
 			'default_tier'  => 'free',
 			'default_price' => 0.00,
 			'preview_lines' => 3,
-			'capabilities'  => [ 'rdap_lookup', 'ssl_check', 'risk_score', 'anomaly_detection', 'behavioral_score', 'scan_history', 'workspace_save', 'export_report' ],
+			'capabilities'  => [ 'rdap_lookup', 'ssl_check', 'url_forensics', 'phishing_detection', 'risk_score', 'anomaly_detection', 'behavioral_score', 'forensic_timeline', 'scan_history', 'workspace_save', 'export_report' ],
 			'badge'         => null,
 		] );
 
@@ -143,6 +143,62 @@ class PDX_Module_Registry {
 			'default_tier'  => 'free',
 			'default_price' => 0.00,
 			'capabilities'  => [ 'project_brief', 'proposal_request', 'budget_estimate' ],
+			'badge'         => null,
+		] );
+
+		$this->register( 'investigation', [
+			'label'         => 'Investigation',
+			'description'   => 'IOC correlation, relationship mapping, timeline reconstruction, and multi-source investigation workflows.',
+			'category'      => 'security',
+			'icon'          => 'search',
+			'panel_type'    => 'interactive',
+			'order'         => 25,
+			'default_tier'  => 'paid',
+			'default_price' => 24.99,
+			'preview_lines' => 0,
+			'capabilities'  => [ 'ioc_correlate', 'timeline', 'graph_export', 'workspace_save' ],
+			'badge'         => null,
+		] );
+
+		$this->register( 'graph', [
+			'label'         => 'Infrastructure Graph',
+			'description'   => 'Visual relationship graph for domains, IPs, ASNs, and correlated indicators.',
+			'category'      => 'security',
+			'icon'          => 'grid',
+			'panel_type'    => 'interactive',
+			'order'         => 26,
+			'default_tier'  => 'paid',
+			'default_price' => 19.99,
+			'preview_lines' => 0,
+			'capabilities'  => [ 'infra_graph', 'ioc_correlate', 'export_report' ],
+			'badge'         => null,
+		] );
+
+		$this->register( 'memory', [
+			'label'         => 'AI Memory',
+			'description'   => 'Persistent AI context, session memory, and cross-module knowledge retention.',
+			'category'      => 'ai',
+			'icon'          => 'user',
+			'panel_type'    => 'interactive',
+			'order'         => 55,
+			'default_tier'  => 'preview',
+			'default_price' => 4.99,
+			'preview_lines' => 2,
+			'capabilities'  => [ 'ai_memory', 'export_chat' ],
+			'badge'         => null,
+		] );
+
+		$this->register( 'team', [
+			'label'         => 'Teams',
+			'description'   => 'Shared investigations, case management, and team collaboration.',
+			'category'      => 'services',
+			'icon'          => 'user',
+			'panel_type'    => 'interactive',
+			'order'         => 95,
+			'default_tier'  => 'paid',
+			'default_price' => 29.99,
+			'preview_lines' => 0,
+			'capabilities'  => [ 'team_cases', 'shared_workspace' ],
 			'badge'         => null,
 		] );
 

@@ -853,7 +853,7 @@ class PDX_Intelligence {
 	 * @param array<string, mixed>                   $sources
 	 * @param array<string, array{state?:string}>    $source_status
 	 */
-	public function compute_risk( array $sources, array $source_status = [] ): array {
+	public function compute_risk( array $sources, array $source_status = [], array $forensics = [] ): array {
 		$score   = 0;
 		$factors = [];
 
@@ -925,6 +925,29 @@ class PDX_Intelligence {
 		if ( ! empty( $dns ) && empty( $dns['spf'] ) && ! empty( $dns['mx'] ) ) {
 			$score    += 5;
 			$factors[] = [ 'factor' => 'Email Auth', 'value' => 'No SPF', 'risk' => 5, 'weight' => 'low' ];
+		}
+
+		// URL forensics / phishing heuristics (v8)
+		$phish_score = (int) ( $forensics['phishing_score'] ?? $sources['url_forensics']['phishing']['score'] ?? 0 );
+		if ( $phish_score >= 25 ) {
+			$phish_risk = min( 35, $phish_score );
+			$score     += $phish_risk;
+			$factors[] = [
+				'factor' => 'Phishing / Page Forensics',
+				'value'  => ( $forensics['phishing_verdict'] ?? 'elevated' ) . " ({$phish_score})",
+				'risk'   => $phish_risk,
+				'weight' => $phish_score >= 45 ? 'critical' : 'high',
+			];
+		}
+
+		if ( ! empty( $forensics['has_login_form'] ) ) {
+			$score    += 10;
+			$factors[] = [ 'factor' => 'Credential Form on Page', 'value' => 'Detected', 'risk' => 10, 'weight' => 'medium' ];
+		}
+
+		if ( ! empty( $forensics['redirect_hops'] ) && (int) $forensics['redirect_hops'] > 3 ) {
+			$score    += 8;
+			$factors[] = [ 'factor' => 'Redirect Chain', 'value' => (int) $forensics['redirect_hops'] . ' hops', 'risk' => 8, 'weight' => 'medium' ];
 		}
 
 		$score = min( 100, max( 0, $score ) );
@@ -1044,6 +1067,14 @@ class PDX_Intelligence {
 		} elseif ( ( $status['threat']['state'] ?? '' ) === 'error' ) {
 			$parts[] = 'Threat feed queries failed — reputation is unknown, not verified clean.';
 			$recs[]  = 'Configure outbound HTTPS and API keys, then re-run the scan.';
+		}
+
+		if ( ! empty( $report['forensics']['phishing_reasons'] ) ) {
+			$parts[] = 'Forensics: ' . implode( '; ', array_slice( $report['forensics']['phishing_reasons'], 0, 2 ) );
+		}
+
+		if ( ! empty( $sources['url_forensics']['redirect_count'] ) && (int) $sources['url_forensics']['redirect_count'] > 0 ) {
+			$parts[] = 'HTTP redirect chain: ' . (int) $sources['url_forensics']['redirect_count'] . ' hop(s) analyzed.';
 		}
 
 		if ( ( $status['rdap']['state'] ?? '' ) === 'error' ) {

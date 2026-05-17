@@ -1,5 +1,31 @@
 ﻿# Changelog
 
+## 8.0.0 — 2026-05-17
+
+**Enterprise intelligence engine (v8)**
+
+### TrustCheck & OSINT
+- New `PDX_Scan_Orchestrator` — unified deep scan pass for TrustCheck and OSINT REST endpoints
+- New `PDX_Url_Analyzer` — redirect chain inspection (up to 8 hops), HTML/JS/form signals, phishing heuristics
+- Forensic block on reports: redirect hops, phishing score/verdict/reasons, ASN/registrar/email-auth correlation
+- Risk scoring re-computed with forensic factors; IOC ingestion into `PDX_Correlation`
+- Extended forensic timeline events on scan completion
+
+### Threat Intel
+- New `GET /pdx/v1/threat/feeds` — live OTX/URLhaus probe aggregation via `PDX_Threat_Feeds`
+- Threat Intel **Feeds** tab syncs real server-side feed status (replaces static placeholder list)
+
+### Frontend
+- TrustCheck: fast scan mode (no heavy staged animation), URL forensics results panel
+- Pipeline animation speed reduced (`PDX_PIPELINE_SPEED` 0.28)
+- Live threat feed list rendering from API
+
+### Platform
+- Recovery health check includes v8 required PHP classes
+- Module registry: TrustCheck capabilities updated; investigation, graph, memory, team modules registered
+
+**Install:** `releases/paxdesign-toolbar-8.0.0.zip` — tag `v8.0.0`
+
 ## 7.1.10 — 2026-05-17
 
 **Critical: fix site fatal after failed update + production updater safety**

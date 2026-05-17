@@ -583,6 +583,7 @@
         { label: 'Analyzing SSL/TLS posture',             detail: 'Inspecting certificate chain, cipher suites, and expiry',    duration: 900 },
         { label: 'Inspecting DNS infrastructure',         detail: 'Resolving A, MX, NS, TXT, SPF, and DMARC records',          duration: 740 },
         { label: 'Querying threat intelligence feeds',    detail: 'Cross-referencing AlienVault OTX, Abuse.ch, CISA KEV',      duration: 980 },
+        { label: 'URL forensics & redirect chain',        detail: 'Following redirects, HTML/JS/form phishing signals',       duration: 720 },
         { label: 'Correlating behavioral indicators',     detail: 'Analyzing registration patterns and infrastructure signals', duration: 700 },
         { label: 'Building reputation profile',           detail: 'Aggregating multi-source trust signals',                    duration: 610 },
         { label: 'Calculating anomaly confidence',        detail: 'Running statistical deviation analysis',                    duration: 660 },
@@ -592,6 +593,7 @@
       runIntelPipeline({
         btn: btn,
         result: result,
+        fast: true,
         id: 'pdx-trust-pipeline',
         stages: trustStages,
         title: 'TrustCheck — ' + domain,
@@ -738,6 +740,35 @@
         anomalies.forEach(function(a) {
           html += '<div class="pdx-anomaly">' + svgIcon('alert') + '<span>' + escHtml(a.message || safeStr(a)) + '</span></div>';
         });
+        html += '</div>';
+      }
+
+      /* ── URL forensics (v8) ── */
+      var forensics = data.forensics || {};
+      var urlFx = src.url_forensics || {};
+      var phish = urlFx.phishing || {};
+      if (forensics.phishing_score || urlFx.redirect_count || (phish.reasons && phish.reasons.length)) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">URL Forensics & Redirect Chain</div><div class="pdx-kv-grid">';
+        if (urlFx.redirect_count) html += kvRow('Redirect hops', String(urlFx.redirect_count));
+        if (urlFx.final_url) html += kvRow('Final URL', urlFx.final_url);
+        if (forensics.phishing_score != null) html += kvRow('Phishing score', forensics.phishing_score + ' (' + (forensics.phishing_verdict || phish.verdict || 'n/a') + ')');
+        if (forensics.has_login_form) html += kvRow('Credential form', 'Detected on page');
+        html += '</div>';
+        if (urlFx.redirect_chain && urlFx.redirect_chain.length) {
+          html += '<div class="pdx-timeline pdx-mt-sm">';
+          urlFx.redirect_chain.forEach(function(hop, i) {
+            html += '<div class="pdx-timeline-item"><span class="pdx-timeline-ts">Hop ' + (i + 1) + '</span> HTTP ' + escHtml(String(hop.code || '?')) + ' → ' + escHtml(hop.url || '') + '</div>';
+          });
+          html += '</div>';
+        }
+        var phishReasons = forensics.phishing_reasons || phish.reasons || [];
+        if (phishReasons.length) {
+          html += '<div class="pdx-factors pdx-mt-sm">';
+          phishReasons.forEach(function(r) {
+            html += '<div class="pdx-factor pdx-factor--medium"><span class="pdx-factor-name">' + escHtml(r) + '</span></div>';
+          });
+          html += '</div>';
+        }
         html += '</div>';
       }
 
@@ -2540,7 +2571,7 @@
        INTERACTION + PIPELINE ENGINE  v7.0
     ══════════════════════════════════════════════════════ */
 
-    var PDX_PIPELINE_SPEED = 0.68;
+    var PDX_PIPELINE_SPEED = 0.28;
 
     function setBtnBusy(btn, busy, busyLabel) {
       if (!btn) return;
@@ -2570,6 +2601,26 @@
       var resultEl = cfg.result;
       if (!resultEl) return;
       if (isBtnBusy(btn)) return;
+
+      if (cfg.fast) {
+        setBtnBusy(btn, true, cfg.busyLabel || 'Running…');
+        resultEl.innerHTML = '<div class="pdx-scan-running"><div class="pdx-dp-pulse-ring"></div><span>' + escHtml(cfg.title || 'Running analysis…') + '</div>';
+        Promise.resolve(cfg.api()).then(function (data) {
+          setBtnBusy(btn, false);
+          if (!data || data.error) {
+            if (cfg.onError) cfg.onError(resultEl, data);
+            else resultEl.innerHTML = '<div class="pdx-error">' + escHtml(cfg.errorMsg || 'Operation failed.') + '</div>';
+            return;
+          }
+          if (data.error === 'payment_required' && cfg.onPayment) { cfg.onPayment(resultEl, data); return; }
+          if (cfg.onSuccess) cfg.onSuccess(resultEl, data);
+        }).catch(function () {
+          setBtnBusy(btn, false);
+          if (cfg.onError) cfg.onError(resultEl, null);
+          else resultEl.innerHTML = '<div class="pdx-error">' + escHtml(cfg.errorMsg || 'Operation failed.') + '</div>';
+        });
+        return;
+      }
 
       setBtnBusy(btn, true, cfg.busyLabel || 'Running…');
       resultEl.innerHTML = buildDeepPipeline(cfg.id, cfg.stages, {
@@ -2624,20 +2675,24 @@
       });
     }
 
-    function renderThreatFeedsList() {
-      return (
-        '<div class="pdx-section-title">Active Threat Intelligence Feeds</div>' +
-        '<div class="pdx-feed-list">' +
-        feedItem('AlienVault OTX', 'Indicators of compromise — IPs, domains, hashes', 'active', '14.2k pulses') +
-        feedItem('Abuse.ch URLhaus', 'Malicious URLs and malware distribution sites', 'active', 'Live') +
-        feedItem('Emerging Threats', 'Network intrusion signatures and rules', 'active', 'Updated hourly') +
-        feedItem('PhishTank', 'Verified phishing URLs and campaigns', 'active', 'Community verified') +
-        feedItem('CISA KEV', 'Known exploited vulnerabilities catalog', 'active', 'CISA official') +
-        feedItem('Shodan InternetDB', 'Exposed services and open port intelligence', 'active', 'Real-time') +
-        '</div>' +
-        '<div class="pdx-scan-complete pdx-mt-sm"><div class="pdx-scan-complete-dot"></div><span>All configured feeds synchronized</span></div>' +
-        '<div class="pdx-info-box">Configure API keys in Settings → API to enable live feed data and higher rate limits.</div>'
-      );
+    function renderThreatFeedsList(feedData) {
+      if (!feedData || !feedData.feeds || !feedData.feeds.length) {
+        return '<div class="pdx-info-box">Click <strong>Sync Live Feeds</strong> to probe OTX, URLhaus, and platform intelligence endpoints from your server.</div>';
+      }
+      var summary = feedData.summary || {};
+      var html = '<div class="pdx-section-title">Live Feed Status (' + (summary.online || 0) + '/' + (summary.total || feedData.feeds.length) + ' online)</div><div class="pdx-feed-list">';
+      feedData.feeds.forEach(function(f) {
+        var st = f.status === 'online' ? 'active' : f.status === 'degraded' ? 'warn' : 'offline';
+        html += feedItem(f.name, f.message || f.url || '', st, f.last_sync ? 'Synced ' + f.last_sync.slice(0, 19).replace('T', ' ') + ' UTC' : '');
+      });
+      html += '</div>';
+      if (feedData.synced_at) {
+        html += '<div class="pdx-scan-complete pdx-mt-sm"><div class="pdx-scan-complete-dot"></div><span>Last sync: ' + escHtml(feedData.synced_at.slice(0, 19).replace('T', ' ')) + ' UTC</span></div>';
+      }
+      if (feedData.status && feedData.status.message) {
+        html += '<div class="pdx-info-box">' + escHtml(feedData.status.message) + '</div>';
+      }
+      return html;
     }
 
     /**
@@ -4667,7 +4722,7 @@
               return d || { ok: true };
             });
           },
-          onSuccess: function (el) { el.innerHTML = renderThreatFeedsList(); },
+          onSuccess: function (el, data) { el.innerHTML = renderThreatFeedsList(data); },
         });
       });
     }

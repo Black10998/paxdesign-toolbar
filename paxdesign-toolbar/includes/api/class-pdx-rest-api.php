@@ -189,8 +189,19 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/platform/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_stats' ], 'permission_callback' => $adm ] );
 
 		// Threat Intel — CVE lookup + attack surface mapping
-		register_rest_route( $ns, '/threat/cve',     [ 'methods' => 'GET', 'callback' => [ $this, 'threat_cve'     ], 'permission_callback' => $pub, 'args' => [ 'q' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
-		register_rest_route( $ns, '/threat/surface', [ 'methods' => 'GET', 'callback' => [ $this, 'threat_surface' ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
+		register_rest_route( $ns, '/threat/cve',     [ 'methods' => 'GET', 'callback' => [ $this, 'threat_cve'     ], 'permission_callback' => $pub, 'args' => [ 'q' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] ] );
+		register_rest_route( $ns, '/threat/surface', [ 'methods' => 'GET', 'callback' => [ $this, 'threat_surface' ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] ] );
+		register_rest_route( $ns, '/threat/feeds',   [ 'methods' => 'GET', 'callback' => [ $this, 'threat_feeds'   ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => false, 'sanitize_callback' => 'sanitize_text_field' ] ] ] ] );
+	}
+
+	/**
+	 * v8 deep scan orchestration (TrustCheck / OSINT).
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function run_deep_scan( string $raw, bool $paid, string $module ): array {
+		$orchestrator = new PDX_Scan_Orchestrator( $this->intel, $this->settings );
+		return $orchestrator->run( $raw, $paid, $module );
 	}
 
 	/* ── Trust check ─────────────────────────────────────── */
@@ -205,7 +216,7 @@ class PDX_REST_API {
 		$domain = $norm['host'];
 		$paid   = PDX_Access::has_access( 'trust' );
 
-		$report = $this->intel->full_scan( $norm['raw'], $paid );
+		$report = $this->run_deep_scan( $norm['raw'], $paid, 'trust' );
 
 		// Anomaly detection against scan history
 		$anomalies = PDX_Intelligence::detect_anomalies( $domain, $report['risk'] );
@@ -310,7 +321,7 @@ class PDX_REST_API {
 
 		if ( ! $paid && ( $mod['tier'] ?? 'paid' ) !== 'free' ) {
 			// Preview: free sources only
-			$report = $this->intel->full_scan( $target, false );
+			$report = $this->run_deep_scan( $target, false, 'osint' );
 			$report['paywall'] = [
 				'module_id' => $module_id,
 				'price'     => $mod['price'],
@@ -323,7 +334,7 @@ class PDX_REST_API {
 		}
 
 		// Full paid scan
-		$report = $this->intel->full_scan( $target, true );
+		$report = $this->run_deep_scan( $target, true, 'osint' );
 		$report['anomalies'] = PDX_Intelligence::detect_anomalies( $target, $report['risk'] );
 		$report['behavioral'] = PDX_Intelligence::behavioral_score( $report );
 
@@ -1200,6 +1211,13 @@ class PDX_REST_API {
 			'cache'       => PDX_Cache::stats(),
 			'rate_limits' => PDX_RateLimit::stats(),
 		], 200 );
+	}
+
+	/* ── Threat Intel: Live feed status ──────────────────── */
+
+	public function threat_feeds( WP_REST_Request $req ): WP_REST_Response {
+		$domain = sanitize_text_field( $req->get_param( 'domain' ) ?? '' );
+		return new WP_REST_Response( PDX_Threat_Feeds::aggregate( $domain ), 200 );
 	}
 
 	/* ── Threat Intel: CVE Lookup ────────────────────────── */

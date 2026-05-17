@@ -3,7 +3,7 @@
  * Plugin Name:  PaxDesign Utility Dock
  * Plugin URI:   https://paxdesign.io
  * Description:  Enterprise AI/Cyber SaaS dock — SSE real-time, command palette, IOC correlation graph, investigation board, team collaboration, billing enforcement, AI memory, and 84-endpoint REST API.
- * Version:      7.1.10
+ * Version:      8.0.0
  * Update URI:   https://github.com/Black10998/paxdesign-toolbar
  * Author:       PaxDesign
  * Author URI:   https://paxdesign.io
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'PDX_VERSION',   '7.1.10' );
+define( 'PDX_VERSION',   '8.0.0' );
 define( 'PDX_DIR',       plugin_dir_path( __FILE__ ) );
 define( 'PDX_URL',       plugin_dir_url( __FILE__ ) );
 define( 'PDX_SLUG',      'paxdesign-toolbar' );
@@ -55,6 +55,9 @@ require_once PDX_DIR . 'includes/class-pdx-webhook.php';
 require_once PDX_DIR . 'includes/class-pdx-target.php';
 require_once PDX_DIR . 'includes/class-pdx-http.php';
 require_once PDX_DIR . 'includes/class-pdx-intelligence.php';
+require_once PDX_DIR . 'includes/class-pdx-url-analyzer.php';
+require_once PDX_DIR . 'includes/class-pdx-threat-feeds.php';
+require_once PDX_DIR . 'includes/class-pdx-scan-orchestrator.php';
 
 // v4 platform infrastructure (load order matters)
 require_once PDX_DIR . 'includes/class-pdx-event-bus.php';
