@@ -42,11 +42,14 @@ class PDX_Updater {
 		add_filter( 'plugins_api', [ $this, 'plugins_api' ], 20, 3 );
 		add_filter( 'http_request_args', [ $this, 'http_request_args' ], 10, 2 );
 		add_filter( 'upgrader_package_options', [ $this, 'filter_package_options' ], 10, 1 );
+		add_filter( 'upgrader_install_package', [ $this, 'force_canonical_install_destination' ], 5, 2 );
 		add_filter( 'upgrader_pre_install', [ $this, 'backup_before_install' ], 5, 2 );
 		add_filter( 'upgrader_source_selection', [ $this, 'fix_github_source' ], 10, 4 );
+		add_filter( 'all_plugins', [ $this, 'filter_plugins_list_single_instance' ], 100 );
 		add_filter( 'upgrader_post_install', [ $this, 'verify_install' ], 10, 3 );
 		add_filter( 'upgrader_install_package_result', [ $this, 'on_install_package_result' ], 10, 2 );
 
+		add_action( 'plugins_loaded', [ $this, 'enforce_canonical_install' ], 0 );
 		add_action( 'plugins_loaded', [ $this, 'bootstrap_recovery' ], 1 );
 		add_action( 'admin_init', [ $this, 'maybe_migrate_to_canonical_dir' ], 0 );
 		add_action( 'admin_init', [ $this, 'maybe_cleanup_stale_maintenance' ] );
@@ -66,9 +69,16 @@ class PDX_Updater {
 	}
 
 	/**
-	 * Basename for the plugin copy loaded in this request (must match Plugins screen row key).
+	 * WordPress plugin basename — always the canonical folder when it exists.
 	 */
 	public function plugin_basename(): string {
+		return $this->canonical_plugin_basename();
+	}
+
+	/**
+	 * Basename for the copy PHP loaded from this request (may differ until canonical enforcement runs).
+	 */
+	public function loaded_plugin_basename(): string {
 		return plugin_basename( $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE );
 	}
 
@@ -126,8 +136,16 @@ class PDX_Updater {
 	 * Installed version from the live plugin file header (never a stale in-memory constant).
 	 */
 	public function get_installed_version(): string {
-		$main = $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
-		$ver  = $this->read_plugin_version( $main );
+		$canonical_main = $this->canonical_plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
+		if ( is_readable( $canonical_main ) ) {
+			$ver = $this->read_plugin_version( $canonical_main );
+			if ( '' !== $ver && '0.0.0' !== $ver ) {
+				return $ver;
+			}
+		}
+
+		$loaded_main = $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
+		$ver         = $this->read_plugin_version( $loaded_main );
 		if ( '' !== $ver && '0.0.0' !== $ver ) {
 			return $ver;
 		}
@@ -217,22 +235,10 @@ class PDX_Updater {
 	}
 
 	/**
-	 * Remove duplicate PaxDesign entries from update transients (wrong folder basenames).
-	 *
-	 * @param object $transient update_plugins site transient.
-	 */
-	/**
 	 * @return list<string>
 	 */
 	private function update_transient_basenames(): array {
-		return array_values(
-			array_unique(
-				[
-					$this->plugin_basename(),
-					$this->preferred_active_basename(),
-				]
-			)
-		);
+		return [ $this->canonical_plugin_basename() ];
 	}
 
 	private function prune_stale_update_transient_keys( object $transient ): void {
@@ -266,7 +272,8 @@ class PDX_Updater {
 		$state        = $this->get_state();
 		$backup       = ! empty( $state['backup'] ) && is_dir( (string) $state['backup'] );
 
-		$installed = $this->get_installed_version();
+		$installed   = $this->get_installed_version();
+		$install_dir = $this->canonical_plugin_dir();
 
 		return [
 			'installed'            => $installed,
@@ -643,8 +650,154 @@ class PDX_Updater {
 		$options['hook_extra']['temp_backup'] = false;
 		$options['abort_if_destination_exists'] = false;
 		$options['clear_destination']           = true;
+		$options['destination']                 = $this->canonical_plugin_dir();
+		$options['hook_extra']['plugin']        = $this->canonical_plugin_basename();
 
 		return $options;
+	}
+
+	/**
+	 * WordPress must install into wp-content/plugins/paxdesign-toolbar only — never paxdesign-toolbar-x.y.z.
+	 *
+	 * @param array<string, mixed> $options   Install package options.
+	 * @param array<string, mixed> $hook_extra Upgrade context.
+	 * @return array<string, mixed>
+	 */
+	public function force_canonical_install_destination( array $options, array $hook_extra = [] ): array {
+		$extra = ( ! empty( $options['hook_extra'] ) && is_array( $options['hook_extra'] ) )
+			? $options['hook_extra']
+			: $hook_extra;
+
+		if ( ! $this->is_our_plugin( $extra ) ) {
+			return $options;
+		}
+
+		$this->enforce_canonical_install();
+
+		$options['destination']                 = $this->canonical_plugin_dir();
+		$options['clear_destination']           = true;
+		$options['abort_if_destination_exists'] = false;
+
+		if ( ! isset( $options['hook_extra'] ) || ! is_array( $options['hook_extra'] ) ) {
+			$options['hook_extra'] = is_array( $extra ) ? $extra : [];
+		}
+		$options['hook_extra']['plugin'] = $this->canonical_plugin_basename();
+
+		return $options;
+	}
+
+	/**
+	 * Hide duplicate versioned plugin rows — WordPress must list only the canonical instance.
+	 *
+	 * @param array<string, array<string, mixed>> $plugins All plugins.
+	 * @return array<string, array<string, mixed>>
+	 */
+	public function filter_plugins_list_single_instance( $plugins ) {
+		if ( ! is_array( $plugins ) ) {
+			return $plugins;
+		}
+
+		$canonical = $this->canonical_plugin_basename();
+		$has_canon = isset( $plugins[ $canonical ] );
+
+		foreach ( array_keys( $plugins ) as $basename ) {
+			if ( ! $this->is_versioned_plugin_basename( $basename ) ) {
+				continue;
+			}
+			if ( $has_canon || $basename !== $this->newest_versioned_basename( $plugins ) ) {
+				unset( $plugins[ $basename ] );
+			}
+		}
+
+		return $plugins;
+	}
+
+	/**
+	 * Single enforcement pass per request — merge into canonical, delete versioned folders, repair active list.
+	 */
+	public function enforce_canonical_install(): void {
+		static $ran = false;
+		if ( $ran ) {
+			return;
+		}
+		$ran = true;
+
+		if ( ! defined( 'WP_PLUGIN_DIR' ) || ! is_dir( WP_PLUGIN_DIR ) ) {
+			return;
+		}
+
+		$this->consolidate_versioned_install_into_canonical();
+		$this->remove_all_versioned_plugin_directories();
+		$this->maybe_repair_active_plugins_list();
+		$this->flush_plugin_cache();
+	}
+
+	/**
+	 * Delete every paxdesign-toolbar-x.y.z directory under wp-content/plugins.
+	 */
+	private function remove_all_versioned_plugin_directories(): void {
+		$canonical = $this->canonical_plugin_dir_path();
+		$patterns  = [
+			WP_PLUGIN_DIR . '/paxdesign-toolbar-*',
+			WP_PLUGIN_DIR . '/' . self::PLUGIN_FOLDER . '/paxdesign-toolbar-*',
+		];
+
+		foreach ( $patterns as $pattern ) {
+			foreach ( glob( $pattern, GLOB_ONLYDIR ) ?: [] as $path ) {
+				if ( ! is_dir( $path ) ) {
+					continue;
+				}
+				$this->delete_duplicate_plugin_directory( $path, $canonical );
+			}
+		}
+
+		$plugins_dir = WP_PLUGIN_DIR;
+		$entries     = @scandir( $plugins_dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		if ( ! is_array( $entries ) ) {
+			return;
+		}
+
+		foreach ( $entries as $entry ) {
+			if ( '.' === $entry || '..' === $entry || $entry === self::PLUGIN_FOLDER ) {
+				continue;
+			}
+			if ( ! $this->is_versioned_folder_name( $entry ) ) {
+				continue;
+			}
+			$path = $plugins_dir . '/' . $entry;
+			if ( is_dir( $path ) ) {
+				$this->delete_duplicate_plugin_directory( $path, $canonical );
+			}
+		}
+	}
+
+	private function is_versioned_folder_name( string $name ): bool {
+		return (bool) preg_match( '#^paxdesign-toolbar-[0-9].*$#', $name );
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $plugins
+	 */
+	private function newest_versioned_basename( array $plugins ): string {
+		$newest    = '';
+		$newest_ver = '0.0.0';
+
+		foreach ( array_keys( $plugins ) as $basename ) {
+			if ( ! $this->is_versioned_plugin_basename( $basename ) ) {
+				continue;
+			}
+			$main = WP_PLUGIN_DIR . '/' . $basename;
+			if ( ! is_readable( $main ) ) {
+				continue;
+			}
+			$ver = $this->read_plugin_version( $main );
+			if ( version_compare( $ver, $newest_ver, '>' ) ) {
+				$newest_ver = $ver;
+				$newest     = $basename;
+			}
+		}
+
+		return $newest;
 	}
 
 	/**
@@ -672,6 +825,14 @@ class PDX_Updater {
 		$parent     = trailingslashit( dirname( $source ) );
 		$normalized = $parent . self::PLUGIN_FOLDER;
 		$source     = untrailingslashit( $source );
+		$leaf       = basename( $source );
+
+		// Packages must never keep a versioned folder name (paxdesign-toolbar-8.4.3) inside the ZIP.
+		if ( $this->is_versioned_folder_name( $leaf ) && $source !== $normalized ) {
+			if ( $wp_filesystem->exists( $normalized ) && ! $this->is_under_plugins_dir( $normalized ) ) {
+				$wp_filesystem->delete( $normalized, true );
+			}
+		}
 
 		if ( $source === $normalized ) {
 			return $source;
@@ -747,6 +908,7 @@ class PDX_Updater {
 			return $return;
 		}
 
+		$this->enforce_canonical_install();
 		$this->init_filesystem();
 		$this->ensure_upgrade_directories();
 
@@ -857,6 +1019,12 @@ class PDX_Updater {
 			);
 		}
 
+		if ( ! $this->is_canonical_plugin_dir( $install_dir ) ) {
+			$this->consolidate_install_to_canonical_folder( is_array( $result ) ? $result : [] );
+			$this->remove_all_versioned_plugin_directories();
+			$this->maybe_repair_active_plugins_list();
+		}
+
 		$this->schedule_deferred_upgrade_cleanup( $result );
 
 		return $response;
@@ -953,7 +1121,7 @@ class PDX_Updater {
 			return;
 		}
 
-		$this->maybe_repair_active_plugins_list();
+		$this->enforce_canonical_install();
 		$this->clear_release_cache();
 		$this->invalidate_plugin_update_transient();
 	}
@@ -1395,16 +1563,7 @@ class PDX_Updater {
 	}
 
 	public function maybe_migrate_to_canonical_dir(): void {
-		if ( ! is_admin() || wp_doing_ajax() ) {
-			return;
-		}
-		if ( $this->uses_canonical_plugin_dir() ) {
-			return;
-		}
-
-		$this->relocate_to_canonical_before_upgrade();
-		$this->maybe_repair_active_plugins_list();
-		$this->flush_plugin_cache();
+		$this->enforce_canonical_install();
 	}
 
 	private function create_copy_backup(): ?string {
@@ -1634,14 +1793,8 @@ class PDX_Updater {
 		}
 
 		$main_file = $path . '/' . self::PLUGIN_MAIN_FILE;
-		if ( is_readable( $main_file ) ) {
-			$basename = plugin_basename( $main_file );
-			if ( $basename === $this->plugin_basename() ) {
-				return;
-			}
-			if ( $this->is_plugin_active_basename( $basename ) && ! $this->is_versioned_plugin_basename( $basename ) ) {
-				return;
-			}
+		if ( is_readable( $main_file ) && ! $this->is_our_plugin_header_file( $main_file ) ) {
+			return;
 		}
 
 		$this->delete_directory( $path );

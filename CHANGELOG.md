@@ -1,5 +1,25 @@
 ﻿# Changelog
 
+## 8.5.0 — 2026-05-17
+
+**Canonical install path — fixes duplicate `paxdesign-toolbar-x.y.z` folders (Hostinger 409)**
+
+### Root cause
+- Some hosts created `paxdesign-toolbar-8.4.3/` when the ZIP lacked a proper `paxdesign-toolbar/` wrapper or when WordPress updated the wrong plugin directory.
+- That produced two plugin folders, broken activation, and `409 Conflict` on upgrade.
+
+### Permanent fix
+- Release ZIPs are built with a guaranteed single root folder: `paxdesign-toolbar/` (verified in CI and `verify-release-zip.ps1`).
+- Upgrader **always** installs to `wp-content/plugins/paxdesign-toolbar/` (`upgrader_package_options` + `upgrader_install_package`).
+- Extracted packages rename any `paxdesign-toolbar-x.y.z` working folder to `paxdesign-toolbar` before install.
+- On every load: merge duplicates into canonical, delete versioned folders, repair `active_plugins`.
+- Plugins screen shows **one** PaxDesign entry (`all_plugins` filter).
+- Update transients register only the canonical basename.
+
+**Install:** `releases/paxdesign-toolbar-8.5.0.zip` — tag `v8.5.0`
+
+**After update:** Delete any extra `wp-content/plugins/paxdesign-toolbar-*` folders manually if they remain, then activate **PaxDesign Utility Dock** once from the canonical `paxdesign-toolbar` row.
+
 ## 8.4.3 — 2026-05-17
 
 **Updater architecture fix — stable WordPress update notifications**

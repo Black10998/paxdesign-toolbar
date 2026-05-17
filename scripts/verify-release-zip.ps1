@@ -11,7 +11,28 @@ $tmp = Join-Path $env:TEMP "pdx-verify-$(Get-Random)"
 Expand-Archive -Path $ZipPath -DestinationPath $tmp -Force
 $roots = Get-ChildItem $tmp -Directory
 if ($roots.Count -ne 1 -or $roots[0].Name -ne 'paxdesign-toolbar') {
-    throw "ZIP must contain exactly one root folder: paxdesign-toolbar/"
+    throw "ZIP must contain exactly one root folder: paxdesign-toolbar/ (found: $($roots.Name -join ', '))"
+}
+if ($roots[0].Name -match '^paxdesign-toolbar-[0-9]') {
+    throw "ZIP root must be paxdesign-toolbar/ not a versioned folder name"
+}
+# Re-pack check: list zip entries via .NET (catches flat ZIPs with no wrapper folder).
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $ZipPath))
+try {
+    $top = @(
+        $zip.Entries | ForEach-Object {
+            $p = $_.FullName -replace '\\','/'
+            if ($p -match '^([^/]+)/') { $Matches[1] }
+        } | Sort-Object -Unique
+    )
+    if ($top.Count -ne 1 -or $top[0] -ne 'paxdesign-toolbar') {
+        throw "ZIP entry roots must be only paxdesign-toolbar/ (found: $($top -join ', '))"
+    }
+    $bad = $zip.Entries | Where-Object { $_.FullName -match '^paxdesign-toolbar-[0-9]' }
+    if ($bad) { throw 'ZIP must not contain versioned root folder paxdesign-toolbar-x.y.z' }
+} finally {
+    $zip.Dispose()
 }
 $plugin = $roots[0].FullName
 $main   = Join-Path $plugin 'paxdesign-toolbar.php'

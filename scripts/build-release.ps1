@@ -53,8 +53,18 @@ Get-ChildItem (Join-Path $root 'paxdesign-toolbar') -Recurse -Force | ForEach-Ob
 
 New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-# Archive must contain paxdesign-toolbar/ at the root (WordPress plugin folder).
-Compress-Archive -Path (Join-Path $stagingDir 'paxdesign-toolbar') -DestinationPath $zipPath -CompressionLevel Optimal
+
+# Archive MUST contain exactly one root folder: paxdesign-toolbar/
+# (Compress-Archive -Path folder can omit the wrapper on some hosts — use .NET ZIP API.)
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$sourceFolder = Join-Path $stagingDir 'paxdesign-toolbar'
+if (-not (Test-Path $sourceFolder)) { throw "Staging folder missing: $sourceFolder" }
+[System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $sourceFolder,
+    $zipPath,
+    [System.IO.Compression.CompressionLevel]::Optimal,
+    $true
+)
 
 Remove-Item $stagingDir -Recurse -Force
 

@@ -105,12 +105,10 @@ if ( ! is_dir( $plugin_dir ) ) {
 	mkdir( $plugin_dir, 0777, true );
 }
 $main = $plugin_dir . '/paxdesign-toolbar.php';
-if ( ! is_file( $main ) ) {
-	file_put_contents(
-		$main,
-		"<?php\n/**\n * Plugin Name: PaxDesign Utility Dock\n * Version: 8.4.1\n * Text Domain: paxdesign-toolbar\n */\ndefine('PDX_VERSION','8.4.1');\n"
-	);
-}
+file_put_contents(
+	$main,
+	"<?php\n/**\n * Plugin Name: PaxDesign Utility Dock\n * Version: 8.4.1\n * Text Domain: paxdesign-toolbar\n */\ndefine('PDX_VERSION','8.4.1');\n"
+);
 
 $updater = PDX_Updater::instance();
 
