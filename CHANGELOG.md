@@ -1,5 +1,22 @@
 ﻿# Changelog
 
+## 7.1.7 — 2026-05-17
+
+**Global target normalization** — fixes intelligence failures when URLs include query strings (e.g. `domain.com?utm_source=…`).
+
+### Backend
+- `PDX_Target` — strips protocol, query, fragment, and path; validates hostname/IP/email/hash before any API call
+- `PDX_Http` — instrumented outbound requests with per-source debug log (`http_code`, `duration_ms`, `parse_status`, errors)
+- TrustCheck, OSINT, Threat Surface, Investigation correlate/timeline, and Automation use normalization on all REST entry points
+- `source_status` enriched with `request_url`, HTTP code, timeout, and real failure messages (no silent placeholders)
+
+### Frontend
+- `normalizePdxTarget()` used by TrustCheck, OSINT, Threat Intel surface, Investigation, Infrastructure Graph, Automation
+- UI shows normalized vs raw target when input contained query parameters
+- Intelligence Sources panel shows detailed error notes from the backend
+
+**Install:** `releases/paxdesign-toolbar-7.1.7.zip` — tag `v7.1.7`
+
 ## 7.1.6 — 2026-05-17
 
 **TrustCheck intelligence pipeline** — real data, consistent scoring, explicit failures.

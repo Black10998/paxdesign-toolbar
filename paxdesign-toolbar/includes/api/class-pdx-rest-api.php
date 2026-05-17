@@ -30,6 +30,36 @@ class PDX_REST_API {
 		return null;
 	}
 
+	/**
+	 * Normalize user input before any intelligence module runs.
+	 *
+	 * @return array{resolved:array<string,mixed>,host:string,raw:string}|WP_REST_Response
+	 */
+	private function resolve_target_param( string $value, string $label = 'target' ) {
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return new WP_REST_Response( [ 'error' => ucfirst( $label ) . ' is required.' ], 400 );
+		}
+
+		$resolved = PDX_Target::resolve( $value );
+		if ( is_wp_error( $resolved ) ) {
+			return new WP_REST_Response(
+				[
+					'error'      => $resolved->get_error_message(),
+					'code'       => $resolved->get_error_code(),
+					'target_raw' => $value,
+				],
+				400
+			);
+		}
+
+		return [
+			'resolved' => $resolved,
+			'host'     => PDX_Target::api_host( $resolved ),
+			'raw'      => $value,
+		];
+	}
+
 	private function quota_check( string $metric ): ?WP_REST_Response {
 		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
 		if ( ! $user_id ) return null;
@@ -51,7 +81,7 @@ class PDX_REST_API {
 		$adm = static fn() => current_user_can( PDX_CAP );
 
 		// Scans
-		register_rest_route( $ns, '/trust',          [ 'methods' => 'GET',   'callback' => [ $this, 'trust_check'       ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field', 'validate_callback' => static fn( $v ) => (bool) preg_match( '/^[a-z0-9.\-]+\.[a-z]{2,}$/i', $v ) ] ] ] );
+		register_rest_route( $ns, '/trust',          [ 'methods' => 'GET',   'callback' => [ $this, 'trust_check'       ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field', 'validate_callback' => [ 'PDX_Target', 'rest_validate_indicator' ] ] ] ] );
 		register_rest_route( $ns, '/osint/scan',     [ 'methods' => 'POST',  'callback' => [ $this, 'osint_scan'        ], 'permission_callback' => $pub ] );
 
 		// AI
@@ -166,10 +196,16 @@ class PDX_REST_API {
 	/* ── Trust check ─────────────────────────────────────── */
 
 	public function trust_check( WP_REST_Request $req ): WP_REST_Response {
-		$domain = strtolower( $req->get_param( 'domain' ) );
+		$raw    = (string) $req->get_param( 'domain' );
+		$norm   = $this->resolve_target_param( $raw, 'domain' );
+		if ( $norm instanceof WP_REST_Response ) {
+			return $norm;
+		}
+
+		$domain = $norm['host'];
 		$paid   = PDX_Access::has_access( 'trust' );
 
-		$report = $this->intel->full_scan( $domain, $paid );
+		$report = $this->intel->full_scan( $norm['raw'], $paid );
 
 		// Anomaly detection against scan history
 		$anomalies = PDX_Intelligence::detect_anomalies( $domain, $report['risk'] );
@@ -261,9 +297,13 @@ class PDX_REST_API {
 	/* ── OSINT scan ──────────────────────────────────────── */
 
 	public function osint_scan( WP_REST_Request $req ): WP_REST_Response {
-		$target    = sanitize_text_field( $req->get_param( 'target' ) ?? '' );
+		$raw       = sanitize_text_field( $req->get_param( 'target' ) ?? '' );
+		$norm      = $this->resolve_target_param( $raw, 'target' );
+		if ( $norm instanceof WP_REST_Response ) {
+			return $norm;
+		}
+		$target    = $norm['raw'];
 		$module_id = 'osint';
-		if ( ! $target ) return new WP_REST_Response( [ 'error' => 'Target required.' ], 400 );
 
 		$mod  = $this->modules->get_with_pricing( $module_id, $this->settings );
 		$paid = PDX_Access::has_access( $module_id );
@@ -496,9 +536,22 @@ class PDX_REST_API {
 		if ( ! PDX_Access::has_access( $module_id ) && ( $mod['tier'] ?? 'paid' ) !== 'free' ) {
 			return new WP_REST_Response( [ 'error' => 'payment_required', 'module_id' => $module_id, 'price' => $mod['price'], 'currency' => $mod['currency'] ], 402 );
 		}
-		$url  = esc_url_raw( $req->get_param( 'url' ) ?? '' );
-		$task = sanitize_textarea_field( $req->get_param( 'task' ) ?? '' );
-		if ( ! $url || ! $task ) return new WP_REST_Response( [ 'error' => 'URL and task are required.' ], 400 );
+		$raw_url = trim( (string) ( $req->get_param( 'url' ) ?? '' ) );
+		$task    = sanitize_textarea_field( $req->get_param( 'task' ) ?? '' );
+		if ( ! $raw_url || ! $task ) {
+			return new WP_REST_Response( [ 'error' => 'URL and task are required.' ], 400 );
+		}
+
+		$norm = $this->resolve_target_param( $raw_url, 'url' );
+		if ( $norm instanceof WP_REST_Response ) {
+			return $norm;
+		}
+
+		$url = $norm['resolved']['url'] ?? ( 'https://' . $norm['host'] );
+		$url = esc_url_raw( $url );
+		if ( ! $url ) {
+			return new WP_REST_Response( [ 'error' => 'Could not build a valid URL from input.' ], 400 );
+		}
 		$api_key = $this->settings->get( 'api_keys.openai', '' );
 		if ( ! $api_key ) return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
 		$job_id  = PDX_Queue::enqueue( $module_id, 'browser_automation', [ 'url' => $url, 'task' => $task ], 3, 7200 );
@@ -879,10 +932,15 @@ class PDX_REST_API {
 		if ( $rl ) return $rl;
 		// Support both GET query params and POST JSON body
 		$body  = $req->get_json_params() ?: [];
-		$value = sanitize_text_field( $req->get_param( 'value' ) ?? $body['value'] ?? '' );
+		$raw   = sanitize_text_field( $req->get_param( 'value' ) ?? $body['value'] ?? '' );
 		$type  = sanitize_key( $req->get_param( 'type' )  ?? $body['type']  ?? '' );
-		if ( ! $value ) return new WP_REST_Response( [ 'error' => 'value required.' ], 400 );
-		$data    = PDX_Correlation::correlate( $value, $type );
+		$norm  = $this->resolve_target_param( $raw, 'value' );
+		if ( $norm instanceof WP_REST_Response ) {
+			return $norm;
+		}
+		$value   = $norm['host'];
+		$data    = PDX_Correlation::correlate( $value, $type ?: ( $norm['resolved']['type'] ?? '' ) );
+		$data['target_raw'] = $norm['raw'];
 		$api_key = $this->settings->get( 'api_keys.openai', '' );
 		if ( $api_key ) $data['ai_summary'] = PDX_Correlation::ai_summary( $value, $data, $api_key );
 		PDX_Audit::log( 'intel', 'correlation_run', [ 'value' => $value, 'type' => $type ] );
@@ -890,10 +948,20 @@ class PDX_REST_API {
 	}
 
 	public function intel_timeline( WP_REST_Request $req ): WP_REST_Response {
-		$target = sanitize_text_field( $req->get_param( 'target' ) ?? '' );
-		$days   = min( 365, (int) ( $req->get_param( 'days' ) ?? 90 ) );
-		if ( ! $target ) return new WP_REST_Response( [ 'error' => 'target required.' ], 400 );
-		return new WP_REST_Response( [ 'timeline' => PDX_Correlation::timeline( $target, $days ) ], 200 );
+		$raw  = sanitize_text_field( $req->get_param( 'target' ) ?? '' );
+		$days = min( 365, (int) ( $req->get_param( 'days' ) ?? 90 ) );
+		$norm = $this->resolve_target_param( $raw, 'target' );
+		if ( $norm instanceof WP_REST_Response ) {
+			return $norm;
+		}
+		return new WP_REST_Response(
+			[
+				'timeline'   => PDX_Correlation::timeline( $norm['host'], $days ),
+				'target'     => $norm['host'],
+				'target_raw' => $norm['raw'],
+			],
+			200
+		);
 	}
 
 	public function intel_clusters(): WP_REST_Response {
@@ -1211,10 +1279,12 @@ class PDX_REST_API {
 			}
 		}
 
-		$target = sanitize_text_field( trim( $req->get_param( 'domain' ) ?? '' ) );
-		if ( ! $target ) {
-			return new WP_REST_Response( [ 'error' => 'Parameter "domain" is required.' ], 400 );
+		$raw    = sanitize_text_field( trim( $req->get_param( 'domain' ) ?? '' ) );
+		$norm   = $this->resolve_target_param( $raw, 'domain' );
+		if ( $norm instanceof WP_REST_Response ) {
+			return $norm;
 		}
+		$target = $norm['host'];
 
 		$cache_key = 'surface_' . md5( strtolower( $target ) );
 		try {
@@ -1230,7 +1300,10 @@ class PDX_REST_API {
 		}
 
 		try {
-			$result = $this->intel->fetch_attack_surface( $target );
+			$result = $this->intel->fetch_attack_surface( $norm['raw'] );
+			if ( is_array( $result ) ) {
+				$result['target_raw'] = $norm['raw'];
+			}
 		} catch ( Throwable $e ) {
 			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
 				error_log( '[PDX] threat_surface fetch_attack_surface exception: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );

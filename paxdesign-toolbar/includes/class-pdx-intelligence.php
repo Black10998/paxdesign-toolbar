@@ -18,11 +18,21 @@ class PDX_Intelligence {
 	 * Full intelligence scan — runs all available sources and returns
 	 * a structured report with risk scoring.
 	 */
-	public function full_scan( string $target, bool $paid = false ): array {
-		$start  = microtime( true );
-		$target = strtolower( trim( $target ) );
+	public function full_scan( string $raw_target, bool $paid = false ): array {
+		PDX_Http::reset_debug_log();
+		$start = microtime( true );
+
+		$resolved = PDX_Target::resolve( $raw_target );
+		if ( is_wp_error( $resolved ) ) {
+			return $this->error_report( $raw_target, $resolved );
+		}
+
+		$target = PDX_Target::api_host( $resolved );
 		$report = [
 			'target'         => $target,
+			'target_raw'     => $resolved['raw'],
+			'target_type'    => $resolved['type'],
+			'target_meta'    => $resolved,
 			'scan_id'        => 'scan-' . substr( bin2hex( random_bytes( 6 ) ), 0, 10 ),
 			'timestamp'      => gmdate( 'c' ),
 			'paid'           => $paid,
@@ -31,6 +41,7 @@ class PDX_Intelligence {
 			'risk'           => [],
 			'timeline'       => [],
 			'indicators'     => [],
+			'debug'          => [],
 		];
 
 		// RDAP / WHOIS
@@ -133,11 +144,52 @@ class PDX_Intelligence {
 		$report['risk']           = $this->compute_risk( $report['sources'], $report['source_status'] );
 		$report['confidence']     = $this->compute_confidence( $report['source_status'] );
 		$narrative                = $this->build_narrative( $target, $report );
-		$report['ai_summary']     = $narrative['summary'];
+		$report['ai_summary']      = $narrative['summary'];
 		$report['recommendations'] = $narrative['recommendations'];
-		$report['duration']       = round( microtime( true ) - $start, 3 );
+		$report['duration']        = round( microtime( true ) - $start, 3 );
+		$report['debug']           = PDX_Http::get_debug_log();
 
 		return $report;
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function error_report( string $raw_target, WP_Error $error ): array {
+		return [
+			'target'          => $raw_target,
+			'target_raw'      => $raw_target,
+			'target_type'     => 'unknown',
+			'scan_id'         => 'scan-' . substr( bin2hex( random_bytes( 6 ) ), 0, 10 ),
+			'timestamp'       => gmdate( 'c' ),
+			'paid'            => false,
+			'sources'         => [],
+			'source_status'   => [
+				'normalize' => [
+					'state'   => 'error',
+					'message' => $error->get_error_message(),
+				],
+			],
+			'risk'            => [
+				'score'   => 0,
+				'verdict' => 'insufficient_data',
+				'label'   => 'Invalid Target',
+				'factors' => [],
+			],
+			'confidence'      => 0,
+			'ai_summary'      => 'Target could not be normalized: ' . $error->get_error_message(),
+			'recommendations' => [ 'Enter a valid domain (e.g. example.com), IP, or URL without typos.' ],
+			'debug'           => [],
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $status
+	 * @param array<string, mixed> $log
+	 * @return array<string, mixed>
+	 */
+	private function with_http_log( array $status, array $log ): array {
+		return PDX_Http::enrich_status( $status, $log );
 	}
 
 	/* ── RDAP ───────────────────────────────────────────── */
@@ -157,45 +209,62 @@ class PDX_Intelligence {
 		$last_err = 'RDAP lookup failed.';
 
 		foreach ( $tried as $candidate ) {
-			$resp = wp_remote_get(
-				'https://rdap.org/domain/' . rawurlencode( $candidate ),
+			$url  = 'https://rdap.org/domain/' . rawurlencode( $candidate );
+			$http = PDX_Http::get(
+				$url,
 				[
-					'timeout' => 12,
+					'timeout' => 15,
 					'headers' => [ 'Accept' => 'application/rdap+json, application/json' ],
-				]
+				],
+				'rdap'
 			);
+			$resp = $http['response'];
 
 			if ( is_wp_error( $resp ) ) {
 				$last_err = $resp->get_error_message();
+				$last_log = $http['log'];
 				continue;
 			}
 
 			$code = (int) wp_remote_retrieve_response_code( $resp );
 			if ( 200 !== $code ) {
 				$last_err = "RDAP HTTP {$code} for {$candidate}";
+				$last_log = $http['log'];
 				continue;
 			}
 
 			$body = json_decode( wp_remote_retrieve_body( $resp ), true );
 			if ( ! is_array( $body ) || empty( $body['ldhName'] ) ) {
-				$last_err = 'Invalid RDAP response.';
+				$last_err = 'Invalid RDAP response (parse failed).';
+				$last_log = $http['log'];
+				$last_log['parse_status'] = 'parse_error';
 				continue;
 			}
+
+			$last_log['parse_status'] = 'ok';
 
 			return [
 				'data'    => $body,
 				'queried' => $candidate,
-				'status'  => [
-					'state'   => 'ok',
-					'message' => $candidate === $domain ? 'Registration data retrieved.' : "Parent zone {$candidate} used.",
-				],
+				'status'  => $this->with_http_log(
+					[
+						'state'   => 'ok',
+						'message' => $candidate === $domain ? 'Registration data retrieved.' : "Parent zone {$candidate} used.",
+					],
+					$http['log']
+				),
 			];
+		}
+
+		$fail_status = [ 'state' => 'error', 'message' => $last_err ];
+		if ( ! empty( $last_log ) ) {
+			$fail_status = $this->with_http_log( $fail_status, $last_log );
 		}
 
 		return [
 			'data'    => null,
 			'queried' => $domain,
-			'status'  => [ 'state' => 'error', 'message' => $last_err ],
+			'status'  => $fail_status,
 		];
 	}
 
@@ -284,9 +353,13 @@ class PDX_Intelligence {
 		$attempts = 6;
 		$body     = null;
 		$last_err = 'SSL Labs assessment unavailable.';
+		$last_log = [];
 
 		for ( $i = 0; $i < $attempts; $i++ ) {
-			$resp = wp_remote_get( $url, [ 'timeout' => 20 ] );
+			$http = PDX_Http::get( $url, [ 'timeout' => 25 ], 'ssl_labs' );
+			$resp = $http['response'];
+			$last_log = $http['log'];
+
 			if ( is_wp_error( $resp ) ) {
 				$last_err = $resp->get_error_message();
 				break;
@@ -300,22 +373,30 @@ class PDX_Intelligence {
 
 			$body = json_decode( wp_remote_retrieve_body( $resp ), true );
 			if ( ! is_array( $body ) ) {
-				$last_err = 'Invalid SSL Labs response.';
+				$last_err = 'Invalid SSL Labs response (parse failed).';
+				$last_log['parse_status'] = 'parse_error';
 				break;
 			}
 
 			$status = strtoupper( (string) ( $body['status'] ?? '' ) );
 			if ( in_array( $status, [ 'READY', 'ERROR' ], true ) ) {
+				$last_log['parse_status'] = 'ok';
 				if ( 'ERROR' === $status ) {
 					return [
 						'data'    => $body,
-						'status'  => [ 'state' => 'error', 'message' => $body['statusMessage'] ?? 'SSL Labs returned an error.' ],
+						'status'  => $this->with_http_log(
+							[ 'state' => 'error', 'message' => $body['statusMessage'] ?? 'SSL Labs returned an error.' ],
+							$last_log
+						),
 						'message' => $body['statusMessage'] ?? null,
 					];
 				}
 				return [
 					'data'   => $body,
-					'status' => [ 'state' => 'ok', 'message' => 'Assessment complete.' ],
+					'status' => $this->with_http_log(
+						[ 'state' => 'ok', 'message' => 'Assessment complete.' ],
+						$last_log
+					),
 				];
 			}
 
@@ -328,14 +409,22 @@ class PDX_Intelligence {
 		if ( is_array( $body ) ) {
 			return [
 				'data'    => $body,
-				'status'  => [ 'state' => 'partial', 'message' => 'Assessment still in progress; partial data shown.' ],
+				'status'  => $this->with_http_log(
+					[ 'state' => 'partial', 'message' => 'Assessment still in progress; partial data shown.' ],
+					$last_log
+				),
 				'message' => 'SSL Labs scan did not finish in time. Retry for a full grade.',
 			];
 		}
 
+		$fail = [ 'state' => 'error', 'message' => $last_err ];
+		if ( ! empty( $last_log ) ) {
+			$fail = $this->with_http_log( $fail, $last_log );
+		}
+
 		return [
 			'data'   => null,
-			'status' => [ 'state' => 'error', 'message' => $last_err ],
+			'status' => $fail,
 		];
 	}
 
@@ -406,12 +495,17 @@ class PDX_Intelligence {
 		$types   = [ 'A', 'AAAA', 'MX', 'TXT', 'NS', 'CAA' ];
 		$records = [ 'a' => [], 'aaaa' => [], 'mx' => [], 'txt' => [], 'ns' => [], 'caa' => [] ];
 		$errors  = 0;
+		$last_log = [];
 
 		foreach ( $types as $type ) {
-			$resp = wp_remote_get(
-				'https://dns.google/resolve?name=' . rawurlencode( $domain ) . '&type=' . $type,
-				[ 'timeout' => 8, 'headers' => [ 'Accept' => 'application/dns-json' ] ]
+			$url  = 'https://dns.google/resolve?name=' . rawurlencode( $domain ) . '&type=' . $type;
+			$http = PDX_Http::get(
+				$url,
+				[ 'timeout' => 10, 'headers' => [ 'Accept' => 'application/dns-json' ] ],
+				'dns_' . strtolower( $type )
 			);
+			$resp     = $http['response'];
+			$last_log = $http['log'];
 
 			if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
 				++$errors;
@@ -422,6 +516,7 @@ class PDX_Intelligence {
 			if ( empty( $data['Answer'] ) || ! is_array( $data['Answer'] ) ) {
 				continue;
 			}
+			$last_log['parse_status'] = 'ok';
 
 			foreach ( $data['Answer'] as $rec ) {
 				$value = (string) ( $rec['data'] ?? '' );
@@ -452,19 +547,28 @@ class PDX_Intelligence {
 			|| ! empty( $records['ns'] ) || ! empty( $records['txt'] );
 
 		if ( ! $has_any ) {
+			$status = [ 'state' => 'error', 'message' => 'No DNS records returned from resolver.' ];
+			if ( ! empty( $last_log ) ) {
+				$status = $this->with_http_log( $status, $last_log );
+			}
 			return [
 				'data'   => null,
-				'status' => [ 'state' => 'error', 'message' => 'No DNS records returned from resolver.' ],
+				'status' => $status,
 			];
 		}
 
 		$records['label'] = 'DNS';
+		$status = [
+			'state'   => $errors > 0 ? 'partial' : 'ok',
+			'message' => $errors > 0 ? 'Some record types could not be queried.' : 'DNS records retrieved.',
+		];
+		if ( ! empty( $last_log ) ) {
+			$status = $this->with_http_log( $status, $last_log );
+		}
+
 		return [
 			'data'   => $records,
-			'status' => [
-				'state'   => $errors > 0 ? 'partial' : 'ok',
-				'message' => $errors > 0 ? 'Some record types could not be queried.' : 'DNS records retrieved.',
-			],
+			'status' => $status,
 		];
 	}
 
@@ -477,10 +581,12 @@ class PDX_Intelligence {
 		}
 
 		foreach ( [ 'A', 'AAAA' ] as $type ) {
-			$resp = wp_remote_get(
+			$http = PDX_Http::get(
 				'https://dns.google/resolve?name=' . rawurlencode( $host ) . '&type=' . $type,
-				[ 'timeout' => 6, 'headers' => [ 'Accept' => 'application/dns-json' ] ]
+				[ 'timeout' => 8, 'headers' => [ 'Accept' => 'application/dns-json' ] ],
+				'dns_resolve'
 			);
+			$resp = $http['response'];
 			if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
 				continue;
 			}
@@ -502,18 +608,21 @@ class PDX_Intelligence {
 	 * @return array{data:?array,status:array}
 	 */
 	public function fetch_threat_intel( string $target, bool $paid ): array {
-		$feeds    = [];
-		$malicious = 0;
+		$feeds      = [];
+		$malicious  = 0;
 		$suspicious = 0;
-		$errors   = 0;
+		$errors     = 0;
+		$last_log   = [];
 
 		// AlienVault OTX (no API key required for indicator summary)
-		$otx = wp_remote_get(
-			'https://otx.alienvault.com/api/v1/indicators/domain/' . rawurlencode( $target ) . '/general',
-			[ 'timeout' => 10, 'headers' => [ 'User-Agent' => 'PaxDesign-Toolbar/' . PDX_VERSION ] ]
-		);
+		$otx_url = 'https://otx.alienvault.com/api/v1/indicators/domain/' . rawurlencode( $target ) . '/general';
+		$otx_http = PDX_Http::get( $otx_url, [ 'timeout' => 12 ], 'otx' );
+		$otx      = $otx_http['response'];
+		$last_log = $otx_http['log'];
+
 		if ( ! is_wp_error( $otx ) && 200 === (int) wp_remote_retrieve_response_code( $otx ) ) {
 			$odata = json_decode( wp_remote_retrieve_body( $otx ), true );
+			$last_log['parse_status'] = is_array( $odata ) ? 'ok' : 'parse_error';
 			$pulse = (int) ( $odata['pulse_info']['count'] ?? 0 );
 			if ( $pulse > 0 ) {
 				$suspicious += min( 5, $pulse );
@@ -526,16 +635,20 @@ class PDX_Intelligence {
 		}
 
 		// URLhaus host lookup
-		$urlhaus = wp_remote_post(
+		$urlhaus_http = PDX_Http::post(
 			'https://urlhaus-api.abuse.ch/v1/host/',
 			[
-				'timeout' => 10,
+				'timeout' => 12,
 				'body'    => [ 'host' => $target ],
-				'headers' => [ 'User-Agent' => 'PaxDesign-Toolbar/' . PDX_VERSION ],
-			]
+			],
+			'urlhaus'
 		);
+		$urlhaus  = $urlhaus_http['response'];
+		$last_log = $urlhaus_http['log'];
+
 		if ( ! is_wp_error( $urlhaus ) && 200 === (int) wp_remote_retrieve_response_code( $urlhaus ) ) {
 			$udata = json_decode( wp_remote_retrieve_body( $urlhaus ), true );
+			$last_log['parse_status'] = is_array( $udata ) ? 'ok' : 'parse_error';
 			if ( 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_count'] ) ) {
 				$malicious += (int) $udata['url_count'];
 				$feeds[]     = 'URLhaus (' . (int) $udata['url_count'] . ' URLs)';
@@ -557,18 +670,27 @@ class PDX_Intelligence {
 		];
 
 		if ( $errors >= 2 ) {
+			$status = [ 'state' => 'error', 'message' => 'Threat feed queries failed. Check outbound HTTPS from the server.' ];
+			if ( ! empty( $last_log ) ) {
+				$status = $this->with_http_log( $status, $last_log );
+			}
 			return [
 				'data'   => null,
-				'status' => [ 'state' => 'error', 'message' => 'Threat feed queries failed. Check outbound HTTPS from the server.' ],
+				'status' => $status,
 			];
+		}
+
+		$status = [
+			'state'   => $errors > 0 ? 'partial' : 'ok',
+			'message' => $malicious > 0 ? 'Malicious indicators found in open feeds.' : 'No malicious hits in open feeds.',
+		];
+		if ( ! empty( $last_log ) ) {
+			$status = $this->with_http_log( $status, $last_log );
 		}
 
 		return [
 			'data'   => $data,
-			'status' => [
-				'state'   => $errors > 0 ? 'partial' : 'ok',
-				'message' => $malicious > 0 ? 'Malicious indicators found in open feeds.' : 'No malicious hits in open feeds.',
-			],
+			'status' => $status,
 		];
 	}
 
@@ -592,11 +714,15 @@ class PDX_Intelligence {
 	/* ── Geolocation ────────────────────────────────────── */
 
 	public function fetch_geo( string $target ): ?array {
-		$resp = wp_remote_get(
-			'http://ip-api.com/json/' . rawurlencode( $target ) . '?fields=status,country,countryCode,regionName,city,zip,lat,lon,isp,org,as,query,hosting',
-			[ 'timeout' => 6 ]
+		$http = PDX_Http::get(
+			'https://ip-api.com/json/' . rawurlencode( $target ) . '?fields=status,country,countryCode,regionName,city,zip,lat,lon,isp,org,as,query,hosting',
+			[ 'timeout' => 8 ],
+			'geo'
 		);
-		if ( is_wp_error( $resp ) ) return null;
+		$resp = $http['response'];
+		if ( is_wp_error( $resp ) ) {
+			return null;
+		}
 		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
 		if ( ( $data['status'] ?? '' ) !== 'success' ) return null;
 
@@ -1264,10 +1390,26 @@ class PDX_Intelligence {
 	 * @param string $target Domain or IP address.
 	 * @return array
 	 */
-	public function fetch_attack_surface( string $target ): array {
-		$target = trim( $target );
+	public function fetch_attack_surface( string $raw_target ): array {
+		$resolved = PDX_Target::resolve( trim( $raw_target ) );
+		if ( is_wp_error( $resolved ) ) {
+			return [
+				'target'     => $raw_target,
+				'target_raw' => $raw_target,
+				'ports'      => [],
+				'vulns'      => [],
+				'dns'        => [],
+				'score'      => 0,
+				'summary'    => $resolved->get_error_message(),
+				'source'     => [],
+				'error'      => $resolved->get_error_message(),
+			];
+		}
+
+		$target = PDX_Target::api_host( $resolved );
 		$result = [
-			'target'   => $target,
+			'target'     => $target,
+			'target_raw' => $resolved['raw'],
 			'ports'    => [],
 			'services' => [],
 			'vulns'    => [],
@@ -1307,10 +1449,12 @@ class PDX_Intelligence {
 			$dns_types   = [ 'A', 'MX', 'TXT', 'NS', 'AAAA' ];
 			$dns_records = [];
 			foreach ( $dns_types as $type ) {
-				$dns_resp = wp_remote_get(
+				$dns_http = PDX_Http::get(
 					'https://dns.google/resolve?name=' . rawurlencode( $target ) . '&type=' . $type,
-					[ 'timeout' => 6, 'headers' => [ 'Accept' => 'application/dns-json' ] ]
+					[ 'timeout' => 8, 'headers' => [ 'Accept' => 'application/dns-json' ] ],
+					'surface_dns'
 				);
+				$dns_resp = $dns_http['response'];
 				if ( ! is_wp_error( $dns_resp ) && (int) wp_remote_retrieve_response_code( $dns_resp ) === 200 ) {
 					$dns_data = json_decode( wp_remote_retrieve_body( $dns_resp ), true );
 					if ( is_array( $dns_data['Answer'] ?? null ) ) {

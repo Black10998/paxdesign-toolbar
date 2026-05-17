@@ -572,8 +572,9 @@
       var result = document.getElementById('pdx-trust-result');
       var btn    = document.getElementById('pdx-trust-btn');
       if (!input || !result) return;
-      var domain = input.value.trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
-      if (!domain) return;
+      var norm = normalizePdxTarget(input.value);
+      if (!norm.host) { showNotif('Enter a valid domain, IP, or URL', 'warn'); return; }
+      var domain = applyNormalizedInput(input, norm);
       clearPanelState('trust');
 
       var trustStages = [
@@ -614,10 +615,11 @@
 
     function finalizeTrustResult(result, data, domain) {
       if (!data) { result.innerHTML = '<div class="pdx-error">Scan failed. Check the domain and try again.</div>'; return; }
-      renderTrustResult(result, data, domain);
+      var scanTarget = data.target || domain;
+      renderTrustResult(result, data, scanTarget);
       savePanelState('trust', {
         view: 'result',
-        target: domain,
+        target: scanTarget,
         data: data,
         paymentRequired: data.error === 'payment_required',
       });
@@ -628,7 +630,8 @@
     }
 
     function renderTrustResult(container, data, domain) {
-      var targetType = detectTargetType(domain);
+      var displayTarget = (data && data.target) ? data.target : domain;
+      var targetType = detectTargetType(displayTarget);
       var risk      = data.risk      || {};
       var score     = risk.score     != null ? risk.score : 0;
       var verdict   = risk.verdict   || 'insufficient_data';
@@ -684,7 +687,7 @@
       /* ── Scan complete banner ── */
       html += '<div class="pdx-scan-complete">' +
         '<div class="pdx-scan-complete-dot"></div>' +
-        '<span>Analysis complete — ' + escHtml(domain) + '</span>' +
+        '<span>Analysis complete — ' + escHtml(displayTarget) + '</span>' +
         '<span class="pdx-scan-complete-time">' + (data.duration ? data.duration + 's' : '') + '</span>' +
       '</div>';
 
@@ -826,10 +829,10 @@
       /* ── Intelligence Sources ── */
       html += '<div class="pdx-section"><div class="pdx-section-title">Intelligence Sources</div>';
       var sources = [
-        { name: 'RDAP / WHOIS Registry',    status: (srcStatus.rdap && srcStatus.rdap.state) || (rdap.registrar ? 'ok' : 'err'),    note: (srcStatus.rdap && srcStatus.rdap.message) || (rdap.registrar ? 'Data retrieved' : 'Unavailable') },
-        { name: 'SSL Labs Assessment',       status: (srcStatus.ssl && srcStatus.ssl.state) || (ssl.assessed ? 'ok' : 'err'),         note: ssl.assessed ? ('Grade ' + ssl.grade) : ((srcStatus.ssl && srcStatus.ssl.message) || 'Not assessed') },
-        { name: 'DNS Resolver',              status: (srcStatus.dns && srcStatus.dns.state) || ((dns.a && dns.a.length) ? 'ok' : 'err'), note: (dns.a && dns.a.length) ? (dns.a.length + ' A record(s)') : ((srcStatus.dns && srcStatus.dns.message) || 'No records') },
-        { name: 'Threat Intelligence Feeds', status: (srcStatus.threat && srcStatus.threat.state === 'error') ? 'err' : (!threat.checked ? 'err' : (threat.malicious > 0 ? 'warn' : (threat.suspicious > 0 ? 'warn' : 'ok'))), note: (srcStatus.threat && srcStatus.threat.state === 'error') ? (srcStatus.threat.message || 'Feed query failed') : (!threat.checked ? 'Not checked' : (threat.malicious > 0 ? (threat.malicious + ' malicious') : (threat.suspicious > 0 ? (threat.suspicious + ' suspicious') : 'No malicious hits (open feeds)'))) },
+        { name: 'RDAP / WHOIS Registry',    status: mapSourceState(srcStatus.rdap) || (rdap.registrar ? 'ok' : 'err'),    note: formatSourceStatusNote(srcStatus.rdap) || (rdap.registrar ? 'Data retrieved' : 'Unavailable') },
+        { name: 'SSL Labs Assessment',       status: mapSourceState(srcStatus.ssl) || (ssl.assessed ? 'ok' : 'err'),         note: ssl.assessed ? ('Grade ' + ssl.grade + (formatSourceStatusNote(srcStatus.ssl) ? ' · ' + formatSourceStatusNote(srcStatus.ssl) : '')) : (formatSourceStatusNote(srcStatus.ssl) || 'Not assessed') },
+        { name: 'DNS Resolver',              status: mapSourceState(srcStatus.dns) || ((dns.a && dns.a.length) ? 'ok' : 'err'), note: (dns.a && dns.a.length) ? (dns.a.length + ' A record(s)' + (formatSourceStatusNote(srcStatus.dns) ? ' · ' + formatSourceStatusNote(srcStatus.dns) : '')) : (formatSourceStatusNote(srcStatus.dns) || 'No records') },
+        { name: 'Threat Intelligence Feeds', status: mapSourceState(srcStatus.threat) || (!threat.checked ? 'err' : (threat.malicious > 0 ? 'warn' : (threat.suspicious > 0 ? 'warn' : 'ok'))), note: formatSourceStatusNote(srcStatus.threat) || (!threat.checked ? 'Not checked' : (threat.malicious > 0 ? (threat.malicious + ' malicious') : (threat.suspicious > 0 ? (threat.suspicious + ' suspicious') : 'No malicious hits (open feeds)'))) },
       ];
       sources.forEach(function(s) {
         html += '<div class="pdx-source-row">' +
@@ -960,8 +963,9 @@
       var result = document.getElementById('pdx-osint-result');
       var btn    = document.getElementById('pdx-osint-btn');
       if (!input || !result) return;
-      var target = input.value.trim();
-      if (!target) return;
+      var norm = normalizePdxTarget(input.value);
+      if (!norm.host) { showNotif('Enter a valid target', 'warn'); return; }
+      var target = applyNormalizedInput(input, norm);
       clearPanelState('osint');
 
       var osintStages = [
@@ -1876,7 +1880,14 @@
       loadJobHistory('automation', 'pdx-auto-jobs');
 
       document.getElementById('pdx-auto-submit').addEventListener('click', function() {
-        var url    = (document.getElementById('pdx-auto-url') || {}).value || '';
+        var urlInput = document.getElementById('pdx-auto-url');
+        var rawUrl   = (urlInput || {}).value || '';
+        var norm     = normalizePdxTarget(rawUrl);
+        if (!norm.host) { showNotif('Enter a valid URL or domain', 'warn'); return; }
+        var url = /^[a-z][a-z0-9+.-]*:\/\//i.test(rawUrl)
+          ? rawUrl.replace(/[?#].*$/, '')
+          : 'https://' + norm.host;
+        if (urlInput) urlInput.value = url;
         var task   = (document.getElementById('pdx-auto-task') || {}).value || '';
         var format = (document.getElementById('pdx-auto-format') || {}).value || 'json';
         var result = document.getElementById('pdx-auto-result');
@@ -2946,13 +2957,53 @@
 
     /* ── Helpers ──────────────────────────────────────────── */
     /* ══════════════════════════════════════════════════════
+       GLOBAL TARGET NORMALIZATION
+       Strips protocol, query strings, fragments, and paths
+       before any API call (TrustCheck, OSINT, Threat, etc.).
+    ══════════════════════════════════════════════════════ */
+    function normalizePdxTarget(input) {
+      if (!input) return { raw: '', host: '', normalized: '', type: 'unknown' };
+      var raw = String(input).trim();
+      var s = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+      s = s.replace(/[?#].*$/, '');
+      s = (s.split('/')[0] || '').split(':')[0] || '';
+      s = s.replace(/^\.+|\.+$/g, '').toLowerCase();
+      return { raw: raw, host: s, normalized: s, type: detectTargetType(s) };
+    }
+
+    function applyNormalizedInput(inputEl, norm) {
+      if (!inputEl || !norm || !norm.host) return norm.host;
+      if (norm.raw !== norm.host) inputEl.value = norm.host;
+      return norm.host;
+    }
+
+    function formatSourceStatusNote(st) {
+      if (!st) return '';
+      var parts = [];
+      if (st.message) parts.push(st.message);
+      if (st.http_code) parts.push('HTTP ' + st.http_code);
+      if (st.duration_ms) parts.push(st.duration_ms + 'ms');
+      if (st.parse_status && st.parse_status !== 'ok' && st.parse_status !== 'n/a') {
+        parts.push(st.parse_status);
+      }
+      return parts.join(' · ');
+    }
+
+    function mapSourceState(st) {
+      if (!st || !st.state) return '';
+      if (st.state === 'ok') return 'ok';
+      if (st.state === 'partial') return 'warn';
+      return 'err';
+    }
+
+    /* ══════════════════════════════════════════════════════
        TARGET TYPE DETECTION
        Determines what kind of indicator is being analysed
        so result renderers can show contextually correct data.
     ══════════════════════════════════════════════════════ */
     function detectTargetType(target) {
       if (!target) return 'unknown';
-      var t = target.trim().toLowerCase();
+      var t = normalizePdxTarget(target).host || target.trim().toLowerCase();
       if (/^[\w.+%-]+@[\w.-]+\.[a-z]{2,}$/.test(t))                    return 'email';
       if (/^\d{1,3}(\.\d{1,3}){3}$/.test(t))                           return 'ip';
       if (/^([0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/i.test(t))      return 'hash';
@@ -3718,8 +3769,9 @@
       var controls = document.getElementById('pdx-graph-controls');
       var btn = document.getElementById('pdx-graph-btn');
       if (!input || !canvas) return;
-      var value = input.value.trim();
-      if (!value) return;
+      var norm = normalizePdxTarget(input.value);
+      if (!norm.host) { showNotif('Enter a valid indicator', 'warn'); return; }
+      var value = applyNormalizedInput(input, norm);
       if (isBtnBusy(btn)) return;
       setBtnBusy(btn, true, 'Mapping…');
 
@@ -4130,8 +4182,9 @@
       var res  = document.getElementById('pdx-inv-result');
       var btn  = document.getElementById('pdx-inv-btn');
       if (!inp || !res) return;
-      var value = inp.value.trim();
-      if (!value) return;
+      var norm = normalizePdxTarget(inp.value);
+      if (!norm.host) { showNotif('Enter a valid indicator', 'warn'); return; }
+      var value = applyNormalizedInput(inp, norm);
       clearPanelState('investigation');
 
       var corrStages = [
@@ -4562,9 +4615,11 @@
         var surfInp = document.getElementById('pdx-surface-input');
         if (surfBtn && surfInp) {
           surfBtn.addEventListener('click', function() {
-            var domain = surfInp.value.trim();
+            var norm = normalizePdxTarget(surfInp.value);
+            if (!norm.host) { showNotif('Enter a valid domain', 'warn'); return; }
+            var domain = applyNormalizedInput(surfInp, norm);
             var res = document.getElementById('pdx-surface-result');
-            if (!domain || !res) return;
+            if (!res) return;
 
             var surfStages = [
               { label: 'Initializing attack surface scanner',  detail: 'Loading Shodan and DNS enumeration modules',          duration: 440 },

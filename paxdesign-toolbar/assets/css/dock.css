@@ -2612,6 +2612,15 @@ body.pdx-no-scroll { overflow: hidden !important; }
 .pdx-evidence-body { display: none; padding: 10px 12px; border-top: 1px solid rgba(255,255,255,.06); }
 .pdx-evidence-section.is-open .pdx-evidence-body { display: block; }
 
+.pdx-target-normalized {
+  font-size: 12px; line-height: 1.45; color: var(--pdx-mid, #8b949e);
+  padding: 8px 12px; margin-bottom: 10px;
+  background: rgba(56,139,253,.08); border: 1px solid rgba(56,139,253,.22);
+  border-radius: 8px;
+}
+.pdx-target-normalized strong { color: var(--pdx-hi, #e6edf3); }
+.pdx-target-raw { opacity: 0.85; font-family: var(--pdx-mono, monospace); font-size: 11px; }
+
 .pdx-scan-complete {
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; background: rgba(194,255,0,.08);
