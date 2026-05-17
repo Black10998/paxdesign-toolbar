@@ -69,28 +69,37 @@ class PDX_Admin {
 		return $classes;
 	}
 
+	/**
+	 * Asset version: PDX_VERSION + file mtime so browsers bust cache after every update.
+	 */
+	private function asset_ver( string $relative ): string {
+		$path  = PDX_DIR . ltrim( $relative, '/' );
+		$mtime = is_readable( $path ) ? (string) filemtime( $path ) : '';
+		return PDX_VERSION . ( '' !== $mtime ? '.' . $mtime : '' );
+	}
+
 	public function enqueue( string $hook ): void {
-		if ( strpos( $hook, PDX_SLUG ) === false ) return;
+		if ( ! str_contains( $hook, PDX_SLUG ) ) return;
 
 		wp_enqueue_style(
 			'pdx-tokens',
 			PDX_URL . 'assets/css/pdx-tokens.css',
 			[],
-			PDX_VERSION
+			$this->asset_ver( 'assets/css/pdx-tokens.css' )
 		);
 
 		wp_enqueue_style(
 			'pdx-admin',
 			PDX_URL . 'assets/css/admin.css',
 			[ 'pdx-tokens' ],
-			PDX_VERSION
+			$this->asset_ver( 'assets/css/admin.css' )
 		);
 
 		wp_enqueue_script(
 			'pdx-admin',
 			PDX_URL . 'assets/js/admin.js',
 			[],
-			PDX_VERSION,
+			$this->asset_ver( 'assets/js/admin.js' ),
 			true
 		);
 
@@ -286,7 +295,7 @@ class PDX_Admin {
 
 	public function admin_notices(): void {
 		$page = sanitize_key( $_GET['page'] ?? '' );
-		if ( strpos( $page, PDX_SLUG ) === false ) {
+		if ( ! str_contains( $page, PDX_SLUG ) ) {
 			return;
 		}
 

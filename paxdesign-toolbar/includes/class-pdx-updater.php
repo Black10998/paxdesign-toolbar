@@ -55,6 +55,9 @@ class PDX_Updater {
 		add_action( 'shutdown', [ $this, 'run_deferred_upgrade_cleanup' ], 9998 );
 		add_action( 'upgrader_process_complete', [ $this, 'reconcile_upgrader_result' ], 5, 2 );
 		add_action( 'upgrader_process_complete', [ $this, 'on_upgrade_complete' ], 999, 2 );
+		// Flush release transient immediately after any upgrade that touches our plugin,
+		// so the next admin page load reflects the newly installed version.
+		add_action( 'upgrader_process_complete', [ $this, 'flush_release_transient_on_upgrade' ], 1000, 2 );
 		add_action( 'deleted_plugin', [ $this, 'on_deleted_plugin' ], 10, 2 );
 
 		add_action( 'admin_post_pdx_check_updates', [ $this, 'handle_check_updates' ] );
@@ -121,12 +124,14 @@ class PDX_Updater {
 	}
 
 	/**
-	 * @return array{installed:string,latest:?string,update_available:bool,last_checked:int,error:?string,package:?string,release_url:?string,maintenance_active:bool,maintenance_stale:bool,backup_available:bool,checked_at_formatted:?string}
+	 * @return array{installed:string,latest:string,update_available:bool,last_checked:int,error:string,package:string,release_url:string,maintenance_active:bool,maintenance_stale:bool,backup_available:bool,checked_at_formatted:string}
 	 */
 	public function get_status( bool $force_refresh = false ): array {
+		// fetch_release() always returns a fully normalized array — no nulls.
 		$release = $this->fetch_release( $force_refresh );
-		$latest  = is_array( $release ) && ! empty( $release['version'] ) ? $release['version'] : null;
-		$error   = is_array( $release ) && ! empty( $release['error'] ) ? (string) $release['error'] : null;
+
+		$latest = '' !== $release['version'] ? $release['version'] : '';
+		$error  = '' !== $release['error']   ? $release['error']   : '';
 
 		$last_checked = (int) get_option( self::LAST_CHECK_OPTION, 0 );
 		$maintenance  = $this->maintenance_file();
@@ -135,19 +140,20 @@ class PDX_Updater {
 
 		$install_dir = $this->plugin_dir();
 		$header_ver  = $this->read_plugin_version( $install_dir . '/' . self::PLUGIN_MAIN_FILE );
+		$installed   = ( '' !== $header_ver && '0.0.0' !== $header_ver ) ? $header_ver : PDX_VERSION;
 
 		return [
-			'installed'            => $header_ver ?: PDX_VERSION,
+			'installed'            => $installed,
 			'install_dir'          => $install_dir,
 			'canonical_dir'        => $this->canonical_plugin_dir(),
 			'uses_canonical_dir'   => $this->uses_canonical_plugin_dir(),
 			'latest'               => $latest,
-			'update_available'     => $latest && version_compare( $header_ver ?: PDX_VERSION, $latest, '<' ),
+			'update_available'     => '' !== $latest && version_compare( $installed, $latest, '<' ),
 			'last_checked'         => $last_checked,
-			'checked_at_formatted' => $last_checked ? wp_date( 'M j, Y g:i a', $last_checked ) : null,
+			'checked_at_formatted' => $last_checked > 0 ? (string) wp_date( 'M j, Y g:i a', $last_checked ) : '',
 			'error'                => $error,
-			'package'              => is_array( $release ) ? ( $release['package'] ?? null ) : null,
-			'release_url'          => is_array( $release ) ? ( $release['url'] ?? null ) : null,
+			'package'              => $release['package'],
+			'release_url'          => $release['url'],
 			'maintenance_active'   => (bool) $maintenance,
 			'maintenance_stale'    => $this->is_maintenance_stale( $maintenance ),
 			'backup_available'     => $backup,
@@ -155,15 +161,20 @@ class PDX_Updater {
 	}
 
 	/**
-	 * @return array<string, mixed>|null
+	 * Fetch latest release metadata from GitHub, with transient caching.
+	 * Always returns a normalized array (all fields are non-null strings).
+	 *
+	 * @return array<string, mixed>
 	 */
-	public function fetch_release( bool $force = false ): ?array {
+	public function fetch_release( bool $force = false ): array {
 		if ( $force ) {
 			delete_transient( self::CACHE_KEY );
 		}
 
 		$cached = get_transient( self::CACHE_KEY );
 		if ( is_array( $cached ) && ! $force ) {
+			// Re-normalize on every read: handles stale DB entries from older plugin versions
+			// that may have stored null fields, which cause PHP 8.1 deprecation warnings.
 			return $this->normalize_release_data( $cached );
 		}
 
@@ -274,7 +285,9 @@ class PDX_Updater {
 	}
 
 	/**
-	 * WordPress core (esc_url, etc.) rejects null strings on PHP 8.1+.
+	 * Normalize release data — all fields are guaranteed non-null strings on return.
+	 * WordPress core passes these values to strpos(), str_replace(), esc_url(), etc.
+	 * on PHP 8.1+ null triggers a deprecation; empty string is always safe.
 	 *
 	 * @param array<string, mixed> $data
 	 * @return array<string, mixed>
@@ -282,11 +295,17 @@ class PDX_Updater {
 	private function normalize_release_data( array $data ): array {
 		$fallback_url = 'https://github.com/' . self::GITHUB_REPO;
 
-		$data['version'] = isset( $data['version'] ) ? (string) $data['version'] : '';
-		$data['package'] = isset( $data['package'] ) ? (string) $data['package'] : '';
-		$data['url']     = ! empty( $data['url'] ) ? (string) $data['url'] : $fallback_url;
-		$data['name']    = ! empty( $data['name'] ) ? (string) $data['name'] : 'PaxDesign Utility Dock';
-		$data['notes']   = isset( $data['notes'] ) ? (string) $data['notes'] : '';
+		$data['version'] = isset( $data['version'] ) && null !== $data['version'] ? (string) $data['version'] : '';
+		$data['package'] = isset( $data['package'] ) && null !== $data['package'] ? (string) $data['package'] : '';
+		$data['url']     = ( isset( $data['url'] ) && null !== $data['url'] && '' !== (string) $data['url'] ) ? (string) $data['url'] : $fallback_url;
+		$data['name']    = ( isset( $data['name'] ) && null !== $data['name'] && '' !== (string) $data['name'] ) ? (string) $data['name'] : 'PaxDesign Utility Dock';
+		$data['notes']   = isset( $data['notes'] ) && null !== $data['notes'] ? (string) $data['notes'] : '';
+		// 'error' must be a string or absent — never null (null triggers PHP 8.1 warnings in core).
+		if ( array_key_exists( 'error', $data ) ) {
+			$data['error'] = null !== $data['error'] ? (string) $data['error'] : '';
+		} else {
+			$data['error'] = '';
+		}
 
 		return $data;
 	}
@@ -403,15 +422,21 @@ class PDX_Updater {
 			return $transient;
 		}
 
+		// fetch_release() always returns a fully normalized array — no nulls.
 		$release = $this->fetch_release( false );
-		if ( ! is_array( $release ) || ! empty( $release['error'] ) ) {
-			return $transient;
-		}
-		if ( empty( $release['version'] ) || empty( $release['package'] ) ) {
+		if ( '' !== $release['error'] || '' === $release['version'] || '' === $release['package'] ) {
 			return $transient;
 		}
 
-		if ( version_compare( PDX_VERSION, $release['version'], '>=' ) ) {
+		// Read the installed version from the file header — never trust the in-memory constant,
+		// which may reflect a previously-loaded version if WordPress loaded the plugin from a
+		// different path than the canonical directory.
+		$installed_ver = $this->read_plugin_version( $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE );
+		if ( '' === $installed_ver || '0.0.0' === $installed_ver ) {
+			$installed_ver = PDX_VERSION;
+		}
+
+		if ( version_compare( $installed_ver, $release['version'], '>=' ) ) {
 			return $transient;
 		}
 
@@ -427,12 +452,12 @@ class PDX_Updater {
 		}
 
 		$release = $this->fetch_release( false );
-		if ( ! is_array( $release ) || empty( $release['version'] ) || empty( $release['package'] ) ) {
+		// fetch_release() always returns a normalized array now.
+		if ( '' !== $release['error'] || '' === $release['version'] || '' === $release['package'] ) {
 			return $result;
 		}
 
-		$release = $this->normalize_release_data( $release );
-		$notes   = $release['notes'] !== '' ? $release['notes'] : 'See GitHub releases for changelog.';
+		$notes = '' !== $release['notes'] ? $release['notes'] : 'See GitHub releases for changelog.';
 
 		return (object) [
 			'name'          => $release['name'],
@@ -594,8 +619,8 @@ class PDX_Updater {
 			$target_version = (string) $hook_extra['new_version'];
 		} else {
 			$release = $this->fetch_release( false );
-			if ( is_array( $release ) && ! empty( $release['version'] ) ) {
-				$target_version = (string) $release['version'];
+			if ( '' !== $release['version'] ) {
+				$target_version = $release['version'];
 			}
 		}
 
@@ -762,6 +787,21 @@ class PDX_Updater {
 		$this->cleanup_duplicate_plugin_folders( true );
 	}
 
+	/**
+	 * Flush the release transient after any upgrade that touches our plugin.
+	 * Ensures the next admin page load re-fetches from GitHub and reflects the
+	 * newly installed version rather than serving stale cached metadata.
+	 *
+	 * @param WP_Upgrader          $upgrader
+	 * @param array<string, mixed> $hook_extra
+	 */
+	public function flush_release_transient_on_upgrade( $upgrader, $hook_extra ): void {
+		if ( ! is_array( $hook_extra ) || ! $this->is_our_plugin( $hook_extra ) ) {
+			return;
+		}
+		$this->clear_all_caches();
+	}
+
 	public function maybe_cleanup_duplicate_plugins_admin(): void {
 		if ( ! is_admin() || ! function_exists( 'get_current_screen' ) ) {
 			return;
@@ -883,13 +923,15 @@ class PDX_Updater {
 
 		if ( $success || $this->plugin_passes_health_check() ) {
 			$this->clear_all_caches();
-			$this->set_state(
-				[
-					'deferred_cleanup' => true,
-					'last_success'     => time(),
-					'backup'           => $this->get_state()['backup'] ?? null,
-				]
-			);
+			$current_backup = isset( $this->get_state()['backup'] ) ? (string) $this->get_state()['backup'] : '';
+			$next_state     = [
+				'deferred_cleanup' => true,
+				'last_success'     => time(),
+			];
+			if ( '' !== $current_backup ) {
+				$next_state['backup'] = $current_backup;
+			}
+			$this->set_state( $next_state );
 		} else {
 			$this->maybe_rollback( $hook_extra );
 			$this->clear_all_caches();
@@ -1124,6 +1166,9 @@ class PDX_Updater {
 	}
 
 	/**
+	 * Restore from backup only when the current install is broken or older than the backup.
+	 * Never rolls back over a valid install that is equal to or newer than the backup.
+	 *
 	 * @param array<string, mixed>|null $hook_extra
 	 */
 	private function maybe_rollback( ?array $hook_extra = null ): void {
@@ -1134,11 +1179,42 @@ class PDX_Updater {
 		$state  = $this->get_state();
 		$backup = isset( $state['backup'] ) ? (string) $state['backup'] : '';
 
-		if ( ! $backup || ! is_dir( $backup ) ) {
+		if ( '' === $backup || ! is_dir( $backup ) ) {
 			return;
 		}
 
-		$target = $this->plugin_dir();
+		$backup_main = $backup . '/' . self::PLUGIN_MAIN_FILE;
+		if ( ! is_readable( $backup_main ) ) {
+			return;
+		}
+
+		$target      = $this->plugin_dir();
+		$target_main = $target . '/' . self::PLUGIN_MAIN_FILE;
+
+		// If the current install is healthy and at least as new as the backup, do not roll back.
+		if ( is_readable( $target_main ) ) {
+			$current_ver = $this->read_plugin_version( $target_main );
+			$backup_ver  = $this->read_plugin_version( $backup_main );
+			if ( '' !== $current_ver && '0.0.0' !== $current_ver
+				&& '' !== $backup_ver && '0.0.0' !== $backup_ver
+				&& version_compare( $current_ver, $backup_ver, '>=' )
+				&& $this->plugin_passes_health_check()
+			) {
+				if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+					error_log( sprintf(
+						'[PDX] Rollback skipped: current %s >= backup %s and install is healthy.',
+						$current_ver,
+						$backup_ver
+					) );
+				}
+				return;
+			}
+		}
+
+		if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+			error_log( '[PDX] Rolling back to backup: ' . $backup );
+		}
+
 		$this->delete_directory( $target );
 		$this->copy_directory( $backup, $target );
 	}

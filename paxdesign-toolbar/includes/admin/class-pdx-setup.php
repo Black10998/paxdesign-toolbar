@@ -45,7 +45,7 @@ class PDX_Setup {
 
 		/* Don't show on the plugin's own settings pages */
 		$page = sanitize_key( $_GET['page'] ?? '' );
-		if ( strpos( $page, PDX_SLUG ) !== false ) return;
+		if ( str_contains( $page, PDX_SLUG ) ) return;
 
 		$step = $state['step'];
 		if ( $step === 'done' ) return;
@@ -214,7 +214,7 @@ class PDX_Setup {
 
 	public function enqueue_wizard_css( string $hook ): void {
 		/* Only on admin pages that show notices */
-		if ( strpos( $hook, 'pdx' ) !== false ) return;
+		if ( str_contains( $hook, 'pdx' ) ) return;
 		$state = $this->state();
 		if ( $state['dismissed'] || $state['step'] === 'done' ) return;
 		?>
