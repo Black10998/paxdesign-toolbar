@@ -16,7 +16,9 @@
 #pdx-panel[data-pdx-module="graph"]       { --pdx-mod-accent: #a78bfa; --pdx-mod-glow: rgba(167, 139, 250, 0.28); }
 #pdx-panel[data-pdx-module="memory"]      { --pdx-mod-accent: #86efac; --pdx-mod-glow: rgba(134, 239, 172, 0.28); }
 #pdx-panel[data-pdx-module="team"]        { --pdx-mod-accent: #fcd34d; --pdx-mod-glow: rgba(252, 211, 77, 0.28); }
-#pdx-panel[data-pdx-module="timeline"]    { --pdx-mod-accent: #93c5fd; --pdx-mod-glow: rgba(147, 197, 253, 0.28); }
+#pdx-panel[data-pdx-module="connectors"]  { --pdx-mod-accent: #38bdf8; --pdx-mod-glow: rgba(56, 189, 248, 0.28); }
+#pdx-panel[data-pdx-module="create"]      { --pdx-mod-accent: #a3e635; --pdx-mod-glow: rgba(163, 230, 53, 0.28); }
+#pdx-panel[data-pdx-module="workspace"]  { --pdx-mod-accent: #93c5fd; --pdx-mod-glow: rgba(147, 197, 253, 0.28); }
 
 /* Dock buttons — per-module color + glow */
 #pdx-dock .pdx-btn[data-module] {
@@ -41,7 +43,9 @@
 #pdx-dock .pdx-btn--graph .pdx-mod-icon        { color: #a78bfa; }
 #pdx-dock .pdx-btn--memory .pdx-mod-icon       { color: #86efac; }
 #pdx-dock .pdx-btn--team .pdx-mod-icon         { color: #fcd34d; }
-#pdx-dock .pdx-btn--timeline .pdx-mod-icon     { color: #93c5fd; }
+#pdx-dock .pdx-btn--connectors .pdx-mod-icon  { color: #38bdf8; }
+#pdx-dock .pdx-btn--create .pdx-mod-icon      { color: #a3e635; }
+#pdx-dock .pdx-btn--workspace .pdx-mod-icon   { color: #93c5fd; }
 
 #pdx-dock .pdx-btn.is-active[data-module] {
   box-shadow: 0 0 0 1px var(--pdx-mod-accent), 0 0 18px var(--pdx-mod-glow);

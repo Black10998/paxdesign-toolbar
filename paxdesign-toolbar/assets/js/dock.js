@@ -472,45 +472,41 @@
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
 
-    /* ── Module theme + icons (v8.3) ─────────────────────── */
-    var MODULE_THEME = {
-      trust: 'trust', osint: 'osint', threat: 'threat', personas: 'personas',
-      builder: 'builder', pipeline: 'pipeline', automation: 'automation',
-      connectors: 'graph', create: 'builder', workspace: 'timeline',
-      investigation: 'investigation', graph: 'graph', team: 'team',
-      memory: 'memory', billing: 'trust'
-    };
-
+    /* ── Module theme + icons (v8.4 — one icon per module id) ── */
     var MODULE_ACCENTS = {
       trust: '#c2ff00', osint: '#5ecbff', threat: '#ff6b6b', personas: '#c084fc',
       builder: '#fbbf24', pipeline: '#34d399', automation: '#fb923c',
       investigation: '#67e8f9', graph: '#a78bfa', memory: '#86efac',
-      team: '#fcd34d', timeline: '#93c5fd'
+      team: '#fcd34d', connectors: '#38bdf8', create: '#a3e635', workspace: '#93c5fd'
     };
 
-    function themeKey(moduleId) {
-      return MODULE_THEME[moduleId] || moduleId || 'trust';
+    function bindClickOnce(el, handler) {
+      if (!el || el.dataset.pdxBound) return;
+      el.dataset.pdxBound = '1';
+      el.addEventListener('click', handler);
     }
 
     function modIcon(moduleId) {
-      return svgIcon(themeKey(moduleId));
+      return svgIcon(moduleId || 'trust');
     }
 
     function setPanelModuleTheme(moduleId) {
-      var tk = themeKey(moduleId);
-      panel.setAttribute('data-pdx-module', tk);
-      inner.className = 'pdx-panel-inner pdx-panel-inner--' + tk;
-      if (MODULE_ACCENTS[tk]) {
-        document.documentElement.style.setProperty('--pdx-mod-accent', MODULE_ACCENTS[tk]);
+      var mid = moduleId || 'trust';
+      panel.setAttribute('data-pdx-module', mid);
+      inner.className = 'pdx-panel-inner pdx-panel-inner--' + mid;
+      if (MODULE_ACCENTS[mid]) {
+        document.documentElement.style.setProperty('--pdx-mod-accent', MODULE_ACCENTS[mid]);
       }
     }
 
     function applyDockModuleIcons() {
       if (typeof global.pdxModuleIcon !== 'function') return;
       dock.querySelectorAll('.pdx-btn[data-module]').forEach(function (btn) {
-        var tk = themeKey(btn.dataset.module || '');
-        btn.innerHTML = global.pdxModuleIcon(tk);
-        btn.classList.add('pdx-btn--' + tk);
+        var mid = btn.dataset.module || 'trust';
+        btn.innerHTML = global.pdxModuleIcon(mid);
+        btn.className = 'pdx-btn pdx-btn--mod-' + mid + ' pdx-btn--' + mid;
+        btn.setAttribute('data-module', mid);
+        btn.setAttribute('type', 'button');
       });
     }
 
@@ -1408,7 +1404,7 @@
       inner.innerHTML =
         '<div class="pdx-ph pdx-ph--chat">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('user') + '<span>AI Personas</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
+            '<div class="pdx-ph-title">' + modIcon('personas') + '<span>AI Personas</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="AI online"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Interact with specialized AI agents trained for automation, intelligence analysis, workflow assistance, and technical operations. Persistent memory and conversation history included.</div>' +
@@ -1568,7 +1564,7 @@
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('layers') + '<span>AI Builder</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
+            '<div class="pdx-ph-title">' + modIcon('builder') + '<span>AI Builder</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Engine ready"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Visual AI workflow builder — chain LLM steps, transformations, and logic into automated pipelines. Run flows, save templates, and deploy reusable intelligence sequences.</div>' +
@@ -2003,7 +1999,7 @@
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('grid') + '<span>Browser Automation</span>' +
+            '<div class="pdx-ph-title">' + modIcon('automation') + '<span>Browser Automation</span>' +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Engine ready"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Automate browser-based workflows, extraction tasks, validation steps, and operational sequences using AI-assisted execution pipelines. Submit a URL and task to receive a structured execution plan.</div>' +
@@ -2193,7 +2189,7 @@
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('link') + '<span>Connectors</span>' +
+            '<div class="pdx-ph-title">' + modIcon('connectors') + '<span>Connectors</span>' +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Ready"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Live API integration testing — REST, Slack, Airtable, Notion, GitHub, Zapier. Test connections, inspect responses, measure latency, and configure webhooks.</div>' +
@@ -2377,7 +2373,7 @@
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('plus') + '<span>Development Services</span></div>' +
+            '<div class="pdx-ph-title">' + modIcon('create') + '<span>Development Services</span></div>' +
             '<div class="pdx-ph-desc">Custom digital product development — submit a project brief and receive a scoped proposal, timeline estimate, and cost breakdown within 24 hours.</div>' +
             '<div class="pdx-module-caps">' +
               '<span class="pdx-cap-tag">Web Apps</span>' +
@@ -2427,7 +2423,7 @@
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('folder') + '<span>Workspaces</span></div>' +
+            '<div class="pdx-ph-title">' + modIcon('workspace') + '<span>Workspaces</span></div>' +
             '<div class="pdx-ph-desc">Persistent saved projects, investigation boards, scan history, and AI memory across all modules. Search, pin, archive, and export your intelligence work.</div>' +
             '<div class="pdx-module-caps">' +
               '<span class="pdx-cap-tag">Saved Projects</span>' +
@@ -3897,7 +3893,7 @@
       inner.innerHTML =
         '<div class="pdx-ph pdx-ph--investigation">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('search') + '<span>Investigation Board</span><span class="pdx-badge pdx-badge--new">v4</span>' +
+            '<div class="pdx-ph-title">' + modIcon('investigation') + '<span>Investigation Board</span><span class="pdx-badge pdx-badge--new">v4</span>' +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Correlation engine active"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Correlate IOCs, build investigation timelines, cluster threat actors, and manage cases with team collaboration. Advanced correlation engine identifies hidden relationships across indicators.</div>' +
@@ -4061,7 +4057,7 @@
       inner.innerHTML =
         '<div class="pdx-ph pdx-ph--graph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('link') + '<span>Infrastructure Graph</span><span class="pdx-badge pdx-badge--new">v4</span>' +
+            '<div class="pdx-ph-title">' + modIcon('graph') + '<span>Infrastructure Graph</span><span class="pdx-badge pdx-badge--new">v4</span>' +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Graph engine ready"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Visual IOC relationship mapping — seed any indicator to build an interactive graph of connected infrastructure, threat actors, and related indicators with AI-generated summaries.</div>' +
@@ -4266,7 +4262,7 @@
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('user') + '<span>Teams</span><span class="pdx-badge pdx-badge--new">v4</span>' +
+            '<div class="pdx-ph-title">' + modIcon('team') + '<span>Teams</span><span class="pdx-badge pdx-badge--new">v4</span>' +
               '<span class="pdx-module-status-dot pdx-module-status-dot--online" title="Collaboration active"></span>' +
             '</div>' +
             '<div class="pdx-ph-desc">Manage team members, assign roles, and collaborate on investigations and cases. Role-based access control ensures each member sees only what they need.</div>' +
@@ -4396,7 +4392,7 @@
       inner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
-            '<div class="pdx-ph-title">' + svgIcon('layers') + '<span>AI Memory</span><span class="pdx-badge pdx-badge--new">v4</span><span class="pdx-module-status-dot pdx-module-status-dot--online" title="Memory engine active"></span></div>' +
+            '<div class="pdx-ph-title">' + modIcon('memory') + '<span>AI Memory</span><span class="pdx-badge pdx-badge--new">v4</span><span class="pdx-module-status-dot pdx-module-status-dot--online" title="Memory engine active"></span></div>' +
             '<div class="pdx-ph-desc">Long-term agent memory with semantic search — store facts, preferences, findings, and context that persist across all AI sessions and modules.</div>' +
             '<div class="pdx-module-caps"><span class="pdx-cap-tag">Semantic Search</span><span class="pdx-cap-tag">Long-term Storage</span><span class="pdx-cap-tag">Cross-module</span><span class="pdx-cap-tag">Importance Scoring</span></div>' +
           '</div>' +
@@ -4493,8 +4489,11 @@
       var btn = document.getElementById('pdx-inv-btn');
       var inp = document.getElementById('pdx-inv-input');
       if (!btn || !inp) return;
-      btn.addEventListener('click', runCorrelate);
-      inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') runCorrelate(); });
+      bindClickOnce(btn, runCorrelate);
+      if (!inp.dataset.pdxBound) {
+        inp.dataset.pdxBound = '1';
+        inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') runCorrelate(); });
+      }
       var saved = loadPanelState('investigation');
       if (saved && saved.view === 'result' && saved.data) {
         if (inp && saved.target) inp.value = saved.target;
@@ -4637,7 +4636,7 @@
       var btn = document.getElementById('pdx-tl-btn');
       var inp = document.getElementById('pdx-tl-input');
       if (!btn || !inp) return;
-      btn.addEventListener('click', function() {
+      bindClickOnce(btn, function() {
         var norm = normalizePdxTarget(inp.value);
         if (!norm.host && !norm.normalized) return;
         var target = applyNormalizedInput(inp, norm);
@@ -4909,7 +4908,7 @@
         var cveBtn = document.getElementById('pdx-cve-btn');
         var cveInp = document.getElementById('pdx-cve-input');
         if (cveBtn && cveInp) {
-          cveBtn.addEventListener('click', function() {
+          function runCveLookup() {
             var q = cveInp.value.trim();
             var res = document.getElementById('pdx-cve-result');
             if (!q || !res) return;
@@ -4940,8 +4939,12 @@
               apiData = data; apiDone = true;
               if (pipelineDone) renderCVEResult(res, data, q);
             });
-          });
-          cveInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') cveBtn.click(); });
+          }
+          bindClickOnce(cveBtn, runCveLookup);
+          if (!cveInp.dataset.pdxBound) {
+            cveInp.dataset.pdxBound = '1';
+            cveInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') runCveLookup(); });
+          }
         }
       }
       // Attack surface
@@ -4949,7 +4952,7 @@
         var surfBtn = document.getElementById('pdx-surface-btn');
         var surfInp = document.getElementById('pdx-surface-input');
         if (surfBtn && surfInp) {
-          surfBtn.addEventListener('click', function() {
+          function runSurfaceScan() {
             var norm = normalizePdxTarget(surfInp.value);
             if (!norm.host) { showNotif('Enter a valid domain', 'warn'); return; }
             var domain = applyNormalizedInput(surfInp, norm);
@@ -4983,7 +4986,12 @@
               apiData = data; apiDone = true;
               if (pipelineDone) renderSurfaceResult(res, data, domain);
             });
-          });
+          }
+          bindClickOnce(surfBtn, runSurfaceScan);
+          if (!surfInp.dataset.pdxBound) {
+            surfInp.dataset.pdxBound = '1';
+            surfInp.addEventListener('keydown', function(e) { if (e.key === 'Enter') runSurfaceScan(); });
+          }
         }
       }
     }

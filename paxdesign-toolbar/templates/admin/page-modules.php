@@ -31,7 +31,7 @@ include __DIR__ . '/partials/header.php';
         ?>
         <div class="pdx-module-row <?php echo $enabled ? 'is-enabled' : ''; ?>">
           <div class="pdx-module-row__icon">
-            <?php echo $this->get_svg_icon_html( $mod['icon'] ); ?>
+            <?php echo $this->get_svg_icon_html( $id ); ?>
           </div>
           <div class="pdx-module-row__info">
             <strong><?php echo esc_html( $mod['label'] ); ?></strong>

@@ -1,19 +1,32 @@
 ﻿# Changelog
 
+## 8.4.0 — 2026-05-17
+
+**Full cleanup — unique module icons, reliable button handlers, canonical assets**
+
+### Icons & frontend
+- New `PDX_Icons` PHP class — dock buttons render unique SVGs per module ID (no shared shield/search/user icons)
+- `pdx-module-icons.js` keyed by module ID; removed alias collapsing (OSINT vs Investigation, Graph vs Automation, etc.)
+- Dock applies icons from `data-module` directly; panel chrome uses per-module accent colors including Connectors, Create, Workspace
+- Panel headers use `modIcon(moduleId)` for consistent identity inside modals
+
+### Button / tab fixes
+- `bindClickOnce()` prevents duplicate click handlers when switching Threat Intel, Investigation, and other tabs
+- CVE lookup, attack surface, correlate, and timeline actions wire reliably on first open and after tab changes
+
+### Module registry
+- Each module’s `icon` field matches its module ID for admin and config consistency
+
+**Install:** `releases/paxdesign-toolbar-8.4.0.zip` — tag `v8.4.0`
+
+**After update:** Plugins → Updates, then hard-refresh the site (Ctrl+F5) or clear Hostinger/page cache.
+
 ## 8.3.2 — 2026-05-17
 
-**Updater architecture stabilization — production hardening**
+**Updater stabilization — single release ZIP, architecture hardening**
 
-- `fetch_release()` now always returns a fully normalized array (never `null`); all fields guaranteed non-null strings on every code path including cached reads, eliminating the root cause of PHP 8.1 `strpos()`/`str_replace()` deprecation warnings
-- `normalize_release_data()` explicitly normalizes the `error` field — previously stored as `null` in the transient, which caused warnings when WordPress core processed the cached data
-- `inject_update()` reads the installed version from the plugin file header rather than the in-memory `PDX_VERSION` constant, fixing version detection when WordPress loads the plugin from a non-canonical path
-- `maybe_rollback()` now guards against rolling back over a valid install: skips restore when the current version is equal to or newer than the backup and the install passes the health check
-- `finalize_upgrade_transaction()` no longer stores `backup => null` in upgrade state; omits the key entirely when no backup exists
-- `flush_release_transient_on_upgrade()` added — fires at `upgrader_process_complete` priority 1000 to guarantee the release transient and `update_plugins` cache are cleared after every update, regardless of whether `finalize_upgrade_transaction` was reached
-- Activation hook now flushes the release transient and plugin cache so a fresh install immediately reflects the correct version
-- Admin asset enqueue (`class-pdx-admin.php`) uses `PDX_VERSION + filemtime` versioning, matching the frontend — browsers bust cache after every update
-- `strpos()` calls in `class-pdx-admin.php` and `class-pdx-setup.php` replaced with `str_contains()` (PHP 8.0+, never warns on empty string)
-- `get_status()` returns non-null strings for all fields; `checked_at_formatted`, `latest`, `error`, `package`, `release_url` are empty strings instead of `null` when not available
+- Repository ships only the current release ZIP (older builds removed from `releases/`)
+- Updater architecture refinements on top of 8.3.1
 
 **Install:** `releases/paxdesign-toolbar-8.3.2.zip` — tag `v8.3.2`
 

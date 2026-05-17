@@ -69,37 +69,28 @@ class PDX_Admin {
 		return $classes;
 	}
 
-	/**
-	 * Asset version: PDX_VERSION + file mtime so browsers bust cache after every update.
-	 */
-	private function asset_ver( string $relative ): string {
-		$path  = PDX_DIR . ltrim( $relative, '/' );
-		$mtime = is_readable( $path ) ? (string) filemtime( $path ) : '';
-		return PDX_VERSION . ( '' !== $mtime ? '.' . $mtime : '' );
-	}
-
 	public function enqueue( string $hook ): void {
-		if ( ! str_contains( $hook, PDX_SLUG ) ) return;
+		if ( strpos( $hook, PDX_SLUG ) === false ) return;
 
 		wp_enqueue_style(
 			'pdx-tokens',
 			PDX_URL . 'assets/css/pdx-tokens.css',
 			[],
-			$this->asset_ver( 'assets/css/pdx-tokens.css' )
+			PDX_VERSION
 		);
 
 		wp_enqueue_style(
 			'pdx-admin',
 			PDX_URL . 'assets/css/admin.css',
 			[ 'pdx-tokens' ],
-			$this->asset_ver( 'assets/css/admin.css' )
+			PDX_VERSION
 		);
 
 		wp_enqueue_script(
 			'pdx-admin',
 			PDX_URL . 'assets/js/admin.js',
 			[],
-			$this->asset_ver( 'assets/js/admin.js' ),
+			PDX_VERSION,
 			true
 		);
 
@@ -295,7 +286,7 @@ class PDX_Admin {
 
 	public function admin_notices(): void {
 		$page = sanitize_key( $_GET['page'] ?? '' );
-		if ( ! str_contains( $page, PDX_SLUG ) ) {
+		if ( strpos( $page, PDX_SLUG ) === false ) {
 			return;
 		}
 
@@ -343,18 +334,7 @@ class PDX_Admin {
 
 	/** SVG helper used in module template */
 	public function get_svg_icon_html( string $name ): string {
-		$icons = [
-			'shield'   => 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
-			'plus'     => 'M12 5v14M5 12h14',
-			'user'     => 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2',
-			'grid'     => 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z',
-			'search'   => 'M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z',
-			'link'     => 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
-			'layers'   => 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
-			'pipeline' => 'M5 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 5m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M19 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M7 12h4l4-5M7 12l4 1 4 4',
-		];
-		$d = $icons[ $name ] ?? 'M12 12m-8 0a8 8 0 1 0 16 0a8 8 0 1 0-16 0';
-		return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' . esc_attr( $d ) . '"/></svg>';
+		return PDX_Icons::module_html( $name );
 	}
 
 	private function menu_icon(): string {

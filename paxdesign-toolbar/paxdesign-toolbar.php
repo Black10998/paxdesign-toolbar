@@ -3,7 +3,7 @@
  * Plugin Name:  PaxDesign Utility Dock
  * Plugin URI:   https://paxdesign.io
  * Description:  Enterprise AI/Cyber SaaS dock — SSE real-time, command palette, IOC correlation graph, investigation board, team collaboration, billing enforcement, AI memory, and 84-endpoint REST API.
- * Version:      8.3.2
+ * Version:      8.4.0
  * Update URI:   https://github.com/Black10998/paxdesign-toolbar
  * Author:       PaxDesign
  * Author URI:   https://paxdesign.io
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'PDX_VERSION',   '8.3.2' );
+define( 'PDX_VERSION',   '8.4.0' );
 define( 'PDX_DIR',       plugin_dir_path( __FILE__ ) );
 define( 'PDX_URL',       plugin_dir_url( __FILE__ ) );
 define( 'PDX_SLUG',      'paxdesign-toolbar' );
@@ -37,6 +37,7 @@ if ( ! PDX_Recovery::install_is_healthy() ) {
 // Core
 require_once PDX_DIR . 'includes/class-pdx-loader.php';
 require_once PDX_DIR . 'includes/class-pdx-settings.php';
+require_once PDX_DIR . 'includes/class-pdx-icons.php';
 require_once PDX_DIR . 'includes/class-pdx-frontend.php';
 
 // Admin
@@ -173,11 +174,6 @@ register_activation_hook( __FILE__, static function () {
 	PDX_Team::install();
 	PDX_RateLimit::install();
 	PDX_Setup::on_activate();
-	// Flush stale release transient and update_plugins cache so the new version
-	// is reflected immediately without waiting for the 12-hour TTL to expire.
-	delete_transient( 'pdx_github_release' );
-	delete_site_transient( 'update_plugins' );
-	wp_cache_delete( 'plugins', 'plugins' );
 	flush_rewrite_rules();
 } );
 
