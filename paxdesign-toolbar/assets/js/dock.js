@@ -96,6 +96,7 @@
   function init() {
     if (typeof PDX_CONFIG === 'undefined') return;
     var C = PDX_CONFIG;
+    var win = typeof window !== 'undefined' ? window : globalThis;
 
     var dock = document.getElementById('pdx-dock');
     if (!dock) return;
@@ -144,10 +145,69 @@
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-label', 'Tool panel');
     panel.setAttribute('aria-hidden', 'true');
-    var inner = document.createElement('div');
-    inner.id = 'pdx-panel-inner';
-    panel.appendChild(inner);
+    var panelInner = document.createElement('div');
+    panelInner.id = 'pdx-panel-inner';
+    panel.appendChild(panelInner);
     document.body.appendChild(panel);
+
+    /* ── Module registry + panel theme (must exist before openPanel) ── */
+    var PDX_KNOWN_MODULES = [
+      'trust', 'osint', 'threat', 'personas', 'builder', 'pipeline', 'automation',
+      'connectors', 'create', 'investigation', 'graph', 'memory', 'team', 'workspace'
+    ];
+
+    var MODULE_ACCENTS = {
+      trust: '#c2ff00', osint: '#5ecbff', threat: '#ff6b6b', personas: '#c084fc',
+      builder: '#fbbf24', pipeline: '#34d399', automation: '#fb923c',
+      investigation: '#67e8f9', graph: '#a78bfa', memory: '#86efac',
+      team: '#fcd34d', connectors: '#38bdf8', create: '#a3e635', workspace: '#93c5fd'
+    };
+
+    function normalizeModuleId(moduleId) {
+      var id = (moduleId && String(moduleId)) || '';
+      if (PDX_KNOWN_MODULES.indexOf(id) >= 0) return id;
+      if (C.modules && C.modules[id]) return id;
+      return 'trust';
+    }
+
+    function resolvePanelEl() {
+      return document.getElementById('pdx-panel') || panel;
+    }
+
+    function resolvePanelInner() {
+      return document.getElementById('pdx-panel-inner') || panelInner;
+    }
+
+    function setPanelModuleTheme(moduleId) {
+      var mid = normalizeModuleId(moduleId);
+      var panelEl = resolvePanelEl();
+      var innerEl = resolvePanelInner();
+      if (!panelEl || !innerEl) {
+        if (win.console && win.console.warn) {
+          win.console.warn('[PDX] Panel DOM not ready for module:', mid);
+        }
+        return;
+      }
+      panelEl.setAttribute('data-pdx-module', mid);
+      innerEl.className = 'pdx-panel-inner pdx-panel-inner--' + mid;
+      document.documentElement.style.setProperty(
+        '--pdx-mod-accent',
+        MODULE_ACCENTS[mid] || MODULE_ACCENTS.trust
+      );
+    }
+
+    function applyDockModuleIcons() {
+      if (typeof win.pdxModuleIcon !== 'function') return;
+      dock.querySelectorAll('.pdx-btn[data-module]').forEach(function (btn) {
+        var mid = normalizeModuleId(btn.dataset.module || '');
+        btn.innerHTML = win.pdxModuleIcon(mid);
+        btn.className = 'pdx-btn pdx-btn--mod-' + mid + ' pdx-btn--' + mid;
+        btn.setAttribute('data-module', mid);
+        btn.setAttribute('type', 'button');
+      });
+    }
+
+    applyDockModuleIcons();
 
     /* ── Notification container ───────────────────────────── */
     var notifContainer = document.createElement('div');
@@ -164,6 +224,7 @@
     var _scrollY = 0;
     var _bodyScrollLocked = false;
     var _panelFocusReturn = null;
+    var _panelRenderGen = 0;
 
     function isMobileViewport() {
       return window.innerWidth <= (C.mobileBreakpoint || 680);
@@ -195,9 +256,11 @@
     }
 
     function openPanel(moduleId) {
+      var mid = normalizeModuleId(moduleId);
+      var renderGen = ++_panelRenderGen;
       if (state.commandPaletteOpen) closeCommandPalette();
-      state.activeModule = moduleId;
-      setPanelModuleTheme(moduleId);
+      state.activeModule = mid;
+      setPanelModuleTheme(mid);
       _panelFocusReturn = document.activeElement;
       panel.setAttribute('aria-hidden', 'false');
       backdrop.classList.add('is-entering');
@@ -218,17 +281,17 @@
       }
 
       dock.querySelectorAll('.pdx-btn').forEach(function(b) {
-        b.classList.toggle('is-active', b.dataset.module === moduleId);
-        b.setAttribute('aria-expanded', b.dataset.module === moduleId ? 'true' : 'false');
+        b.classList.toggle('is-active', b.dataset.module === mid);
+        b.setAttribute('aria-expanded', b.dataset.module === mid ? 'true' : 'false');
       });
         // Always fetch fresh access status before rendering — this is the
       // single source of truth for tier/price/locked state. No stale
       // PDX_CONFIG.modules values are used for access decisions.
       apiFetch('GET', '/pay/status').then(function(s) {
         if (s) state.accessStatus = s;
-        // Only render if this panel is still the active one.
-        if (state.activeModule !== moduleId || !panel.classList.contains('is-open')) return;
-        renderPanel(moduleId);
+        // Only render if this open request is still current (prevents stale panel content).
+        if (renderGen !== _panelRenderGen || state.activeModule !== mid || !panel.classList.contains('is-open')) return;
+        renderPanel(mid);
         injectCloseBtnGlobal();
         focusPanel();
         var _body = panel.querySelector('.pdx-ph-body');
@@ -236,12 +299,12 @@
         state._skipPanelScrollReset = false;
       }).catch(function() {
         // Fallback: render with whatever state we have.
-        if (state.activeModule !== moduleId || !panel.classList.contains('is-open')) return;
-        renderPanel(moduleId);
+        if (renderGen !== _panelRenderGen || state.activeModule !== mid || !panel.classList.contains('is-open')) return;
+        renderPanel(mid);
         injectCloseBtnGlobal();
         focusPanel();
       });
-      if (C.analytics) logEvent(moduleId, 'panel_open');
+      if (C.analytics) logEvent(mid, 'panel_open');
     }
 
     function closePanel() {
@@ -448,14 +511,16 @@
     var _closeSvg = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="1" y1="1" x2="13" y2="13"/><line x1="13" y1="1" x2="1" y2="13"/></svg>';
 
     function injectCloseBtnGlobal() {
+      panelInner = resolvePanelInner();
+      if (!panelInner) return;
       // Always remove any existing close button first — renderPanel replaces
-      // inner.innerHTML so any previously appended button is already gone,
+      // panelInner.innerHTML so any previously appended button is already gone,
       // but guard against double-injection on rapid calls.
-      var existing = inner.querySelector('.pdx-mobile-close');
+      var existing = panelInner.querySelector('.pdx-mobile-close');
       if (existing) existing.remove();
 
       // Only inject when a panel module is rendered (.pdx-ph exists).
-      if (!inner.querySelector('.pdx-ph')) return;
+      if (!panelInner.querySelector('.pdx-ph')) return;
 
       var btn = document.createElement('button');
       btn.className = 'pdx-panel-close';
@@ -466,19 +531,11 @@
       // Append to inner (not .pdx-ph-hd) — avoids overflow:hidden clipping.
       // position:absolute on the button + position:relative on #pdx-panel-inner
       // keeps it pinned top-right above all content at all times.
-      inner.appendChild(btn);
+      panelInner.appendChild(btn);
     }
 
     /* ── Mobile ───────────────────────────────────────────── */
     if (C.mobileEnabled) setupMobile(C, panel, dock);
-
-    /* ── Module theme + icons (v8.4 — one icon per module id) ── */
-    var MODULE_ACCENTS = {
-      trust: '#c2ff00', osint: '#5ecbff', threat: '#ff6b6b', personas: '#c084fc',
-      builder: '#fbbf24', pipeline: '#34d399', automation: '#fb923c',
-      investigation: '#67e8f9', graph: '#a78bfa', memory: '#86efac',
-      team: '#fcd34d', connectors: '#38bdf8', create: '#a3e635', workspace: '#93c5fd'
-    };
 
     function bindClickOnce(el, handler) {
       if (!el || el.dataset.pdxBound) return;
@@ -487,27 +544,7 @@
     }
 
     function modIcon(moduleId) {
-      return svgIcon(moduleId || 'trust');
-    }
-
-    function setPanelModuleTheme(moduleId) {
-      var mid = moduleId || 'trust';
-      panel.setAttribute('data-pdx-module', mid);
-      inner.className = 'pdx-panel-inner pdx-panel-inner--' + mid;
-      if (MODULE_ACCENTS[mid]) {
-        document.documentElement.style.setProperty('--pdx-mod-accent', MODULE_ACCENTS[mid]);
-      }
-    }
-
-    function applyDockModuleIcons() {
-      if (typeof global.pdxModuleIcon !== 'function') return;
-      dock.querySelectorAll('.pdx-btn[data-module]').forEach(function (btn) {
-        var mid = btn.dataset.module || 'trust';
-        btn.innerHTML = global.pdxModuleIcon(mid);
-        btn.className = 'pdx-btn pdx-btn--mod-' + mid + ' pdx-btn--' + mid;
-        btn.setAttribute('data-module', mid);
-        btn.setAttribute('type', 'button');
-      });
+      return svgIcon(normalizeModuleId(moduleId));
     }
 
     function renderPhishingIntelHero(forensics, urlFx, phish) {
@@ -533,18 +570,19 @@
       return html.replace(/<motion\.div/g, '<div').replace(/<\/motion\.motion\.div>/g, '</div>');
     }
 
-    applyDockModuleIcons();
-
     /* ── Panel renderer ───────────────────────────────────── */
     function renderPanel(moduleId) {
-      if (!moduleId) return;
-      setPanelModuleTheme(moduleId);
-      var mod = (C.modules && C.modules[moduleId]) || null;
-      if (!mod) { inner.innerHTML = '<div class="pdx-empty">Module not found.</div>'; return; }
+      var mid = normalizeModuleId(moduleId);
+      if (!mid) return;
+      panelInner = resolvePanelInner();
+      if (!panelInner) return;
+      setPanelModuleTheme(mid);
+      var mod = (C.modules && C.modules[mid]) || null;
+      if (!mod) { panelInner.innerHTML = '<div class="pdx-empty">Module not found.</div>'; return; }
 
       // access comes from /pay/status — always live, never stale.
       // Merge live tier/price into mod so all render functions see current values.
-      var access = (state.accessStatus && state.accessStatus[moduleId]) || {};
+      var access = (state.accessStatus && state.accessStatus[mid]) || {};
       var locked = access.status === 'locked';
 
       // Sync mod tier/price/description from live access status so paywall shows correct values.
@@ -556,7 +594,7 @@
       if (access.description)       liveOverrides.description = access.description;
       if (Object.keys(liveOverrides).length) mod = Object.assign({}, mod, liveOverrides);
 
-      switch (moduleId) {
+      switch (mid) {
         case 'trust':          renderTrust(mod, access); break;
         case 'osint':          renderOsint(mod, access, locked); break;
         case 'threat':         renderThreat(mod, access, locked); break;
@@ -573,7 +611,7 @@
         case 'team':           renderTeam(mod, access, locked); break;
         case 'billing':        renderBilling(mod); break;
         case 'memory':         renderMemory(mod, access, locked); break;
-        default:               inner.innerHTML = '<div class="pdx-empty">Coming soon.</div>';
+        default:               panelInner.innerHTML = '<div class="pdx-empty">Coming soon.</div>';
       }
     }
 
@@ -582,7 +620,7 @@
        TRUST CHECK  — Deep Analysis UX
     ══════════════════════════════════════════════════════ */
     function renderTrust(mod, access) {
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--trust">' +
           '<div class="pdx-ph-hd pdx-ph-hd--trust">' +
             '<div class="pdx-ph-title pdx-ph-title--trust">' + modIcon('trust') + '<span>TrustCheck</span>' +
@@ -1015,7 +1053,7 @@
     ══════════════════════════════════════════════════════ */
     function renderOsint(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--osint">' +
           '<div class="pdx-ph-hd pdx-ph-hd--osint">' +
             '<div class="pdx-ph-title pdx-ph-title--osint">' + modIcon('osint') + '<span>OSINT Agents</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
@@ -1324,7 +1362,7 @@
     ══════════════════════════════════════════════════════ */
     function renderThreat(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--threat">' +
           '<div class="pdx-ph-hd pdx-ph-hd--threat">' +
             '<div class="pdx-ph-title pdx-ph-title--threat">' + modIcon('threat') + '<span>Threat Intel</span><span class="pdx-badge pdx-badge--new">New</span>' +
@@ -1401,7 +1439,7 @@
       // If fully locked (paid tier, no access), show paywall immediately.
       if (locked && mod.tier === 'paid') { renderPaywall(mod, access); return; }
 
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--chat">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('personas') + '<span>AI Personas</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
@@ -1440,9 +1478,9 @@
       }
 
       // Persona switcher
-      inner.querySelectorAll('.pdx-persona-btn').forEach(function(btn) {
+      panelInner.querySelectorAll('.pdx-persona-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
-          inner.querySelectorAll('.pdx-persona-btn').forEach(function(b) { b.classList.remove('is-active'); });
+          panelInner.querySelectorAll('.pdx-persona-btn').forEach(function(b) { b.classList.remove('is-active'); });
           btn.classList.add('is-active');
           currentPersona = btn.dataset.persona;
           appendChatMsg(msgContainer, 'system', 'Switched to ' + btn.textContent + ' persona.');
@@ -1482,7 +1520,7 @@
           if (!data) { appendChatMsg(msgContainer, 'error', 'Request failed.'); return; }
           if (data.error === 'payment_required') {
             appendChatMsg(msgContainer, 'system', 'Preview limit reached.');
-            var footer = inner.querySelector('.pdx-chat-footer');
+            var footer = panelInner.querySelector('.pdx-chat-footer');
             if (footer) {
               footer.innerHTML = renderPaywallInline(mod, { price: data.price, currency: data.currency });
               var unlockBtn = footer.querySelector('.pdx-unlock-btn');
@@ -1561,7 +1599,7 @@
     ══════════════════════════════════════════════════════ */
     function renderBuilder(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('builder') + '<span>AI Builder</span>' + (mod.badge ? '<span class="pdx-badge">' + mod.badge + '</span>' : '') +
@@ -1774,7 +1812,7 @@
     ══════════════════════════════════════════════════════ */
     function renderPipeline(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + svgIcon('pipeline') + '<span>Agent Pipeline</span>' +
@@ -1996,7 +2034,7 @@
     ══════════════════════════════════════════════════════ */
     function renderAutomation(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('automation') + '<span>Browser Automation</span>' +
@@ -2186,7 +2224,7 @@
     ══════════════════════════════════════════════════════ */
     function renderConnectors(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('connectors') + '<span>Connectors</span>' +
@@ -2370,7 +2408,7 @@
        DEVELOPMENT SERVICES (Create)
     ══════════════════════════════════════════════════════ */
     function renderCreate(mod) {
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('create') + '<span>Development Services</span></div>' +
@@ -2420,7 +2458,7 @@
        WORKSPACES
     ══════════════════════════════════════════════════════ */
     function renderWorkspace(mod) {
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('workspace') + '<span>Workspaces</span></div>' +
@@ -2595,7 +2633,7 @@
       var priceFormatted = parseFloat(price).toFixed(2);
       var modId    = mod.id || '';
 
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>' + escHtml(mod.label || 'Module') + '</span></div>' +
@@ -2621,7 +2659,7 @@
           '</div>' +
         '</div>';
 
-      var unlockBtn = inner.querySelector('.pdx-unlock-btn');
+      var unlockBtn = panelInner.querySelector('.pdx-unlock-btn');
       if (unlockBtn) {
         unlockBtn.addEventListener('click', function(e) {
           var b = e.currentTarget;
@@ -2648,7 +2686,7 @@
 
     function initiatePayment(moduleId, price, currency) {
       // Disable all unlock buttons in the panel to prevent double-clicks.
-      inner.querySelectorAll('.pdx-unlock-btn').forEach(function(b) {
+      panelInner.querySelectorAll('.pdx-unlock-btn').forEach(function(b) {
         b.disabled = true;
         b.textContent = 'Creating order…';
       });
@@ -2656,7 +2694,7 @@
       apiFetch('POST', '/pay/create', { module_id: moduleId }).then(function(data) {
         if (!data || data.error) {
           showNotif(data && data.error ? data.error : 'Payment unavailable', 'error');
-          inner.querySelectorAll('.pdx-unlock-btn').forEach(function(b) {
+          panelInner.querySelectorAll('.pdx-unlock-btn').forEach(function(b) {
             b.disabled = false;
             b.textContent = 'Unlock Access';
           });
@@ -2732,8 +2770,8 @@
 
       if (cfg.fast) {
         setBtnBusy(btn, true, cfg.busyLabel || 'Running…');
-        resultEl.innerHTML = (typeof global.pdxBuildIntelActivity === 'function')
-          ? global.pdxBuildIntelActivity(cfg.module || 'trust', cfg.title || 'Running analysis…')
+        resultEl.innerHTML = (typeof win.pdxBuildIntelActivity === 'function')
+          ? win.pdxBuildIntelActivity(cfg.module || 'trust', cfg.title || 'Running analysis…')
           : '<div class="pdx-scan-running"><div class="pdx-dp-pulse-ring"></div><span>' + escHtml(cfg.title || 'Running analysis…') + '</span></div>';
         Promise.resolve(cfg.api()).then(function (data) {
           setBtnBusy(btn, false);
@@ -2848,8 +2886,8 @@
       }).join('');
 
       var mod = opts.module || 'osint';
-      var activityHtml = (typeof global.pdxBuildIntelActivity === 'function')
-        ? '<div class="pdx-dp-intel-slot">' + global.pdxBuildIntelActivity(mod, opts.title || 'Intelligence pipeline active') + '</div>'
+      var activityHtml = (typeof win.pdxBuildIntelActivity === 'function')
+        ? '<div class="pdx-dp-intel-slot">' + win.pdxBuildIntelActivity(mod, opts.title || 'Intelligence pipeline active') + '</div>'
         : '';
 
       return '<div class="pdx-deep-pipeline" id="' + pipelineId + '">' +
@@ -3517,8 +3555,8 @@
     }
 
     function svgIcon(name) {
-      if (typeof global.pdxModuleIcon === 'function') {
-        return global.pdxModuleIcon(name);
+      if (typeof win.pdxModuleIcon === 'function') {
+        return win.pdxModuleIcon(name);
       }
       var icons = {
         shield:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
@@ -3686,7 +3724,7 @@
         handle.type = 'button';
         handle.className = 'pdx-panel-drag-handle';
         handle.setAttribute('aria-label', 'Drag to close panel');
-        inner.insertBefore(handle, inner.firstChild);
+        panelInner.insertBefore(handle, panelInner.firstChild);
         handle.addEventListener('click', closePanel);
       }
     }
@@ -3890,7 +3928,7 @@
     ══════════════════════════════════════════════════════ */
     function renderInvestigation(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--investigation">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('investigation') + '<span>Investigation Board</span><span class="pdx-badge pdx-badge--new">v4</span>' +
@@ -4054,7 +4092,7 @@
     ══════════════════════════════════════════════════════ */
     function renderInfraGraph(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--graph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('graph') + '<span>Infrastructure Graph</span><span class="pdx-badge pdx-badge--new">v4</span>' +
@@ -4259,7 +4297,7 @@
     ══════════════════════════════════════════════════════ */
     function renderTeam(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('team') + '<span>Teams</span><span class="pdx-badge pdx-badge--new">v4</span>' +
@@ -4328,7 +4366,7 @@
        v4: BILLING
     ══════════════════════════════════════════════════════ */
     function renderBilling(mod) {
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + svgIcon('shield') + '<span>Billing & Plans</span></div>' +
@@ -4346,7 +4384,7 @@
         var plans   = (results[0] && results[0].plans) || {};
         var status  = results[1] || {};
         var credits = (results[2] && results[2].balance) || 0;
-        var body = inner.querySelector('.pdx-ph-body');
+        var body = panelInner.querySelector('.pdx-ph-body');
         if (!body) return;
 
         var currentPlanId = status.plan && status.plan.id || 'free';
@@ -4389,7 +4427,7 @@
     ══════════════════════════════════════════════════════ */
     function renderMemory(mod, access, locked) {
       if (locked) { renderPaywall(mod, access); return; }
-      inner.innerHTML =
+      panelInner.innerHTML =
         '<div class="pdx-ph">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title">' + modIcon('memory') + '<span>AI Memory</span><span class="pdx-badge pdx-badge--new">v4</span><span class="pdx-module-status-dot pdx-module-status-dot--online" title="Memory engine active"></span></div>' +

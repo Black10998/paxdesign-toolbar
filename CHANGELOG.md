@@ -1,5 +1,23 @@
 ﻿# Changelog
 
+## 8.4.1 — 2026-05-17
+
+**Hotfix — dock panels open reliably (fixes v8.4.0 `setPanelModuleTheme` crash)**
+
+### Panel / theme registry
+- `setPanelModuleTheme()` no longer throws on missing DOM or unknown module IDs; resolves `#pdx-panel` / `#pdx-panel-inner` at runtime with safe fallbacks
+- Canonical `PDX_KNOWN_MODULES` list + `MODULE_ACCENTS` map for all 14 dock modules (personas, builder, automation, connectors, team, etc.)
+- `normalizeModuleId()` used consistently in `openPanel()`, `renderPanel()`, and icon helpers
+- Replaced fragile `global` references with `window` for strict-mode compatibility
+
+### Interaction reliability
+- Panel render generation counter prevents stale `/pay/status` responses from painting the wrong module after rapid dock clicks
+- `injectCloseBtnGlobal()` refreshes panel inner element before injecting close control
+
+**Install:** `releases/paxdesign-toolbar-8.4.1.zip` — tag `v8.4.1`
+
+**After update:** Plugins → Updates, then hard-refresh (Ctrl+F5) or clear page cache.
+
 ## 8.4.0 — 2026-05-17
 
 **Full cleanup — unique module icons, reliable button handlers, canonical assets**

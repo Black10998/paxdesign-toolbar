@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>PDX Dock Test</title>
+  <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-tokens.css" />
+  <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/dock.css" />
+  <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-dock-ui.css" />
+  <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-panel-scroll.css" />
+  <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-intel-activity.css" />
+  <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-module-chrome.css" />
+  <style>body{margin:0;background:#111;color:#eee;font-family:system-ui;padding:2rem}</style>
+</head>
+<body>
+  <div id="log"></div>
+  <div id="pdx-root" data-position="left" data-theme="dark" data-size="default">
+    <nav id="pdx-dock" aria-label="Utility dock tools"></nav>
+  </div>
+  <script>
+    const modules = ['trust','osint','threat','personas','builder','pipeline','automation','connectors','create','investigation','graph','memory','team','workspace'];
+    const modConfig = {};
+    modules.forEach(id => { modConfig[id] = { id, label: id, icon: id, type: 'interactive', category: 'security', tier: 'free', price: 0, currency: 'USD' }; });
+    window.PDX_CONFIG = {
+      version: '8.4.1-test', modules: modConfig, restUrl: '/wp-json/pdx/v1', nonce: 'test',
+      mobileEnabled: true, mobileBreakpoint: 680, analytics: false, aiMemory: false, workspaceEnabled: true,
+      accentColor: '#c2ff00', position: 'left', ctaPrimary: 'Go', ctaSecondary: 'More'
+    };
+    const dock = document.getElementById('pdx-dock');
+    modules.forEach(id => {
+      const b = document.createElement('button');
+      b.className = 'pdx-btn pdx-btn--mod-' + id;
+      b.type = 'button';
+      b.dataset.module = id;
+      b.setAttribute('aria-label', id);
+      dock.appendChild(b);
+    });
+    window.addEventListener('error', e => {
+      document.getElementById('log').innerHTML += '<div style="color:#f66">' + e.message + '</div>';
+    });
+    window.fetch = function(url) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(url.includes('pay/status') ? Object.fromEntries(modules.map(m => [m, { status: 'unlocked', tier: 'free', price: 0 }])) : {}),
+        text: () => Promise.resolve('{}')
+      });
+    };
+  </script>
+  <script src="../paxdesign-toolbar/assets/js/pdx-module-icons.js"></script>
+  <script src="../paxdesign-toolbar/assets/js/dock.js"></script>
+  <script>
+    setTimeout(async () => {
+      const log = document.getElementById('log');
+      for (const id of modules) {
+        const btn = document.querySelector('[data-module="' + id + '"]');
+        btn.click();
+        await new Promise(r => setTimeout(r, 120));
+        const panel = document.getElementById('pdx-panel');
+        const inner = document.getElementById('pdx-panel-inner');
+        const modAttr = panel ? panel.getAttribute('data-pdx-module') : '';
+        const ok = panel && panel.classList.contains('is-open') && inner && modAttr === id && (inner.querySelector('.pdx-ph') || inner.querySelector('.pdx-empty'));
+        log.innerHTML += '<div style="color:' + (ok ? '#9f9' : '#f66') + '">' + id + ': ' + (ok ? 'OK' : 'FAIL') + (modAttr && modAttr !== id ? ' (theme=' + modAttr + ')' : '') + '</div>';
+        btn.click();
+        await new Promise(r => setTimeout(r, 40));
+      }
+    }, 200);
+  </script>
+</body>
+</html>
