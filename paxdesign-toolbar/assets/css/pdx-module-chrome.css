@@ -20,36 +20,56 @@
 #pdx-panel[data-pdx-module="create"]      { --pdx-mod-accent: #a3e635; --pdx-mod-glow: rgba(163, 230, 53, 0.28); }
 #pdx-panel[data-pdx-module="workspace"]  { --pdx-mod-accent: #93c5fd; --pdx-mod-glow: rgba(147, 197, 253, 0.28); }
 
-/* Dock buttons — per-module color + glow */
+/* Dock toolbar / sidebar / mobile dock — calm idle icons, brand accent when selected */
+#pdx-dock {
+  --pdx-dock-icon-idle: var(--pdx-text-muted, #8b949e);
+  --pdx-dock-icon-hover: var(--pdx-text, #e6edf3);
+  --pdx-dock-icon-active: var(--pdx-accent, #c2ff00);
+  --pdx-dock-glow-active: rgba(194, 255, 0, 0.32);
+}
+
 #pdx-dock .pdx-btn[data-module] {
   position: relative;
   transition: box-shadow 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
 }
 
-#pdx-dock .pdx-btn[data-module] .pdx-mod-icon {
+#pdx-dock .pdx-btn[data-module] .pdx-mod-icon,
+#pdx-dock .pdx-btn[data-module] [class*="pdx-mod-icon--"] {
   width: 1.35em;
   height: 1.35em;
-  filter: drop-shadow(0 0 8px var(--pdx-mod-glow, rgba(194, 255, 0, 0.35)));
+  color: var(--pdx-dock-icon-idle);
+  filter: none;
+  opacity: 0.9;
+  transition: color 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
 }
 
-#pdx-dock .pdx-btn--trust .pdx-mod-icon       { color: #c2ff00; }
-#pdx-dock .pdx-btn--osint .pdx-mod-icon       { color: #5ecbff; }
-#pdx-dock .pdx-btn--threat .pdx-mod-icon      { color: #ff6b6b; }
-#pdx-dock .pdx-btn--personas .pdx-mod-icon    { color: #c084fc; }
-#pdx-dock .pdx-btn--builder .pdx-mod-icon     { color: #fbbf24; }
-#pdx-dock .pdx-btn--pipeline .pdx-mod-icon    { color: #34d399; }
-#pdx-dock .pdx-btn--automation .pdx-mod-icon   { color: #fb923c; }
-#pdx-dock .pdx-btn--investigation .pdx-mod-icon { color: #67e8f9; }
-#pdx-dock .pdx-btn--graph .pdx-mod-icon        { color: #a78bfa; }
-#pdx-dock .pdx-btn--memory .pdx-mod-icon       { color: #86efac; }
-#pdx-dock .pdx-btn--team .pdx-mod-icon         { color: #fcd34d; }
-#pdx-dock .pdx-btn--connectors .pdx-mod-icon  { color: #38bdf8; }
-#pdx-dock .pdx-btn--create .pdx-mod-icon      { color: #a3e635; }
-#pdx-dock .pdx-btn--workspace .pdx-mod-icon   { color: #93c5fd; }
+#pdx-dock .pdx-btn[data-module]:hover .pdx-mod-icon,
+#pdx-dock .pdx-btn[data-module]:hover [class*="pdx-mod-icon--"] {
+  color: var(--pdx-dock-icon-hover);
+  opacity: 1;
+}
+
+#pdx-dock .pdx-btn.is-active[data-module] .pdx-mod-icon,
+#pdx-dock .pdx-btn.is-active[data-module] [class*="pdx-mod-icon--"] {
+  color: var(--pdx-dock-icon-active);
+  filter: drop-shadow(0 0 8px var(--pdx-dock-glow-active));
+  opacity: 1;
+}
 
 #pdx-dock .pdx-btn.is-active[data-module] {
-  box-shadow: 0 0 0 1px var(--pdx-mod-accent), 0 0 18px var(--pdx-mod-glow);
   transform: translateY(-1px);
+}
+
+/* Light / auto themes — slightly stronger idle contrast on pale dock chrome */
+#pdx-root[data-theme="light"] #pdx-dock,
+#pdx-root[data-theme="auto"] #pdx-dock {
+  --pdx-dock-icon-idle: var(--pdx-text-subtle, #656d76);
+}
+
+@media (max-width: 680px) and (prefers-color-scheme: light) {
+  #pdx-root[data-theme="auto"] #pdx-dock {
+    --pdx-dock-icon-idle: var(--pdx-text-subtle, #656d76);
+  }
 }
 
 /* Panel header atmosphere */

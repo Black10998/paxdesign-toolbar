@@ -7,18 +7,37 @@
   vertical-align: -0.15em;
 }
 
-.pdx-mod-icon--trust { color: var(--pdx-accent, #c2ff00); filter: drop-shadow(0 0 6px rgba(194, 255, 0, 0.35)); }
-.pdx-mod-icon--osint { color: #5ecbff; }
-.pdx-mod-icon--threat { color: #ff6b6b; }
-.pdx-mod-icon--personas { color: #c084fc; }
-.pdx-mod-icon--builder { color: #fbbf24; }
-.pdx-mod-icon--pipeline { color: #34d399; }
-.pdx-mod-icon--automation { color: #fb923c; }
-.pdx-mod-icon--timeline { color: #93c5fd; }
-.pdx-mod-icon--investigation { color: #67e8f9; }
-.pdx-mod-icon--graph { color: #a78bfa; }
-.pdx-mod-icon--memory { color: #86efac; }
-.pdx-mod-icon--team { color: #fcd34d; }
+/* Panel / activity only — dock toolbar uses unified palette in pdx-module-chrome.css */
+#pdx-panel .pdx-mod-icon--trust,
+.pdx-intel-activity .pdx-mod-icon--trust { color: var(--pdx-accent, #c2ff00); filter: drop-shadow(0 0 6px rgba(194, 255, 0, 0.35)); }
+#pdx-panel .pdx-mod-icon--osint,
+.pdx-intel-activity .pdx-mod-icon--osint { color: #5ecbff; }
+#pdx-panel .pdx-mod-icon--threat,
+.pdx-intel-activity .pdx-mod-icon--threat { color: #ff6b6b; }
+#pdx-panel .pdx-mod-icon--personas,
+.pdx-intel-activity .pdx-mod-icon--personas { color: #c084fc; }
+#pdx-panel .pdx-mod-icon--builder,
+.pdx-intel-activity .pdx-mod-icon--builder { color: #fbbf24; }
+#pdx-panel .pdx-mod-icon--pipeline,
+.pdx-intel-activity .pdx-mod-icon--pipeline { color: #34d399; }
+#pdx-panel .pdx-mod-icon--automation,
+.pdx-intel-activity .pdx-mod-icon--automation { color: #fb923c; }
+#pdx-panel .pdx-mod-icon--timeline,
+.pdx-intel-activity .pdx-mod-icon--timeline { color: #93c5fd; }
+#pdx-panel .pdx-mod-icon--investigation,
+.pdx-intel-activity .pdx-mod-icon--investigation { color: #67e8f9; }
+#pdx-panel .pdx-mod-icon--graph,
+.pdx-intel-activity .pdx-mod-icon--graph { color: #a78bfa; }
+#pdx-panel .pdx-mod-icon--memory,
+.pdx-intel-activity .pdx-mod-icon--memory { color: #86efac; }
+#pdx-panel .pdx-mod-icon--team,
+.pdx-intel-activity .pdx-mod-icon--team { color: #fcd34d; }
+#pdx-panel .pdx-mod-icon--connectors,
+.pdx-intel-activity .pdx-mod-icon--connectors { color: #38bdf8; }
+#pdx-panel .pdx-mod-icon--create,
+.pdx-intel-activity .pdx-mod-icon--create { color: #a3e635; }
+#pdx-panel .pdx-mod-icon--workspace,
+.pdx-intel-activity .pdx-mod-icon--workspace { color: #93c5fd; }
 
 .pdx-intel-activity {
   display: flex;

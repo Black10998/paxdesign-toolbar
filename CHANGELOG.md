@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## 8.4.2 — 2026-05-17
+
+**Dock icon polish — unified toolbar/sidebar colors**
+
+- Inactive dock SVG icons use one calm muted color (desktop sidebar + mobile top dock)
+- Active/selected dock icon uses brand accent `#C2FF00` only
+- Per-module rainbow colors scoped to panel content, not the home dock toolbar
+
+**Install:** `releases/paxdesign-toolbar-8.4.2.zip` — tag `v8.4.2`
+
 ## 8.4.1 — 2026-05-17
 
 **Hotfix — dock panels open reliably (fixes v8.4.0 `setPanelModuleTheme` crash)**

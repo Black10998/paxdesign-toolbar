@@ -93,8 +93,14 @@
   box-shadow: inset 0 0 0 1px var(--pdx-accent-border);
 }
 
-#pdx-dock .pdx-btn svg {
+#pdx-dock .pdx-btn svg,
+#pdx-dock .pdx-btn .pdx-mod-icon {
   stroke: currentColor;
+  fill: none;
+}
+
+#pdx-dock .pdx-btn:not(.is-active) svg,
+#pdx-dock .pdx-btn:not(.is-active) .pdx-mod-icon {
   opacity: 0.92;
 }
 
