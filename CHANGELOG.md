@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## 7.1.2 — 2026-05-17
+
+**Admin-wide compact layout pass** — readability, sidebar density, and control column fixes.
+
+### Admin (all pages)
+- Brighter typography tokens and hint text for readable contrast on dark backgrounds
+- Compact sidebar (188px): tighter nav padding, 14px icons, 12px labels
+- Settings rows use flex layout with fixed control column — toggles no longer clip or overflow
+- Sections use `overflow: visible`; module rows align controls on the right
+- Reduced vertical spacing; full-width content area (no narrow max-width trap)
+- WP form-table and notice text inherit readable colors
+
+**Install:** `releases/paxdesign-toolbar-7.1.2.zip` — tag `v7.1.2`
+
 ## 7.1.1 — 2026-05-17
 
 **Admin & frontend UX refinement** — enterprise settings layout on the v7.1 production baseline.
