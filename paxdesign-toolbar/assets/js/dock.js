@@ -72,7 +72,7 @@
 
   function prependRestoreBanner(container, moduleId, target, onRerun) {
     if (!container) return;
-    var bar = document.createElement('div');
+    var bar = document.createElement('motion');
     bar.className = 'pdx-session-restore';
     bar.innerHTML =
       '<span>Restored <strong>' + escHtml(target || 'result') + '</strong> from this session</span>' +
@@ -1174,7 +1174,7 @@
       /* ── Raw data (collapsed) ── */
       html += rawSection('Raw Response', data);
 
-      html += '</div>';
+      html += '</motion>';
       savePanelState('osint', {
         view: 'result',
         target: target,
@@ -3281,7 +3281,7 @@
 
     function injectPanelDragHandle() {
       if (!panel.querySelector('.pdx-panel-drag-handle')) {
-        var handle = document.createElement('div');
+        var handle = document.createElement('motion');
         handle.type = 'button';
         handle.className = 'pdx-panel-drag-handle';
         handle.setAttribute('aria-label', 'Drag to close panel');
@@ -4089,6 +4089,16 @@
       if (!btn || !inp) return;
       btn.addEventListener('click', runCorrelate);
       inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') runCorrelate(); });
+      var saved = loadPanelState('investigation');
+      if (saved && saved.view === 'result' && saved.data) {
+        if (inp && saved.target) inp.value = saved.target;
+        var res = document.getElementById('pdx-inv-result');
+        if (res) {
+          state._skipPanelScrollReset = true;
+          renderCorrResult(res, saved.data, saved.target);
+          prependRestoreBanner(res, 'investigation', saved.target, runCorrelate);
+        }
+      }
     }
 
     function runCorrelate() {
@@ -4099,6 +4109,7 @@
       if (!inp || !res) return;
       var value = inp.value.trim();
       if (!value) return;
+      clearPanelState('investigation');
 
       var corrStages = [
         { label: 'Initializing correlation engine',       detail: 'Loading IOC relationship graph database',              duration: 480 },
