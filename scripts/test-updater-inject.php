@@ -16,6 +16,9 @@ function add_filter( ...$args ) {}
 function add_action( ...$args ) {}
 function delete_site_transient( $key ) {}
 function wp_cache_delete( ...$args ) {}
+function wp_json_encode( $data, $options = 0, $depth = 512 ) {
+	return json_encode( $data, $options, $depth );
+}
 
 require_once __DIR__ . '/../paxdesign-toolbar/includes/class-pdx-updater.php';
 

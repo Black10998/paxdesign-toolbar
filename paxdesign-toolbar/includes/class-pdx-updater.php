@@ -50,8 +50,10 @@ class PDX_Updater {
 		add_filter( 'upgrader_install_package_result', [ $this, 'on_install_package_result' ], 10, 2 );
 
 		add_action( 'plugins_loaded', [ $this, 'enforce_canonical_install' ], 0 );
-		add_action( 'plugins_loaded', [ $this, 'bootstrap_recovery' ], 1 );
-		add_action( 'admin_init', [ $this, 'maybe_migrate_to_canonical_dir' ], 0 );
+		add_action( 'plugins_loaded', [ $this, 'repair_stored_update_transient' ], 1 );
+		add_action( 'plugins_loaded', [ $this, 'bootstrap_recovery' ], 2 );
+		add_action( 'admin_init', [ $this, 'repair_stored_update_transient' ], 0 );
+		add_action( 'admin_init', [ $this, 'maybe_migrate_to_canonical_dir' ], 1 );
 		add_action( 'admin_init', [ $this, 'maybe_cleanup_stale_maintenance' ] );
 		add_action( 'admin_init', [ $this, 'maybe_cleanup_duplicate_plugins_admin' ] );
 		add_action( 'shutdown', [ $this, 'maybe_cleanup_stale_maintenance' ], 999 );
@@ -91,7 +93,7 @@ class PDX_Updater {
 			return plugin_basename( $canonical_main );
 		}
 
-		return $this->plugin_basename();
+		return $this->loaded_plugin_basename();
 	}
 
 	/**
@@ -241,19 +243,119 @@ class PDX_Updater {
 		return [ $this->canonical_plugin_basename() ];
 	}
 
-	private function prune_stale_update_transient_keys( object $transient ): void {
-		$keep = $this->update_transient_basenames();
+	/**
+	 * Plugin update rows keyed by any paxdesign-toolbar* basename (including orphans).
+	 */
+	private function is_pdx_plugin_transient_key( string $key ): bool {
+		return str_contains( $key, self::PLUGIN_FOLDER );
+	}
 
-		foreach ( $this->all_plugin_basenames() as $basename ) {
-			if ( in_array( $basename, $keep, true ) ) {
+	/**
+	 * Coerce mixed values to string for WordPress core (strpos/str_replace reject null on PHP 8.1+).
+	 */
+	private function encode_for_compare( mixed $data ): string {
+		if ( function_exists( 'wp_json_encode' ) ) {
+			$json = wp_json_encode( $data );
+			return is_string( $json ) ? $json : '';
+		}
+
+		$json = json_encode( $data );
+		return is_string( $json ) ? $json : '';
+	}
+
+	private function string_field( mixed $value, string $default = '' ): string {
+		if ( is_string( $value ) ) {
+			return $value;
+		}
+		if ( is_scalar( $value ) ) {
+			return (string) $value;
+		}
+		return $default;
+	}
+
+	/**
+	 * @param array<mixed>|object|null $data
+	 * @return array<string>
+	 */
+	private function sanitize_string_list( $data ): array {
+		if ( ! is_array( $data ) && ! ( is_object( $data ) && $data instanceof \stdClass ) ) {
+			return [];
+		}
+		$out = [];
+		foreach ( (array) $data as $item ) {
+			if ( is_string( $item ) && '' !== $item ) {
+				$out[] = $item;
+			} elseif ( is_scalar( $item ) && '' !== (string) $item ) {
+				$out[] = (string) $item;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Remove orphan PDX rows and normalize string fields so core never receives null.
+	 *
+	 * @return bool Whether the transient was modified.
+	 */
+	private function scrub_pdx_entries_in_update_transient( object $transient ): bool {
+		$modified  = false;
+		$canonical = $this->canonical_plugin_basename();
+
+		foreach ( [ 'response', 'no_update' ] as $bucket ) {
+			if ( ! isset( $transient->$bucket ) || ! is_array( $transient->$bucket ) ) {
+				$transient->$bucket = [];
+				$modified           = true;
 				continue;
 			}
-			if ( isset( $transient->response ) && is_array( $transient->response ) ) {
-				unset( $transient->response[ $basename ] );
+
+			foreach ( array_keys( $transient->$bucket ) as $plugin_key ) {
+				$key = (string) $plugin_key;
+				if ( ! $this->is_pdx_plugin_transient_key( $key ) ) {
+					continue;
+				}
+
+				if ( $key !== $canonical ) {
+					unset( $transient->$bucket[ $plugin_key ] );
+					$modified = true;
+					continue;
+				}
+
+				$before    = $transient->$bucket[ $plugin_key ];
+				$sanitized = $this->sanitize_update_object( $before );
+
+				if ( 'response' === $bucket && ! $this->update_object_is_valid( $sanitized ) ) {
+					unset( $transient->$bucket[ $plugin_key ] );
+					$modified = true;
+					continue;
+				}
+
+				$before_json    = $this->encode_for_compare( $before );
+				$sanitized_json = $this->encode_for_compare( $sanitized );
+				if ( $before_json !== $sanitized_json ) {
+					$transient->$bucket[ $plugin_key ] = $sanitized;
+					$modified                          = true;
+				}
 			}
-			if ( isset( $transient->no_update ) && is_array( $transient->no_update ) ) {
-				unset( $transient->no_update[ $basename ] );
-			}
+		}
+
+		return $modified;
+	}
+
+	private function prune_stale_update_transient_keys( object $transient ): void {
+		$this->scrub_pdx_entries_in_update_transient( $transient );
+	}
+
+	/**
+	 * Repair corrupt update_plugins rows left from versioned folders or legacy releases.
+	 */
+	public function repair_stored_update_transient(): void {
+		$transient = get_site_transient( 'update_plugins' );
+		if ( ! is_object( $transient ) ) {
+			return;
+		}
+
+		if ( $this->scrub_pdx_entries_in_update_transient( $transient ) ) {
+			set_site_transient( 'update_plugins', $transient );
 		}
 	}
 
@@ -308,7 +410,11 @@ class PDX_Updater {
 		if ( is_array( $cached ) && ! $force ) {
 			// Re-normalize on every read: handles stale DB entries from older plugin versions
 			// that may have stored null fields, which cause PHP 8.1 deprecation warnings.
-			return $this->normalize_release_data( $cached );
+			$normalized = $this->normalize_release_data( $cached );
+			if ( $normalized !== $cached ) {
+				set_transient( self::CACHE_KEY, $normalized, self::CACHE_TTL );
+			}
+			return $normalized;
 		}
 
 		$url = 'https://api.github.com/repos/' . self::GITHUB_REPO . '/releases/latest';
@@ -477,20 +583,7 @@ class PDX_Updater {
 			return $transient;
 		}
 
-		$this->prune_stale_update_transient_keys( $transient );
-
-		foreach ( $this->update_transient_basenames() as $plugin ) {
-			if ( isset( $transient->response ) && is_array( $transient->response ) && isset( $transient->response[ $plugin ] ) ) {
-				$transient->response[ $plugin ] = $this->sanitize_update_object( $transient->response[ $plugin ] );
-				if ( ! $this->update_object_is_valid( $transient->response[ $plugin ] ) ) {
-					unset( $transient->response[ $plugin ] );
-				}
-			}
-
-			if ( isset( $transient->no_update ) && is_array( $transient->no_update ) && isset( $transient->no_update[ $plugin ] ) ) {
-				$transient->no_update[ $plugin ] = $this->sanitize_update_object( $transient->no_update[ $plugin ] );
-			}
-		}
+		$this->scrub_pdx_entries_in_update_transient( $transient );
 
 		return $transient;
 	}
@@ -504,38 +597,56 @@ class PDX_Updater {
 		}
 
 		$fallback = 'https://github.com/' . self::GITHUB_REPO;
+		$basename = $this->canonical_plugin_basename();
 
-		$obj->id          = isset( $obj->id ) ? (string) $obj->id : $this->plugin_basename();
-		$obj->slug        = isset( $obj->slug ) ? (string) $obj->slug : PDX_SLUG;
-		$obj->plugin      = isset( $obj->plugin ) ? (string) $obj->plugin : $this->plugin_basename();
-		$obj->new_version = isset( $obj->new_version ) ? (string) $obj->new_version : '';
-		$obj->url         = ( isset( $obj->url ) && is_string( $obj->url ) && '' !== $obj->url ) ? $obj->url : $fallback;
-		$obj->package     = isset( $obj->package ) && is_string( $obj->package ) ? $obj->package : '';
-		$obj->tested      = $this->wp_version_for_update_meta();
-		$obj->requires    = isset( $obj->requires ) ? (string) $obj->requires : '6.0';
-		$obj->requires_php = isset( $obj->requires_php ) ? (string) $obj->requires_php : '8.0';
+		$string_fields = [
+			'id'             => $basename,
+			'slug'           => PDX_SLUG,
+			'plugin'         => $basename,
+			'new_version'    => '',
+			'url'            => $fallback,
+			'package'        => '',
+			'tested'         => $this->wp_version_for_update_meta(),
+			'requires'       => '6.0',
+			'requires_php'   => '8.0',
+			'upgrade_notice' => '',
+			'version'        => '',
+		];
+
+		foreach ( $string_fields as $field => $default ) {
+			$raw = $obj->$field ?? null;
+			$val = $this->string_field( $raw, $default );
+			if ( 'url' === $field && '' === $val ) {
+				$val = $fallback;
+			}
+			if ( ( 'slug' === $field ) && '' === $val ) {
+				$val = PDX_SLUG;
+			}
+			if ( in_array( $field, [ 'id', 'plugin' ], true ) && '' === $val ) {
+				$val = $basename;
+			}
+			$obj->$field = $val;
+		}
 
 		if ( ! isset( $obj->compatibility ) || ! is_object( $obj->compatibility ) ) {
 			$obj->compatibility = (object) [];
 		}
-		if ( ! isset( $obj->icons ) || ! is_array( $obj->icons ) ) {
-			$obj->icons = [];
-		}
-		if ( ! isset( $obj->banners ) || ! is_array( $obj->banners ) ) {
-			$obj->banners = [];
-		}
-		if ( ! isset( $obj->banners_rtl ) || ! is_array( $obj->banners_rtl ) ) {
-			$obj->banners_rtl = [];
-		}
+
+		$obj->icons       = $this->sanitize_string_list( $obj->icons ?? null );
+		$obj->banners     = $this->sanitize_string_list( $obj->banners ?? null );
+		$obj->banners_rtl = $this->sanitize_string_list( $obj->banners_rtl ?? null );
 
 		return $obj;
 	}
 
 	private function update_object_is_valid( object $obj ): bool {
-		return '' !== ( $obj->new_version ?? '' )
-			&& '' !== ( $obj->package ?? '' )
-			&& is_string( $obj->url ?? null )
-			&& '' !== $obj->url;
+		$obj = $this->sanitize_update_object( $obj );
+
+		return '' !== $obj->new_version
+			&& '' !== $obj->package
+			&& '' !== $obj->url
+			&& '' !== $obj->plugin
+			&& '' !== $obj->slug;
 	}
 
 	/**
@@ -579,7 +690,7 @@ class PDX_Updater {
 		$up_to_date = version_compare( $installed_ver, $release['version'], '>=' );
 
 		foreach ( $this->update_transient_basenames() as $plugin ) {
-			$offer = $this->build_update_offer( $release, $plugin );
+			$offer = $this->sanitize_update_object( $this->build_update_offer( $release, $plugin ) );
 			if ( $up_to_date ) {
 				unset( $transient->response[ $plugin ] );
 				$transient->no_update[ $plugin ] = $offer;
@@ -588,6 +699,8 @@ class PDX_Updater {
 				$transient->response[ $plugin ] = $offer;
 			}
 		}
+
+		$this->scrub_pdx_entries_in_update_transient( $transient );
 
 		return $transient;
 	}
@@ -1122,8 +1235,7 @@ class PDX_Updater {
 		}
 
 		$this->enforce_canonical_install();
-		$this->clear_release_cache();
-		$this->invalidate_plugin_update_transient();
+		$this->refresh_plugin_update_metadata();
 	}
 
 	public function maybe_cleanup_duplicate_plugins_admin(): void {

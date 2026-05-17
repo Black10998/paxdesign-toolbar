@@ -1,5 +1,23 @@
 ﻿# Changelog
 
+## 8.5.2 — 2026-05-17
+
+**Updater PHP 8.1 fix — no null values in `update_plugins` transient**
+
+### Root cause
+- Orphan `update_plugins` rows for deleted versioned folders (`paxdesign-toolbar-8.x.x/...`) could remain in the database with `null` `url`, `package`, `plugin`, or `slug` fields.
+- WordPress core calls `strpos()` / `str_replace()` on those fields → PHP 8.1+ deprecation warnings in `debug.log`.
+- `canonical_plugin_basename()` could recurse when the canonical folder was missing.
+
+### Fix
+- Scrub every `paxdesign-toolbar*` row in `response` / `no_update`: coerce all string fields, drop orphan keys, remove invalid `response` rows.
+- Run repair on `plugins_loaded`, `admin_init`, and after inject/sanitize filters.
+- Rebuild update metadata after activation (`refresh_plugin_update_metadata()`).
+- Re-normalize cached GitHub release data when legacy entries contain `null`.
+- `scripts/test-updater-php81-deprecations.php` — asserts zero deprecations in scrub/inject paths.
+
+**Not tagged for release yet** — verify on Hostinger with `WP_DEBUG_LOG` before publishing `v8.5.2`.
+
 ## 8.5.1 — 2026-05-17
 
 **SVG icon system — unique transparent action icons**
