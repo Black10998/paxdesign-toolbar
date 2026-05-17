@@ -3,7 +3,7 @@
  * Plugin Name:  PaxDesign Utility Dock
  * Plugin URI:   https://paxdesign.io
  * Description:  Enterprise AI/Cyber SaaS dock — SSE real-time, command palette, IOC correlation graph, investigation board, team collaboration, billing enforcement, AI memory, and 84-endpoint REST API.
- * Version:      7.1.9
+ * Version:      7.1.10
  * Update URI:   https://github.com/Black10998/paxdesign-toolbar
  * Author:       PaxDesign
  * Author URI:   https://paxdesign.io
@@ -19,12 +19,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'PDX_VERSION',   '7.1.9' );
+define( 'PDX_VERSION',   '7.1.10' );
 define( 'PDX_DIR',       plugin_dir_path( __FILE__ ) );
 define( 'PDX_URL',       plugin_dir_url( __FILE__ ) );
 define( 'PDX_SLUG',      'paxdesign-toolbar' );
 define( 'PDX_OPT',       'pdx_settings' );
 define( 'PDX_CAP',       'manage_options' );
+
+// Recovery layer (no PDX class dependencies) — maintenance + rollback before full bootstrap.
+require_once PDX_DIR . 'includes/class-pdx-recovery.php';
+PDX_Recovery::register();
+
+if ( ! PDX_Recovery::install_is_healthy() ) {
+	return;
+}
 
 // Core
 require_once PDX_DIR . 'includes/class-pdx-loader.php';
@@ -166,8 +174,21 @@ register_deactivation_hook( __FILE__, static function () {
 } );
 
 add_action( 'plugins_loaded', static function () {
-	PaxDesign_Toolbar::instance();
-} );
+	if ( ! PDX_Recovery::install_is_healthy() ) {
+		return;
+	}
+	try {
+		PaxDesign_Toolbar::instance();
+	} catch ( Throwable $e ) {
+		if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+			error_log( '[PDX] Bootstrap failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+		}
+		if ( class_exists( 'PDX_Recovery', false ) ) {
+			PDX_Recovery::restore_from_backup();
+			PDX_Recovery::release_maintenance_file();
+		}
+	}
+}, 20 );
 
 /* ── Global helpers ──────────────────────────────────────── */
 

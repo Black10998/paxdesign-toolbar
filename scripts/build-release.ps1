@@ -45,6 +45,7 @@ Get-ChildItem (Join-Path $root 'paxdesign-toolbar') -Recurse -Force | ForEach-Ob
 
 New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+# Archive must contain paxdesign-toolbar/ at the root (WordPress plugin folder).
 Compress-Archive -Path (Join-Path $stagingDir 'paxdesign-toolbar') -DestinationPath $zipPath -CompressionLevel Optimal
 
 Remove-Item $stagingDir -Recurse -Force

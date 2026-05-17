@@ -205,8 +205,9 @@ class PDX_Intelligence {
 	 * @return array{data:?array,status:array,queried:string}
 	 */
 	public function fetch_rdap_resolved( string $domain ): array {
-		$tried   = $this->rdap_lookup_candidates( $domain );
+		$tried    = $this->rdap_lookup_candidates( $domain );
 		$last_err = 'RDAP lookup failed.';
+		$last_log = [];
 
 		foreach ( $tried as $candidate ) {
 			$url  = 'https://rdap.org/domain/' . rawurlencode( $candidate );

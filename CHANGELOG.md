@@ -1,5 +1,25 @@
 ﻿# Changelog
 
+## 7.1.10 — 2026-05-17
+
+**Critical: fix site fatal after failed update + production updater safety**
+
+### Recovery
+- New `PDX_Recovery` layer loads before full bootstrap — releases `.maintenance`, restores from updater backup if files are missing
+- Skips broken bootstrap (no fatal) when required PHP files are missing; shows admin notice instead
+- `plugins_loaded` bootstrap wrapped in try/catch with automatic rollback
+
+### Updater
+- Removed dangerous `bootstrap_recovery()` auto-success finalization on every page load (caused corrupt state / repeated destructive cleanup)
+- Deferred cleanup runs once, clears state first, health-checks before deleting folders, rolls back on failure
+- Keeps backup until deferred cleanup succeeds
+- `plugin_passes_health_check()` validates required files before any destructive operation
+
+### Build
+- Release ZIP now compresses staging root so `paxdesign-toolbar/` folder is always at archive root
+
+**Install:** `releases/paxdesign-toolbar-7.1.10.zip` — tag `v7.1.10`
+
 ## 7.1.9 — 2026-05-17
 
 **Hotfix: JavaScript target normalization stack overflow**

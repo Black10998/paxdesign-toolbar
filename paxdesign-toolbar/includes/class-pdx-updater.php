@@ -493,7 +493,7 @@ class PDX_Updater {
 			return $result;
 		}
 
-		if ( is_wp_error( $result ) && $this->is_upgrade_successful() ) {
+		if ( is_wp_error( $result ) && $this->plugin_passes_health_check() ) {
 			return true;
 		}
 
@@ -515,7 +515,7 @@ class PDX_Updater {
 			return;
 		}
 
-		if ( is_wp_error( $upgrader->result ) && $this->is_upgrade_successful() ) {
+		if ( is_wp_error( $upgrader->result ) && $this->plugin_passes_health_check() ) {
 			$upgrader->result = true;
 		}
 	}
@@ -526,7 +526,7 @@ class PDX_Updater {
 		}
 
 		$failed = is_object( $upgrader ) && isset( $upgrader->result ) && is_wp_error( $upgrader->result );
-		if ( $failed && $this->is_upgrade_successful() ) {
+		if ( $failed && $this->plugin_passes_health_check() ) {
 			$failed = false;
 			if ( is_object( $upgrader ) ) {
 				$upgrader->result = true;
@@ -560,21 +560,32 @@ class PDX_Updater {
 	}
 
 	public function bootstrap_recovery(): void {
-		$this->maybe_cleanup_stale_maintenance();
+		try {
+			$this->maybe_cleanup_stale_maintenance();
 
-		$state = $this->get_state();
-		if ( empty( $state['upgrading'] ) ) {
-			$this->cleanup_duplicate_plugin_folders();
-			return;
-		}
+			if ( ! $this->plugin_passes_health_check() ) {
+				if ( class_exists( 'PDX_Recovery', false ) ) {
+					PDX_Recovery::restore_from_backup();
+					PDX_Recovery::release_maintenance_file();
+					PDX_Recovery::clear_upgrade_state();
+				}
+				return;
+			}
 
-		if ( ! empty( $state['started'] ) && ( time() - (int) $state['started'] ) > 900 ) {
-			$this->finalize_upgrade_transaction( $this->is_upgrade_successful(), null );
-			return;
-		}
+			$state = $this->get_state();
+			if ( empty( $state['upgrading'] ) ) {
+				return;
+			}
 
-		if ( $this->is_upgrade_successful() ) {
-			$this->finalize_upgrade_transaction( true, null );
+			// Stale upgrade flag only — never auto-finalize "success" on every request.
+			if ( ! empty( $state['started'] ) && ( time() - (int) $state['started'] ) > 900 ) {
+				$this->finalize_upgrade_transaction( $this->plugin_passes_health_check(), null );
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] bootstrap_recovery: ' . $e->getMessage() );
+			}
+			$this->release_maintenance_mode();
 		}
 	}
 
@@ -629,13 +640,13 @@ class PDX_Updater {
 		$this->release_maintenance_mode();
 		$this->cleanup_upgrade_artifacts();
 
-		if ( $success || $this->is_upgrade_successful() ) {
+		if ( $success || $this->plugin_passes_health_check() ) {
 			$this->clear_all_caches();
-			$this->cleanup_failed_backups();
 			$this->set_state(
 				[
 					'deferred_cleanup' => true,
 					'last_success'     => time(),
+					'backup'           => $this->get_state()['backup'] ?? null,
 				]
 			);
 		} else {
@@ -692,24 +703,75 @@ class PDX_Updater {
 	}
 
 	public function run_deferred_upgrade_cleanup(): void {
+		static $ran = false;
+		if ( $ran ) {
+			return;
+		}
+		$ran = true;
+
 		$state = $this->get_state();
 		if ( empty( $state['deferred_cleanup'] ) ) {
 			return;
 		}
 
-		if ( ! empty( $state['install_result'] ) && is_array( $state['install_result'] ) ) {
-			$this->consolidate_install_to_canonical_folder( $state['install_result'] );
+		// Clear flag first so a fatal during cleanup cannot re-trigger endlessly.
+		$this->set_state( [ 'last_success' => (int) ( $state['last_success'] ?? time() ) ] );
+
+		try {
+			if ( ! $this->plugin_passes_health_check() ) {
+				$this->maybe_rollback( null );
+				PDX_Recovery::release_maintenance_file();
+				return;
+			}
+
+			if ( ! empty( $state['install_result'] ) && is_array( $state['install_result'] ) ) {
+				$this->consolidate_install_to_canonical_folder( $state['install_result'] );
+			}
+
+			if ( $this->plugin_passes_health_check() ) {
+				$this->cleanup_duplicate_plugin_folders( true );
+				$this->cleanup_upgrade_artifacts();
+				$this->cleanup_failed_backups();
+			} else {
+				$this->maybe_rollback( null );
+			}
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] deferred_upgrade_cleanup: ' . $e->getMessage() );
+			}
+			$this->maybe_rollback( null );
+		} finally {
+			$this->release_maintenance_mode();
+		}
+	}
+
+	/**
+	 * Verify plugin files are present and readable after an update.
+	 */
+	public function plugin_passes_health_check(): bool {
+		if ( class_exists( 'PDX_Recovery', false ) ) {
+			return PDX_Recovery::install_is_healthy();
 		}
 
-		$this->cleanup_duplicate_plugin_folders( true );
-		$this->cleanup_upgrade_artifacts();
-		$this->release_maintenance_mode();
-
-		$keep = [];
-		if ( ! empty( $state['last_success'] ) ) {
-			$keep['last_success'] = (int) $state['last_success'];
+		$main = $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
+		if ( ! is_readable( $main ) ) {
+			return false;
 		}
-		$this->set_state( $keep );
+
+		$required = [
+			'includes/class-pdx-loader.php',
+			'includes/class-pdx-target.php',
+			'includes/class-pdx-http.php',
+			'includes/class-pdx-intelligence.php',
+		];
+
+		foreach ( $required as $rel ) {
+			if ( ! is_readable( $this->plugin_dir() . '/' . $rel ) ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	private function cleanup_upgrade_artifacts(): void {
@@ -755,11 +817,11 @@ class PDX_Updater {
 	}
 
 	private function is_upgrade_successful(): bool {
-		$main = $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
-		if ( ! is_readable( $main ) ) {
+		if ( ! $this->plugin_passes_health_check() ) {
 			return false;
 		}
 
+		$main      = $this->plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
 		$installed = $this->read_plugin_version( $main );
 		if ( '' === $installed || '0.0.0' === $installed ) {
 			return false;
