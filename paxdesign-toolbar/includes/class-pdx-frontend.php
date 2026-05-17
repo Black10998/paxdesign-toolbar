@@ -69,6 +69,14 @@ class PDX_Frontend {
 			$script_args
 		);
 
+		wp_enqueue_script(
+			'pdx-dock-v81',
+			PDX_URL . 'assets/js/dock-v81.js',
+			[ 'pdx-dock' ],
+			PDX_VERSION,
+			$script_args
+		);
+
 		// Pass config to JS
 		wp_localize_script( 'pdx-dock', 'PDX_CONFIG', $this->js_config() );
 

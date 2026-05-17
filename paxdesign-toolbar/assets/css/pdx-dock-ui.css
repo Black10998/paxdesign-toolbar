@@ -118,7 +118,7 @@
 
 #pdx-backdrop.is-open {
   background: rgba(1, 4, 9, 0.62);
-  backdrop-filter: blur(2px);
+  backdrop-filter: none;
 }
 
 /* Close — always visible, all viewports */
@@ -360,9 +360,9 @@
 }
 
 @keyframes pdx-pulse {
-  0% { box-shadow: 0 0 0 0 var(--pdx-accent-dim); }
-  70% { box-shadow: 0 0 0 6px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0% { opacity: 1; }
+  70% { opacity: 0.88; }
+  100% { opacity: 1; }
 }
 
 .pdx-dp-stage.is-active {
@@ -443,7 +443,7 @@
 
 /* ─── Command palette ─────────────────────────────────── */
 .pdx-cmd-overlay {
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 .pdx-cmd-box {
@@ -707,4 +707,20 @@
 
 .pdx-ph-title .pdx-module-status-dot--online {
   background: var(--pdx-accent);
+}
+
+/* v8.1 — mobile / performance */
+@media (max-width: 680px) {
+  #pdx-panel { max-width: 100vw; width: 100vw !important; }
+  .pdx-ph-body, .pdx-chat-messages, .pdx-dp-stages { max-height: min(58vh, 520px); }
+  .pdx-input-row, .pdx-chat-input-row { flex-direction: column; align-items: stretch; }
+  .pdx-metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .pdx-tpl-grid { grid-template-columns: 1fr; }
+  .pdx-persona-select { flex-wrap: wrap; }
+}
+
+.pdx-dp-pulse-ring,
+.pdx-scan-complete-dot {
+  box-shadow: none !important;
+  filter: none !important;
 }

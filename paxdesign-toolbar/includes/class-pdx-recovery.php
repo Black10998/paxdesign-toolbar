@@ -24,6 +24,11 @@ final class PDX_Recovery {
 		'includes/class-pdx-url-analyzer.php',
 		'includes/class-pdx-scan-orchestrator.php',
 		'includes/class-pdx-threat-feeds.php',
+		'includes/class-pdx-ai-service.php',
+		'includes/class-pdx-conversation.php',
+		'includes/class-pdx-flow-store.php',
+		'includes/class-pdx-workflow-engine.php',
+		'includes/class-pdx-browser-automation.php',
 	];
 
 	public static function register(): void {

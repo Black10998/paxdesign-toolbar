@@ -60,6 +60,36 @@ class PDX_REST_API {
 		];
 	}
 
+	private function check_module_access( string $module_id ): ?WP_REST_Response {
+		$mod  = $this->modules->get_with_pricing( $module_id, $this->settings );
+		$tier = $mod['tier'] ?? 'paid';
+
+		if ( 'free' === $tier || PDX_Access::has_access( $module_id ) ) {
+			return null;
+		}
+
+		$preview_limit = (int) ( $mod['preview_lines'] ?? 0 );
+		$session_key   = 'pdx_preview_' . $module_id . '_' . ( $_COOKIE['pdx_guest'] ?? md5( $_SERVER['REMOTE_ADDR'] ?? '' ) );
+		$used          = (int) get_transient( $session_key );
+
+		if ( $preview_limit > 0 && $used < $preview_limit ) {
+			set_transient( $session_key, $used + 1, HOUR_IN_SECONDS );
+			return null;
+		}
+
+		return new WP_REST_Response(
+			[
+				'error'        => 'payment_required',
+				'preview_used' => $used,
+				'preview_max'  => $preview_limit,
+				'module_id'    => $module_id,
+				'price'        => $mod['price'],
+				'currency'     => $mod['currency'],
+			],
+			402
+		);
+	}
+
 	private function quota_check( string $metric ): ?WP_REST_Response {
 		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
 		if ( ! $user_id ) return null;
@@ -87,6 +117,9 @@ class PDX_REST_API {
 		// AI
 		register_rest_route( $ns, '/ai/chat',        [ 'methods' => 'POST',  'callback' => [ $this, 'ai_chat'           ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/ai/memory',      [ [ 'methods' => 'GET',  'callback' => [ $this, 'ai_memory_get'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'ai_memory_store' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/ai/conversations', [ 'methods' => 'GET', 'callback' => [ $this, 'ai_conversations_list' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/ai/conversations/(?P<thread_id>[a-z0-9\-]+)', [ 'methods' => 'GET', 'callback' => [ $this, 'ai_conversation_get' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/ai/export',      [ 'methods' => 'POST', 'callback' => [ $this, 'ai_export'          ], 'permission_callback' => $pub ] );
 
 		// Automation
 		register_rest_route( $ns, '/automation/submit', [ 'methods' => 'POST', 'callback' => [ $this, 'automation_submit' ], 'permission_callback' => $pub ] );
@@ -98,10 +131,14 @@ class PDX_REST_API {
 		// AI Builder
 		register_rest_route( $ns, '/builder/run',       [ 'methods' => 'POST', 'callback' => [ $this, 'builder_run'       ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/builder/templates', [ 'methods' => 'GET',  'callback' => [ $this, 'builder_templates' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/builder/flows',     [ [ 'methods' => 'GET', 'callback' => [ $this, 'builder_flows_list' ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'builder_flow_save' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/builder/flows/(?P<flow_id>[a-z0-9\-]+)', [ [ 'methods' => 'GET', 'callback' => [ $this, 'builder_flow_get' ], 'permission_callback' => $pub ], [ 'methods' => 'DELETE', 'callback' => [ $this, 'builder_flow_delete' ], 'permission_callback' => $pub ] ] );
 
 		// Agent Pipeline
 		register_rest_route( $ns, '/pipeline/run',       [ 'methods' => 'POST', 'callback' => [ $this, 'pipeline_run'       ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/pipeline/templates', [ 'methods' => 'GET',  'callback' => [ $this, 'pipeline_templates' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/pipeline/flows',     [ [ 'methods' => 'GET', 'callback' => [ $this, 'pipeline_flows_list' ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'pipeline_flow_save' ], 'permission_callback' => $pub ] ] );
+		register_rest_route( $ns, '/pipeline/flows/(?P<flow_id>[a-z0-9\-]+)', [ [ 'methods' => 'GET', 'callback' => [ $this, 'pipeline_flow_get' ], 'permission_callback' => $pub ], [ 'methods' => 'DELETE', 'callback' => [ $this, 'pipeline_flow_delete' ], 'permission_callback' => $pub ] ] );
 
 		// Queue
 		register_rest_route( $ns, '/queue/jobs',  [ 'methods' => 'GET', 'callback' => [ $this, 'queue_jobs'  ], 'permission_callback' => $pub ] );
@@ -243,66 +280,88 @@ class PDX_REST_API {
 	public function ai_chat( WP_REST_Request $req ): WP_REST_Response {
 		$module_id = sanitize_key( $req->get_param( 'module_id' ) ?? 'personas' );
 		$message   = sanitize_textarea_field( $req->get_param( 'message' ) ?? '' );
-		$persona   = sanitize_text_field( $req->get_param( 'persona' ) ?? 'assistant' );
+		$persona   = sanitize_key( $req->get_param( 'persona' ) ?? 'assistant' );
+		$stream    = (bool) $req->get_param( 'stream' );
 
-		if ( ! $message ) return new WP_REST_Response( [ 'error' => 'Message required.' ], 400 );
-
-		$mod  = $this->modules->get_with_pricing( $module_id, $this->settings );
-		$tier = $mod['tier'] ?? 'paid';
-
-		if ( $tier !== 'free' && ! PDX_Access::has_access( $module_id ) ) {
-			$preview_limit = (int) ( $mod['preview_lines'] ?? 0 );
-			$session_key   = 'pdx_preview_' . $module_id . '_' . ( $_COOKIE['pdx_guest'] ?? md5( $_SERVER['REMOTE_ADDR'] ?? '' ) );
-			$used          = (int) get_transient( $session_key );
-
-			if ( $preview_limit > 0 && $used < $preview_limit ) {
-				set_transient( $session_key, $used + 1, HOUR_IN_SECONDS );
-			} else {
-				return new WP_REST_Response( [
-					'error'        => 'payment_required',
-					'preview_used' => $used,
-					'preview_max'  => $preview_limit,
-					'module_id'    => $module_id,
-					'price'        => $mod['price'],
-					'currency'     => $mod['currency'],
-				], 402 );
-			}
+		if ( ! $message ) {
+			return new WP_REST_Response( [ 'error' => 'Message required.' ], 400 );
 		}
 
-		$api_key = $this->settings->get( 'api_keys.openai', '' );
-		if ( ! $api_key ) return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
+		$denied = $this->check_module_access( $module_id );
+		if ( $denied ) {
+			return $denied;
+		}
 
-		$system_prompts = [
-			'assistant'  => 'You are a helpful, professional AI assistant for PaxDesign clients.',
-			'analyst'    => 'You are a senior business analyst. Provide structured, data-driven insights.',
-			'developer'  => 'You are an expert software engineer. Give precise, production-ready technical answers.',
-			'strategist' => 'You are a strategic consultant. Think in frameworks, outcomes, and ROI.',
+		$thread_id = sanitize_text_field( $req->get_param( 'thread_id' ) ?? '' );
+		if ( ! $thread_id ) {
+			$thread_id = PDX_Conversation::get_or_create( $persona );
+		}
+
+		$history = (array) ( $req->get_param( 'history' ) ?? [] );
+		if ( empty( $history ) ) {
+			$history = PDX_Conversation::get_messages( $thread_id );
+		}
+
+		$memory_agent = 'persona_' . $persona;
+		$memory_ctx   = PDX_Memory::build_context( $memory_agent, 600 );
+		$messages     = PDX_AI_Service::build_persona_messages( $persona, $message, $history, $memory_ctx );
+
+		$result = PDX_AI_Service::chat_completion( $this->settings, $messages, [ 'max_tokens' => 900, 'temperature' => 0.7 ] );
+		if ( is_wp_error( $result ) ) {
+			return new WP_REST_Response( [ 'error' => $result->get_error_message() ], 503 );
+		}
+
+		PDX_Conversation::append( $thread_id, 'user', $message );
+		PDX_Conversation::append( $thread_id, 'assistant', $result['content'] );
+		PDX_Memory::store(
+			'User: ' . substr( $message, 0, 400 ) . "\nAssistant: " . substr( $result['content'], 0, 400 ),
+			$memory_agent,
+			'context',
+			45,
+			[],
+			DAY_IN_SECONDS * 14
+		);
+
+		PDX_Audit::log( $module_id, 'ai_chat', [ 'persona' => $persona, 'thread_id' => $thread_id ] );
+
+		$payload = [
+			'reply'       => $result['content'],
+			'model'       => $result['model'],
+			'thread_id'   => $thread_id,
+			'tokens_used' => $result['tokens_used'],
 		];
 
-		$resp = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
-			'timeout' => 30,
-			'headers' => [
-				'Authorization' => 'Bearer ' . $api_key,
-				'Content-Type'  => 'application/json',
-			],
-			'body' => wp_json_encode( [
-				'model'       => 'gpt-4o-mini',
-				'messages'    => [
-					[ 'role' => 'system', 'content' => $system_prompts[ $persona ] ?? $system_prompts['assistant'] ],
-					[ 'role' => 'user',   'content' => $message ],
-				],
-				'max_tokens'  => 800,
-				'temperature' => 0.7,
-			] ),
-		] );
+		if ( $stream ) {
+			$payload['stream_chunks'] = PDX_AI_Service::chunk_for_stream( $result['content'] );
+		}
 
-		if ( is_wp_error( $resp ) ) return new WP_REST_Response( [ 'error' => 'AI service unavailable.' ], 503 );
+		return new WP_REST_Response( $payload, 200 );
+	}
 
-		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
-		$text = $body['choices'][0]['message']['content'] ?? null;
-		if ( ! $text ) return new WP_REST_Response( [ 'error' => 'No response from AI.' ], 503 );
+	public function ai_conversations_list( WP_REST_Request $req ): WP_REST_Response {
+		$persona = sanitize_key( $req->get_param( 'persona' ) ?? '' );
+		return new WP_REST_Response( [ 'threads' => PDX_Conversation::list_threads( $persona ?: null ) ], 200 );
+	}
 
-		return new WP_REST_Response( [ 'reply' => $text, 'model' => $body['model'] ?? 'gpt-4o-mini' ], 200 );
+	public function ai_conversation_get( WP_REST_Request $req ): WP_REST_Response {
+		$thread_id = sanitize_text_field( $req->get_param( 'thread_id' ) ?? '' );
+		$export    = PDX_Conversation::export_thread( $thread_id );
+		if ( ! $export ) {
+			return new WP_REST_Response( [ 'error' => 'Thread not found.' ], 404 );
+		}
+		return new WP_REST_Response( $export, 200 );
+	}
+
+	public function ai_export( WP_REST_Request $req ): WP_REST_Response {
+		$thread_id = sanitize_text_field( $req->get_param( 'thread_id' ) ?? '' );
+		if ( ! $thread_id ) {
+			return new WP_REST_Response( [ 'error' => 'thread_id required.' ], 400 );
+		}
+		$export = PDX_Conversation::export_thread( $thread_id );
+		if ( ! $export ) {
+			return new WP_REST_Response( [ 'error' => 'Thread not found.' ], 404 );
+		}
+		return new WP_REST_Response( $export, 200 );
 	}
 
 	/* ── OSINT scan ──────────────────────────────────────── */
@@ -469,36 +528,6 @@ class PDX_REST_API {
 		return $response;
 	}
 
-	/**
-	 * Live config endpoint — returns the current enabled module list and a
-	 * settings version token. The JS dock polls this to detect admin changes
-	 * and refresh its state without requiring a page reload.
-	 */
-	public function live_config(): WP_REST_Response {
-		$modules = $this->modules->all_with_pricing( $this->settings );
-		$enabled = [];
-		foreach ( $modules as $id => $mod ) {
-			if ( $this->settings->module_enabled( $id ) ) {
-				$enabled[ $id ] = [
-					'label'    => $mod['label']    ?? $id,
-					'tier'     => $mod['tier']     ?? 'free',
-					'price'    => $mod['price']    ?? 0,
-					'currency' => $mod['currency'] ?? 'USD',
-					'desc'     => $mod['desc']     ?? '',
-					'caps'     => $mod['caps']     ?? [],
-				];
-			}
-		}
-		$response = new WP_REST_Response( [
-			// Monotonic version token — JS compares this to detect changes.
-			'v'       => (int) get_option( 'pdx_config_version', 0 ),
-			'modules' => $enabled,
-		], 200 );
-		$response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
-		$response->header( 'Pragma', 'no-cache' );
-		return $response;
-	}
-
 	/* ── Analytics ───────────────────────────────────────── */
 
 	public function log_event( WP_REST_Request $req ): WP_REST_Response {
@@ -563,30 +592,39 @@ class PDX_REST_API {
 		if ( ! $url ) {
 			return new WP_REST_Response( [ 'error' => 'Could not build a valid URL from input.' ], 400 );
 		}
-		$api_key = $this->settings->get( 'api_keys.openai', '' );
-		if ( ! $api_key ) return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
-		$job_id  = PDX_Queue::enqueue( $module_id, 'browser_automation', [ 'url' => $url, 'task' => $task ], 3, 7200 );
-		$analysis = $this->run_ai_task_analysis( $url, $task, $api_key );
-		PDX_Queue::complete( $job_id, $analysis );
-		PDX_Audit::log( $module_id, 'task_submitted', [ 'url' => $url, 'job_id' => $job_id ] );
-		PDX_Webhook::dispatch( 'job.completed', [ 'module' => $module_id, 'job_id' => $job_id ] );
-		$ws_id = PDX_Workspace::create( $module_id, 'automation', 'Automation: ' . parse_url( $url, PHP_URL_HOST ), $analysis );
-		return new WP_REST_Response( [ 'job_id' => $job_id, 'workspace_id' => $ws_id, 'status' => 'done', 'result' => $analysis ], 200 );
-	}
+		if ( is_wp_error( PDX_AI_Service::api_key( $this->settings ) ) ) {
+			return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
+		}
 
-	private function run_ai_task_analysis( string $url, string $task, string $api_key ): array {
-		$prompt = "You are a browser automation analyst. Analyze this task and return a JSON object with keys: steps (array), data_points (array), obstacles (array), approach (string), estimated_seconds (int).\n\nURL: {$url}\nTask: {$task}";
-		$resp   = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
-			'timeout' => 30,
-			'headers' => [ 'Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json' ],
-			'body'    => wp_json_encode( [ 'model' => 'gpt-4o-mini', 'messages' => [ [ 'role' => 'user', 'content' => $prompt ] ], 'max_tokens' => 800, 'temperature' => 0.3 ] ),
-		] );
-		if ( is_wp_error( $resp ) ) return [ 'error' => 'AI unavailable', 'url' => $url, 'task' => $task ];
-		$body    = json_decode( wp_remote_retrieve_body( $resp ), true );
-		$content = $body['choices'][0]['message']['content'] ?? '';
-		$parsed  = json_decode( $content, true );
-		return $parsed ? array_merge( $parsed, [ 'url' => $url, 'task' => $task, 'ai_analyzed' => true ] )
-		               : [ 'url' => $url, 'task' => $task, 'analysis' => $content, 'ai_analyzed' => true ];
+		$job_id = PDX_Queue::enqueue( $module_id, 'browser_automation', [ 'url' => $url, 'task' => $task ], 3, 7200 );
+		PDX_Queue::start( $job_id );
+		PDX_Queue::update_progress( $job_id, 15 );
+
+		$result = PDX_Browser_Automation::execute( $url, $task, $this->settings );
+		PDX_Queue::update_progress( $job_id, 85 );
+
+		$dispatch = PDX_Worker::dispatch_job( $job_id );
+		if ( ( $dispatch['status'] ?? '' ) !== 'dispatched' ) {
+			PDX_Queue::complete( $job_id, $result );
+		}
+
+		PDX_Audit::log( $module_id, 'task_submitted', [ 'url' => $url, 'job_id' => $job_id, 'sandbox' => $result['sandbox'] ?? [] ] );
+		PDX_Webhook::dispatch( 'job.completed', [ 'module' => $module_id, 'job_id' => $job_id ] );
+		$ws_id = PDX_Workspace::create( $module_id, 'automation', 'Automation: ' . parse_url( $url, PHP_URL_HOST ), $result );
+
+		$job = PDX_Queue::get( $job_id );
+
+		return new WP_REST_Response(
+			[
+				'job_id'       => $job_id,
+				'workspace_id' => $ws_id,
+				'status'       => $job['status'] ?? 'done',
+				'progress'     => (int) ( $job['progress'] ?? 100 ),
+				'result'       => $result,
+				'worker'       => $dispatch,
+			],
+			200
+		);
 	}
 
 	/* ── Connectors ──────────────────────────────────────── */
@@ -650,50 +688,66 @@ class PDX_REST_API {
 
 	public function builder_run( WP_REST_Request $req ): WP_REST_Response {
 		$module_id = 'builder';
-		$mod       = $this->modules->get_with_pricing( $module_id, $this->settings );
-		if ( ! PDX_Access::has_access( $module_id ) && ( $mod['tier'] ?? 'paid' ) !== 'free' ) {
-			return new WP_REST_Response( [ 'error' => 'payment_required', 'module_id' => $module_id, 'price' => $mod['price'], 'currency' => $mod['currency'] ], 402 );
+		$denied    = $this->check_module_access( $module_id );
+		if ( $denied ) {
+			return $denied;
 		}
-		$api_key = $this->settings->get( 'api_keys.openai', '' );
-		if ( ! $api_key ) return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
+		if ( is_wp_error( PDX_AI_Service::api_key( $this->settings ) ) ) {
+			return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
+		}
+
 		$flow_name = sanitize_text_field( $req->get_param( 'flow_name' ) ?? 'Untitled Flow' );
 		$steps     = (array) ( $req->get_param( 'steps' ) ?? [] );
 		$input     = sanitize_textarea_field( $req->get_param( 'input' ) ?? '' );
-		if ( empty( $steps ) ) return new WP_REST_Response( [ 'error' => 'At least one step required.' ], 400 );
+		if ( empty( $steps ) ) {
+			return new WP_REST_Response( [ 'error' => 'At least one step required.' ], 400 );
+		}
+
 		$job_id = PDX_Queue::enqueue( $module_id, 'flow_run', [ 'flow_name' => $flow_name, 'steps' => $steps, 'input' => $input ], 2, 3600 );
-		$result = $this->execute_builder_flow( $steps, $input, $api_key );
+		PDX_Queue::start( $job_id );
+		$result = PDX_Workflow_Engine::run_builder_flow( $this->settings, $steps, $input, $job_id );
 		PDX_Queue::complete( $job_id, $result );
+
 		PDX_Audit::log( $module_id, 'flow_executed', [ 'flow_name' => $flow_name, 'steps' => count( $steps ), 'job_id' => $job_id ] );
 		PDX_Webhook::dispatch( 'builder.deploy', [ 'flow_name' => $flow_name, 'job_id' => $job_id ] );
 		$ws_id = PDX_Workspace::create( $module_id, 'builder', $flow_name, [ 'steps' => $steps, 'result' => $result ] );
-		return new WP_REST_Response( [ 'job_id' => $job_id, 'workspace_id' => $ws_id, 'flow_name' => $flow_name, 'result' => $result ], 200 );
+
+		return new WP_REST_Response(
+			[
+				'job_id'       => $job_id,
+				'workspace_id' => $ws_id,
+				'flow_name'    => $flow_name,
+				'result'       => $result,
+			],
+			200
+		);
 	}
 
-	private function execute_builder_flow( array $steps, string $input, string $api_key ): array {
-		$context = $input;
-		$outputs = [];
-		foreach ( $steps as $i => $step ) {
-			$type   = sanitize_key( $step['type'] ?? 'llm' );
-			$prompt = sanitize_textarea_field( $step['prompt'] ?? '' );
-			if ( $type === 'llm' && $prompt ) {
-				$full_prompt = $prompt . ( $context ? "\n\nContext:\n" . $context : '' );
-				$resp = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
-					'timeout' => 30,
-					'headers' => [ 'Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json' ],
-					'body'    => wp_json_encode( [ 'model' => 'gpt-4o-mini', 'messages' => [ [ 'role' => 'user', 'content' => $full_prompt ] ], 'max_tokens' => 600, 'temperature' => 0.5 ] ),
-				] );
-				$body    = is_wp_error( $resp ) ? [] : json_decode( wp_remote_retrieve_body( $resp ), true );
-				$output  = $body['choices'][0]['message']['content'] ?? '[Step failed]';
-				$context = $output;
-				$outputs[] = [ 'step' => $i + 1, 'type' => $type, 'output' => $output ];
-			} elseif ( $type === 'transform' ) {
-				$context   = strtoupper( $context );
-				$outputs[] = [ 'step' => $i + 1, 'type' => $type, 'output' => $context ];
-			} else {
-				$outputs[] = [ 'step' => $i + 1, 'type' => $type, 'output' => $context ];
-			}
+	public function builder_flows_list(): WP_REST_Response {
+		return new WP_REST_Response( [ 'flows' => PDX_Flow_Store::list( 'builder' ) ], 200 );
+	}
+
+	public function builder_flow_save( WP_REST_Request $req ): WP_REST_Response {
+		$name = sanitize_text_field( $req->get_param( 'name' ) ?? 'Saved Flow' );
+		$def  = [
+			'steps' => (array) ( $req->get_param( 'steps' ) ?? [] ),
+			'input' => sanitize_textarea_field( $req->get_param( 'input' ) ?? '' ),
+		];
+		$id = PDX_Flow_Store::save( 'builder', $name, $def );
+		return new WP_REST_Response( [ 'flow_id' => $id, 'ok' => true ], 201 );
+	}
+
+	public function builder_flow_get( WP_REST_Request $req ): WP_REST_Response {
+		$flow = PDX_Flow_Store::get( sanitize_text_field( $req->get_param( 'flow_id' ) ?? '' ) );
+		if ( ! $flow || ( $flow['type'] ?? '' ) !== 'builder' ) {
+			return new WP_REST_Response( [ 'error' => 'Flow not found.' ], 404 );
 		}
-		return [ 'steps_executed' => count( $outputs ), 'outputs' => $outputs, 'final_output' => $context ];
+		return new WP_REST_Response( $flow, 200 );
+	}
+
+	public function builder_flow_delete( WP_REST_Request $req ): WP_REST_Response {
+		$ok = PDX_Flow_Store::delete( sanitize_text_field( $req->get_param( 'flow_id' ) ?? '' ) );
+		return new WP_REST_Response( [ 'ok' => $ok ], $ok ? 200 : 404 );
 	}
 
 	private function get_builder_templates(): array {
@@ -715,50 +769,66 @@ class PDX_REST_API {
 
 	public function pipeline_run( WP_REST_Request $req ): WP_REST_Response {
 		$module_id = 'pipeline';
-		$mod       = $this->modules->get_with_pricing( $module_id, $this->settings );
-		if ( ! PDX_Access::has_access( $module_id ) && ( $mod['tier'] ?? 'paid' ) !== 'free' ) {
-			return new WP_REST_Response( [ 'error' => 'payment_required', 'module_id' => $module_id, 'price' => $mod['price'], 'currency' => $mod['currency'] ], 402 );
+		$denied    = $this->check_module_access( $module_id );
+		if ( $denied ) {
+			return $denied;
 		}
-		$api_key = $this->settings->get( 'api_keys.openai', '' );
-		if ( ! $api_key ) return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
+		if ( is_wp_error( PDX_AI_Service::api_key( $this->settings ) ) ) {
+			return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
+		}
+
 		$pipeline_name = sanitize_text_field( $req->get_param( 'pipeline_name' ) ?? 'Untitled Pipeline' );
 		$agents        = (array) ( $req->get_param( 'agents' ) ?? [] );
 		$objective     = sanitize_textarea_field( $req->get_param( 'objective' ) ?? '' );
-		if ( empty( $agents ) || ! $objective ) return new WP_REST_Response( [ 'error' => 'Agents and objective required.' ], 400 );
+		if ( empty( $agents ) || ! $objective ) {
+			return new WP_REST_Response( [ 'error' => 'Agents and objective required.' ], 400 );
+		}
+
 		$job_id = PDX_Queue::enqueue( $module_id, 'pipeline_run', [ 'pipeline_name' => $pipeline_name, 'agents' => $agents, 'objective' => $objective ], 1, 3600 );
-		$result = $this->execute_pipeline( $agents, $objective, $api_key );
+		PDX_Queue::start( $job_id );
+		$result = PDX_Workflow_Engine::run_pipeline( $this->settings, $agents, $objective, $job_id );
 		PDX_Queue::complete( $job_id, $result );
+
 		PDX_Audit::log( $module_id, 'pipeline_executed', [ 'pipeline_name' => $pipeline_name, 'agents' => count( $agents ), 'job_id' => $job_id ] );
 		PDX_Webhook::dispatch( 'pipeline.run', [ 'pipeline_name' => $pipeline_name, 'job_id' => $job_id ] );
 		$ws_id = PDX_Workspace::create( $module_id, 'pipeline', $pipeline_name, [ 'agents' => $agents, 'result' => $result ] );
-		return new WP_REST_Response( [ 'job_id' => $job_id, 'workspace_id' => $ws_id, 'pipeline_name' => $pipeline_name, 'result' => $result ], 200 );
+
+		return new WP_REST_Response(
+			[
+				'job_id'         => $job_id,
+				'workspace_id'   => $ws_id,
+				'pipeline_name'  => $pipeline_name,
+				'result'         => $result,
+			],
+			200
+		);
 	}
 
-	private function execute_pipeline( array $agents, string $objective, string $api_key ): array {
-		$handoff  = $objective;
-		$trace    = [];
-		$personas = [
-			'researcher'  => 'You are a research agent. Gather and synthesize information thoroughly.',
-			'analyst'     => 'You are an analysis agent. Identify patterns, risks, and insights.',
-			'writer'      => 'You are a writing agent. Produce clear, professional output.',
-			'critic'      => 'You are a quality-control agent. Review and improve the previous output.',
-			'coordinator' => 'You are a coordinator agent. Summarize and structure the final deliverable.',
+	public function pipeline_flows_list(): WP_REST_Response {
+		return new WP_REST_Response( [ 'flows' => PDX_Flow_Store::list( 'pipeline' ) ], 200 );
+	}
+
+	public function pipeline_flow_save( WP_REST_Request $req ): WP_REST_Response {
+		$name = sanitize_text_field( $req->get_param( 'name' ) ?? 'Saved Pipeline' );
+		$def  = [
+			'agents'    => (array) ( $req->get_param( 'agents' ) ?? [] ),
+			'objective' => sanitize_textarea_field( $req->get_param( 'objective' ) ?? '' ),
 		];
-		foreach ( $agents as $agent ) {
-			$role   = sanitize_key( $agent['role'] ?? 'coordinator' );
-			$system = $personas[ $role ] ?? $personas['coordinator'];
-			$prompt = "Objective: {$objective}\n\nPrevious agent output:\n{$handoff}\n\nYour task: Process this and produce your contribution.";
-			$resp   = wp_remote_post( 'https://api.openai.com/v1/chat/completions', [
-				'timeout' => 30,
-				'headers' => [ 'Authorization' => 'Bearer ' . $api_key, 'Content-Type' => 'application/json' ],
-				'body'    => wp_json_encode( [ 'model' => 'gpt-4o-mini', 'messages' => [ [ 'role' => 'system', 'content' => $system ], [ 'role' => 'user', 'content' => $prompt ] ], 'max_tokens' => 700, 'temperature' => 0.6 ] ),
-			] );
-			$body   = is_wp_error( $resp ) ? [] : json_decode( wp_remote_retrieve_body( $resp ), true );
-			$output = $body['choices'][0]['message']['content'] ?? '[Agent failed]';
-			$trace[] = [ 'agent' => $role, 'name' => $agent['name'] ?? $role, 'output' => $output ];
-			$handoff = $output;
+		$id = PDX_Flow_Store::save( 'pipeline', $name, $def );
+		return new WP_REST_Response( [ 'flow_id' => $id, 'ok' => true ], 201 );
+	}
+
+	public function pipeline_flow_get( WP_REST_Request $req ): WP_REST_Response {
+		$flow = PDX_Flow_Store::get( sanitize_text_field( $req->get_param( 'flow_id' ) ?? '' ) );
+		if ( ! $flow || ( $flow['type'] ?? '' ) !== 'pipeline' ) {
+			return new WP_REST_Response( [ 'error' => 'Pipeline not found.' ], 404 );
 		}
-		return [ 'agents_run' => count( $trace ), 'trace' => $trace, 'final_output' => $handoff, 'objective' => $objective ];
+		return new WP_REST_Response( $flow, 200 );
+	}
+
+	public function pipeline_flow_delete( WP_REST_Request $req ): WP_REST_Response {
+		$ok = PDX_Flow_Store::delete( sanitize_text_field( $req->get_param( 'flow_id' ) ?? '' ) );
+		return new WP_REST_Response( [ 'ok' => $ok ], $ok ? 200 : 404 );
 	}
 
 	private function get_pipeline_templates(): array {

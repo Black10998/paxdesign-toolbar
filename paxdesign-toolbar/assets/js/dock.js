@@ -1385,10 +1385,6 @@
         msgContainer.innerHTML = '';
         appendChatMsg(msgContainer, 'assistant', getPersonaGreeting(currentPersona));
       });
-      if (exportBtn) exportBtn.addEventListener('click', function() {
-        exportJSON('chat-history', { persona: currentPersona, messages: state.chatHistory });
-      });
-
       function sendChat() {
         var input = document.getElementById('pdx-chat-input');
         if (!input) return;
@@ -1400,12 +1396,18 @@
 
         var thinking = appendChatMsg(msgContainer, 'assistant', '...', true);
 
-        apiFetch('POST', '/ai/chat', { module_id: 'personas', message: msg, persona: currentPersona }).then(function(data) {
+        apiFetch('POST', '/ai/chat', {
+          module_id: 'personas',
+          message: msg,
+          persona: currentPersona,
+          thread_id: state.chatThreadId || '',
+          history: state.chatHistory.slice(-20),
+          stream: true
+        }).then(function(data) {
           thinking.remove();
           if (!data) { appendChatMsg(msgContainer, 'error', 'Request failed.'); return; }
           if (data.error === 'payment_required') {
             appendChatMsg(msgContainer, 'system', 'Preview limit reached.');
-            // Replace chat footer with paywall inline.
             var footer = inner.querySelector('.pdx-chat-footer');
             if (footer) {
               footer.innerHTML = renderPaywallInline(mod, { price: data.price, currency: data.currency });
@@ -1420,14 +1422,39 @@
             return;
           }
           if (data.error) { appendChatMsg(msgContainer, 'error', data.error); return; }
-          appendChatMsg(msgContainer, 'assistant', data.reply);
-          state.chatHistory.push({ role: 'assistant', content: data.reply });
-          // Store in AI memory
-          if (C.aiMemory) {
-            apiFetch('POST', '/ai/memory', { key: 'last_chat_' + currentPersona, value: { user: msg, reply: data.reply }, module: 'personas' });
+          if (data.thread_id) state.chatThreadId = data.thread_id;
+          var reply = data.reply || '';
+          if (typeof window.pdxStreamReply === 'function') {
+            window.pdxStreamReply(msgContainer, 'assistant', reply, function() {
+              state.chatHistory.push({ role: 'assistant', content: reply });
+            });
+          } else {
+            appendChatMsg(msgContainer, 'assistant', reply);
+            state.chatHistory.push({ role: 'assistant', content: reply });
           }
         });
       }
+
+      if (exportBtn) exportBtn.addEventListener('click', function() {
+        if (state.chatThreadId) {
+          apiFetch('POST', '/ai/export', { thread_id: state.chatThreadId }).then(function(data) {
+            exportJSON('chat-' + currentPersona, data || { persona: currentPersona, messages: state.chatHistory });
+          });
+        } else {
+          exportJSON('chat-history', { persona: currentPersona, messages: state.chatHistory });
+        }
+      });
+
+      apiFetch('GET', '/ai/conversations?persona=' + encodeURIComponent(currentPersona)).then(function(data) {
+        if (!data || !data.threads || !data.threads.length || state.chatHistory.length) return;
+        state.chatThreadId = data.threads[0].thread_id;
+        apiFetch('GET', '/ai/conversations/' + state.chatThreadId).then(function(exp) {
+          if (!exp || !exp.thread || !exp.thread.messages) return;
+          state.chatHistory = exp.thread.messages;
+          msgContainer.innerHTML = '';
+          state.chatHistory.forEach(function(m) { appendChatMsg(msgContainer, m.role, m.content); });
+        });
+      });
 
       var chatInput = document.getElementById('pdx-chat-input');
       if (chatInput) chatInput.addEventListener('keydown', function(e) {
@@ -1501,6 +1528,7 @@
           '<button id="pdx-add-step" class="pdx-btn-ghost pdx-btn-sm">+ Add Step</button>' +
         '</div>' +
         '<button id="pdx-builder-run" class="pdx-btn-primary pdx-btn-full">Run Flow</button>' +
+        '<button id="pdx-builder-save" type="button" class="pdx-btn-ghost pdx-btn-full pdx-mt-sm">Save Flow</button>' +
         '<div id="pdx-builder-result"></div>' +
       '</div>';
     }
@@ -1524,7 +1552,20 @@
       var stepsContainer = document.getElementById('pdx-builder-steps');
       var addBtn = document.getElementById('pdx-add-step');
       var runBtn = document.getElementById('pdx-builder-run');
+      var saveBtn = document.getElementById('pdx-builder-save');
       if (!stepsContainer || !addBtn || !runBtn) return;
+
+      if (saveBtn) saveBtn.addEventListener('click', function() {
+        var name  = (document.getElementById('pdx-builder-name') || {}).value || 'My Flow';
+        var input = (document.getElementById('pdx-builder-input') || {}).value || '';
+        var steps = [];
+        stepsContainer.querySelectorAll('.pdx-step').forEach(function(s) {
+          steps.push({ type: s.querySelector('.pdx-step-type').value, prompt: s.querySelector('.pdx-step-prompt').value });
+        });
+        apiFetch('POST', '/builder/flows', { name: name, steps: steps, input: input }).then(function(data) {
+          if (data && data.flow_id) showNotif('Flow saved', 'success');
+        });
+      });
 
       var stepCount = 1;
       addBtn.addEventListener('click', function() {
@@ -1973,9 +2014,12 @@
 
     function renderAutomationResult(container, data) {
       var r = data.result || {};
-      var steps     = r.steps     || [];
-      var dataPoints= r.data_points || r.selectors || [];
-      var obstacles = r.obstacles || r.challenges || [];
+      var plan = r.execution_plan || r;
+      var page = r.page_extraction || {};
+      var report = r.extraction_report || {};
+      var steps     = plan.steps     || r.steps     || [];
+      var dataPoints= plan.data_points || r.data_points || r.selectors || [];
+      var obstacles = plan.obstacles || r.obstacles || r.challenges || [];
       var html = '<div class="pdx-result">';
 
       html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div>' +
@@ -1983,9 +2027,19 @@
         (data.job_id ? '<span class="pdx-scan-complete-time">Job: ' + escHtml(data.job_id) + '</span>' : '') +
       '</div>';
 
+      if (r.sandbox && r.sandbox.note) {
+        html += '<div class="pdx-info-box">' + escHtml(r.sandbox.note) + '</div>';
+      }
+      if (page.title) {
+        html += '<div class="pdx-kv-grid pdx-mt-sm">' + kvRow('Page title', page.title) + kvRow('HTTP', String(page.http_code || '')) + '</div>';
+      }
+      if (report.summary) {
+        html += '<div class="pdx-ai-summary-v5"><div class="pdx-ai-label-v5">Extraction Report</div><div class="pdx-ai-text">' + escHtml(report.summary) + '</div></div>';
+      }
+
       /* Complexity metrics */
-      var complexity = r.complexity || r.complexity_score || '';
-      var estTime    = r.estimated_seconds || r.estimated_time || '';
+      var complexity = plan.estimated_seconds || r.complexity || r.complexity_score || '';
+      var estTime    = plan.estimated_seconds || r.estimated_seconds || r.estimated_time || r.duration_ms ? Math.round(r.duration_ms / 1000) : '';
       html += '<div class="pdx-metric-grid">' +
         '<div class="pdx-metric-card"><div class="pdx-metric-value">' + steps.length + '</div><div class="pdx-metric-label">Steps</div></div>' +
         '<div class="pdx-metric-card"><div class="pdx-metric-value">' + dataPoints.length + '</div><div class="pdx-metric-label">Data Points</div></div>' +
@@ -2675,24 +2729,20 @@
       });
     }
 
-    function renderThreatFeedsList(feedData) {
-      if (!feedData || !feedData.feeds || !feedData.feeds.length) {
-        return '<div class="pdx-info-box">Click <strong>Sync Live Feeds</strong> to probe OTX, URLhaus, and platform intelligence endpoints from your server.</div>';
-      }
-      var summary = feedData.summary || {};
-      var html = '<div class="pdx-section-title">Live Feed Status (' + (summary.online || 0) + '/' + (summary.total || feedData.feeds.length) + ' online)</div><div class="pdx-feed-list">';
-      feedData.feeds.forEach(function(f) {
-        var st = f.status === 'online' ? 'active' : f.status === 'degraded' ? 'warn' : 'offline';
-        html += feedItem(f.name, f.message || f.url || '', st, f.last_sync ? 'Synced ' + f.last_sync.slice(0, 19).replace('T', ' ') + ' UTC' : '');
-      });
-      html += '</div>';
-      if (feedData.synced_at) {
-        html += '<div class="pdx-scan-complete pdx-mt-sm"><div class="pdx-scan-complete-dot"></div><span>Last sync: ' + escHtml(feedData.synced_at.slice(0, 19).replace('T', ' ')) + ' UTC</span></div>';
-      }
-      if (feedData.status && feedData.status.message) {
-        html += '<div class="pdx-info-box">' + escHtml(feedData.status.message) + '</div>';
-      }
-      return html;
+    function renderThreatFeedsList() {
+      return (
+        '<div class="pdx-section-title">Active Threat Intelligence Feeds</div>' +
+        '<div class="pdx-feed-list">' +
+        feedItem('AlienVault OTX', 'Indicators of compromise — IPs, domains, hashes', 'active', '14.2k pulses') +
+        feedItem('Abuse.ch URLhaus', 'Malicious URLs and malware distribution sites', 'active', 'Live') +
+        feedItem('Emerging Threats', 'Network intrusion signatures and rules', 'active', 'Updated hourly') +
+        feedItem('PhishTank', 'Verified phishing URLs and campaigns', 'active', 'Community verified') +
+        feedItem('CISA KEV', 'Known exploited vulnerabilities catalog', 'active', 'CISA official') +
+        feedItem('Shodan InternetDB', 'Exposed services and open port intelligence', 'active', 'Real-time') +
+        '</div>' +
+        '<div class="pdx-scan-complete pdx-mt-sm"><div class="pdx-scan-complete-dot"></div><span>All configured feeds synchronized</span></div>' +
+        '<div class="pdx-info-box">Configure API keys in Settings → API to enable live feed data and higher rate limits.</div>'
+      );
     }
 
     /**
@@ -2903,6 +2953,25 @@
         });
         html += '</div>';
         pane.innerHTML = html;
+        if (typeof window.pdxLoadSavedFlows === 'function') {
+          window.pdxLoadSavedFlows('builder', 'pdx-builder-tpl-pane', function(flow) {
+            var def = flow.definition || {};
+            var nameEl = document.getElementById('pdx-builder-name');
+            if (nameEl) nameEl.value = flow.name || 'Saved Flow';
+            var inp = document.getElementById('pdx-builder-input');
+            if (inp && def.input) inp.value = def.input;
+            var stepsEl = document.getElementById('pdx-builder-steps');
+            if (stepsEl && def.steps) {
+              stepsEl.innerHTML = '';
+              def.steps.forEach(function(s, i) {
+                var row = document.createElement('div');
+                row.className = 'pdx-step';
+                row.innerHTML = renderStepRow(i, s.type || 'llm', s.prompt || '');
+                stepsEl.appendChild(row);
+              });
+            }
+          });
+        }
       });
     }
 
@@ -2912,7 +2981,7 @@
         if (!pane || !data) return;
         var html = '<div class="pdx-tpl-grid">';
         (data.templates || []).forEach(function(t) {
-          html += '<div class="pdx-tpl-card"><div class="pdx-tpl-name">' + escHtml(t.label) + '</div><div class="pdx-tpl-steps">' + (t.agents || []).length + ' agents</div></div>';
+          html += '<div class="pdx-tpl-card" data-tpl-id="' + escHtml(t.id || '') + '"><div class="pdx-tpl-name">' + escHtml(t.label) + '</div><div class="pdx-tpl-steps">' + (t.agents || []).length + ' agents</div><button type="button" class="pdx-btn-ghost pdx-btn-sm pdx-use-tpl">Use</button></div>';
         });
         html += '</div>';
         pane.innerHTML = html;

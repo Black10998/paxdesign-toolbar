@@ -1,5 +1,38 @@
 ﻿# Changelog
 
+## 8.1.0 — 2026-05-17
+
+**Enterprise AI modules — Personas, Builder, Pipeline, Automation**
+
+### AI Services / Personas
+- New `PDX_AI_Service` — centralized OpenAI chat with memory injection
+- `PDX_Conversation` — persistent threads (logged-in + guest session)
+- `POST /ai/chat` accepts `thread_id`, `history`, `stream` (chunked client playback)
+- `GET /ai/conversations`, `GET /ai/conversations/{id}`, `POST /ai/export`
+- Personas dock: restores history, simulated streaming replies, server export
+
+### AI Builder
+- `PDX_Workflow_Engine` — LLM chains + transforms (uppercase, lowercase, trim, json_pretty, extract_links)
+- `PDX_Flow_Store` — save/load builder flows (`GET/POST /builder/flows`)
+- Job progress updates during multi-step runs; tokens + duration in results
+
+### Agent Pipeline
+- Multi-agent handoffs with trace, `handoffs`, `tokens_used`, `duration_ms`
+- Save/load pipelines via `GET/POST /pipeline/flows`
+- Security analyst role added to agent roster
+
+### Browser Automation
+- `PDX_Browser_Automation` — safe URL policy, server-side HTML sandbox fetch, page extraction report
+- AI execution plan JSON + structured extraction report
+- Worker dispatch attempted when available; completes with sandbox results when not
+
+### Platform
+- Removed dead `live_config()` REST handler
+- `dock-v81.js` — template Use buttons, saved flow loader, streaming helper
+- Lighter UI: reduced backdrop blur and pulse glow; mobile panel/layout pass
+
+**Install:** `releases/paxdesign-toolbar-8.1.0.zip` — tag `v8.1.0`
+
 ## 8.0.0 — 2026-05-17
 
 **Enterprise intelligence engine (v8)**
