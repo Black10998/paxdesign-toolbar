@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## 8.6.0 — 2026-05-17
+
+**Dock icon identity + floating transparent toolbar**
+
+### Icons
+- Rebuilt all 14 module dock SVGs with distinct silhouettes (no shared magnifier, multi-user, or node-grid language between modules).
+- Fixed action alias bug where module IDs like `threat` could resolve to action icons instead of module icons.
+- Connector/zap icons differentiated; action icons remain unique per UI context.
+
+### Dock chrome
+- Removed per-button dark/hover/active tile backgrounds — icons float on transparent buttons (stroke-only glyphs).
+- Dock CSS unified across `dock.css`, `pdx-dock-ui.css`, `pdx-module-chrome.css`, and `pdx-icons.css`.
+
+**Install:** `releases/paxdesign-toolbar-8.6.0.zip` — tag `v8.6.0`
+
 ## 8.5.2 — 2026-05-17
 
 **Updater PHP 8.1 fix — no null values in `update_plugins` transient**

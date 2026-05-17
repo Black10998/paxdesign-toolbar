@@ -157,9 +157,9 @@ body.pdx-no-scroll { overflow: hidden !important; }
   outline: none;
   flex-shrink: 0;
 }
-.pdx-btn:hover         { background: var(--pdx-bg-hov); color: var(--pdx-hi); }
+.pdx-btn:hover         { background: transparent; color: var(--pdx-hi); }
 .pdx-btn:focus-visible { outline: 2px solid var(--pdx-accent); outline-offset: 1px; }
-.pdx-btn.is-active     { background: var(--pdx-bg-hov); color: var(--pdx-hi); }
+.pdx-btn.is-active     { background: transparent; color: var(--pdx-hi); }
 /* Mobile default: bottom edge indicator */
 .pdx-btn.is-active::before {
   content: '';

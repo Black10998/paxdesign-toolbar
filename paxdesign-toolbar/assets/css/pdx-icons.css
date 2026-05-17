@@ -111,9 +111,26 @@
   color: #58a6ff;
 }
 
+#pdx-dock .pdx-btn {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+#pdx-dock .pdx-btn:hover,
+#pdx-dock .pdx-btn.is-active {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 #pdx-dock .pdx-btn .pdx-mod-icon {
   width: 1.35em;
   height: 1.35em;
+  transition: transform 0.15s ease, color 0.15s ease, filter 0.15s ease;
+}
+
+#pdx-dock .pdx-btn .pdx-mod-icon * {
+  fill: none !important;
 }
 
 @media (max-width: 680px) {

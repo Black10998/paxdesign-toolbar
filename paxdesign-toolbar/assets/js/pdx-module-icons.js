@@ -23,61 +23,65 @@
     return '<svg class="pdx-icon' + (extra ? ' ' + extra : '') + '"' + VB + inner + '</svg>';
   }
 
+  /* Each module: unique silhouette — no shared magnifier / multi-user / node-grid language. */
   var MODULE_ICONS = {
     trust: wrapMod(
-      '<path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7l7-4z"/><path d="M9 12l2 2 4-4"/>',
+      '<path d="M12 2l8 4v6c0 5-4 9-8 10-5-3.5-8-9-8-10V6l8-4z"/><path d="M9 12l2.5 2.5L15 10"/>',
       'trust'
     ),
     osint: wrapMod(
-      '<circle cx="11" cy="11" r="6"/><path d="M20 20l-3-3"/><path d="M8 11h6M11 8v6"/>',
+      '<circle cx="11" cy="11" r="7"/><path d="M3 11h16"/><path d="M11 4a12 12 0 0 1 0 14"/><path d="M16 16l5 5"/>',
       'osint'
     ),
     threat: wrapMod(
-      '<path d="M12 2l9 16H3L12 2z"/><path d="M12 9v4M12 17h.01"/>',
+      '<path d="M12 3l8 14H4L12 3z"/><path d="M12 9v3"/><circle cx="12" cy="16" r="1"/>',
       'threat'
     ),
     personas: wrapMod(
-      '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5"/><path d="M14 20c0-2 2-3.5 4-3.5"/>',
+      '<circle cx="9" cy="9" r="3"/><path d="M4 20c0-3.5 2.5-6 5-6"/><path d="M15 7h5v6h-4l-2 2V7z"/>',
       'personas'
     ),
     builder: wrapMod(
-      '<rect x="3" y="4" width="6" height="5" rx="1"/><rect x="15" y="4" width="6" height="5" rx="1"/><rect x="9" y="15" width="6" height="5" rx="1"/><path d="M6 9v3h3M18 9v3h-3M12 12v3"/>',
+      '<path d="M5 17l7-7"/><path d="M13 6l6 5-2 2-5-5-2 2-3-3z"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/>',
       'builder'
     ),
     pipeline: wrapMod(
-      '<circle cx="5" cy="12" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="12" cy="18" r="2"/><path d="M7 12h3M14 12h3M12 8v2M12 14v2"/>',
+      '<circle cx="5" cy="12" r="2"/><path d="M7 12h3l2-4 2 4h3"/><circle cx="19" cy="12" r="2"/><path d="M12 5v14"/>',
       'pipeline'
     ),
     automation: wrapMod(
-      '<rect x="4" y="5" width="16" height="12" rx="2"/><path d="M8 9h8M8 13h5"/><path d="M9 5V3M15 5V3"/>',
+      '<rect x="4" y="6" width="16" height="11" rx="2"/><path d="M4 9h16"/><path d="M14 14l4 4"/><path d="M18 11v7"/>',
       'automation'
     ),
     connectors: wrapMod(
-      '<circle cx="6" cy="12" r="2"/><circle cx="18" cy="12" r="2"/><path d="M8 12h8"/><path d="M6 10V6M18 10V6M6 14v4M18 14v4"/>',
+      '<path d="M7 9h3v4H7z"/><path d="M14 9h3v4h-3z"/><path d="M10 13h4v2h-4z"/><path d="M12 15v4"/>',
       'connectors'
     ),
-    create: wrapMod('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>', 'create'),
+    create: wrapMod(
+      '<path d="M6 5h12v14H6z"/><path d="M9 11l-2 2 2 2"/><path d="M13 15h4"/>',
+      'create'
+    ),
     investigation: wrapMod(
-      '<circle cx="10" cy="10" r="6"/><path d="M21 21l-4-4"/><path d="M10 7v6M7 10h6"/>',
+      '<rect x="4" y="5" width="16" height="14" rx="1"/><circle cx="8" cy="10" r="1.5"/><circle cx="15" cy="9" r="1.5"/><circle cx="11" cy="15" r="1.5"/><path d="M8 10l7-1M15 9l-4 6"/>',
       'investigation'
     ),
     graph: wrapMod(
-      '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="8" cy="18" r="2"/><circle cx="18" cy="17" r="2"/><path d="M8 6h8M7 17l9-8M8 8l8 9"/>',
+      '<circle cx="12" cy="12" r="2"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/><path d="M6.8 6.8l2.8 2.8M14.4 14.4l2.8 2.8M17.2 6.8l-2.8 2.8M6.8 17.2l2.8-2.8"/>',
       'graph'
     ),
     memory: wrapMod(
-      '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+      '<path d="M9 7c-2 0-3.5 1.5-3.5 3.5S7 14 9 14c0 2 2 3.5 3 3.5s3-1.5 3-3.5S14 14 15 14c2 0 3.5-1.5 3.5-3.5S17 7 15 7c0-2-2-3-3-3s-3 1-3 3"/>',
       'memory'
     ),
     team: wrapMod(
-      '<circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 19c0-2.5 2.5-4 5-4"/><path d="M21 19c0-2.5-2.5-4-5-4"/><path d="M12 19c0-2 1.5-3.5 3.5-3.5"/>',
+      '<circle cx="12" cy="7" r="2.5"/><circle cx="7" cy="13" r="2"/><circle cx="17" cy="13" r="2"/><path d="M5 19c0-2 3.2-3.5 7-3.5s7 1.5 7 3.5"/>',
       'team'
     ),
     workspace: wrapMod(
-      '<path d="M4 7h5l2 2h9v10H4V7z"/><path d="M9 13h6M9 17h4"/>',
+      '<path d="M9 6h9l2 2v10H9z"/><path d="M7 8h9l2 2v10H7z"/><path d="M5 10h9l2 2v10H5z"/>',
       'workspace'
     ),
-    circle: wrapMod('<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/>', 'circle'),
+    circle: wrapMod('<circle cx="12" cy="12" r="7"/><path d="M12 8v4l3 2"/>', 'circle'),
   };
 
   var D = 'pdx-icon--danger';
@@ -205,7 +209,9 @@
     'connector-github': wrapAction(
       '<path d="M9 18c-4 1-4-2-4-2s-1-3 2-4"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="8" r="2"/><path d="M8 18l4-6 4 4 4-2"/>'
     ),
-    'connector-zapier': wrapAction('<path d="M13 2L3 14h6l-2 8 10-14h-6l2-6z"/>'),
+    'connector-zapier': wrapAction(
+      '<path d="M4 12h6"/><path d="M14 8h6"/><path d="M14 16h6"/><circle cx="10" cy="12" r="2"/><circle cx="20" cy="8" r="2"/><circle cx="20" cy="16" r="2"/>'
+    ),
     zap: wrapAction('<path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/>'),
     cpu: wrapAction(
       '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 9h6v6H9z"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>'
@@ -234,6 +240,7 @@
   };
 
   /** Map legacy/API slug → dedicated action icon (never module icons). */
+  /** Never alias module IDs (trust, threat, pipeline, …) — only legacy action slugs. */
   var ACTION_ALIAS = {
     alert: 'alert',
     warning: 'alert',
@@ -248,8 +255,6 @@
     hibp: 'breach-check',
     hunter: 'email-hunter',
     abuse: 'abuse-ch',
-    threat: 'threat-feed',
-    pipeline: 'report-pipeline',
   };
 
   function resolveActionKey(name) {

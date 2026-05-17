@@ -57,7 +57,33 @@
 }
 
 #pdx-dock .pdx-btn.is-active[data-module] {
-  transform: translateY(-1px);
+  transform: none;
+}
+
+/* Floating minimal dock — glyph only, no per-button tiles */
+#pdx-dock .pdx-btn[data-module],
+#pdx-dock .pdx-btn[data-module]:hover,
+#pdx-dock .pdx-btn.is-active[data-module] {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+#pdx-dock .pdx-btn[data-module] .pdx-mod-icon,
+#pdx-dock .pdx-btn[data-module] svg {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+#pdx-dock .pdx-btn[data-module]:hover .pdx-mod-icon {
+  transform: scale(1.06);
+}
+
+#pdx-dock .pdx-btn.is-active[data-module] .pdx-mod-icon {
+  transform: scale(1.1);
 }
 
 /* Light / auto themes — slightly stronger idle contrast on pale dock chrome */
