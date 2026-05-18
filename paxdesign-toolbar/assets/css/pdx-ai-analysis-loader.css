@@ -1,0 +1,302 @@
+/**
+ * Cinematic AI analysis loader — glass + chip data-flow (TrustCheck, OSINT, Investigation, Graph, Threat).
+ */
+
+.pdx-ai-analysis {
+  --pdx-ai-accent: #399fff;
+  --pdx-ai-glow: rgba(57, 159, 255, 0.35);
+  position: relative;
+  margin-bottom: 0.85rem;
+  color: var(--pdx-ai-accent);
+}
+
+.pdx-ai-analysis__glass {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem 1rem 1.1rem;
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, rgba(14, 20, 32, 0.92), rgba(6, 10, 18, 0.88)),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.02) 2px,
+      rgba(255, 255, 255, 0.02) 3px
+    );
+  border: 1px solid color-mix(in srgb, var(--pdx-ai-accent) 35%, transparent);
+  box-shadow:
+    0 0 48px var(--pdx-ai-glow),
+    inset 0 0 80px color-mix(in srgb, var(--pdx-ai-accent) 6%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: pdx-ai-glass-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes pdx-ai-glass-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 36px var(--pdx-ai-glow), inset 0 0 50px color-mix(in srgb, var(--pdx-ai-accent) 4%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 56px var(--pdx-ai-glow), inset 0 0 90px color-mix(in srgb, var(--pdx-ai-accent) 10%, transparent);
+  }
+}
+
+.pdx-ai-analysis__scanline {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--pdx-ai-accent) 8%, transparent) 48%,
+    transparent 52%
+  );
+  opacity: 0.35;
+  animation: pdx-ai-scan 4.5s linear infinite;
+}
+
+@keyframes pdx-ai-scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+/* Module accents */
+.pdx-ai-analysis--trust {
+  --pdx-ai-accent: #c2ff00;
+  --pdx-ai-glow: rgba(194, 255, 0, 0.28);
+}
+.pdx-ai-analysis--osint {
+  --pdx-ai-accent: #5ecbff;
+  --pdx-ai-glow: rgba(94, 203, 255, 0.28);
+}
+.pdx-ai-analysis--threat {
+  --pdx-ai-accent: #ff6b6b;
+  --pdx-ai-glow: rgba(255, 107, 107, 0.28);
+}
+.pdx-ai-analysis--investigation {
+  --pdx-ai-accent: #67e8f9;
+  --pdx-ai-glow: rgba(103, 232, 249, 0.28);
+}
+.pdx-ai-analysis--graph {
+  --pdx-ai-accent: #a78bfa;
+  --pdx-ai-glow: rgba(167, 139, 250, 0.28);
+}
+
+/* Chip SVG */
+.pdx-ai-chip-loader {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.pdx-ai-chip-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  color: #0a0e14;
+}
+
+.pdx-ai-trace-bg {
+  stroke: #252525;
+  stroke-width: 1.8;
+  fill: none;
+}
+
+.pdx-ai-trace-flow {
+  stroke-width: 1.8;
+  fill: none;
+  stroke-dasharray: 40 400;
+  stroke-dashoffset: 438;
+  filter: drop-shadow(0 0 6px currentColor);
+  animation: pdx-ai-flow 3.4s cubic-bezier(0.5, 0, 0.9, 1) infinite;
+}
+
+.pdx-ai-trace--b {
+  animation-duration: 3.8s;
+  animation-delay: 0.35s;
+}
+
+.pdx-ai-trace--a {
+  animation-duration: 3.2s;
+  animation-delay: 0.7s;
+}
+
+@keyframes pdx-ai-flow {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.pdx-ai-node {
+  opacity: 0.85;
+  animation: pdx-ai-node-pulse 2s ease-in-out infinite;
+}
+
+.pdx-ai-chip-label {
+  animation: pdx-ai-label-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pdx-ai-node-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes pdx-ai-label-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Copy block */
+.pdx-ai-analysis__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 28rem;
+  padding: 0 0.5rem;
+}
+
+.pdx-ai-analysis__icon {
+  display: flex;
+  margin-bottom: 0.15rem;
+  opacity: 0.9;
+}
+
+.pdx-ai-analysis__icon .pdx-mod-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  color: var(--pdx-ai-accent);
+  filter: drop-shadow(0 0 8px var(--pdx-ai-glow));
+}
+
+.pdx-ai-analysis__module {
+  font: 600 10px/1.2 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pdx-ai-accent);
+  opacity: 0.9;
+}
+
+.pdx-ai-analysis__title {
+  font: 600 13px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #e6edf3;
+}
+
+.pdx-ai-analysis__stage {
+  font: 11px/1.45 ui-monospace, Consolas, monospace;
+  color: #8b949e;
+  min-height: 2.6em;
+  transition: color 0.25s ease, opacity 0.25s ease;
+}
+
+.pdx-ai-analysis__stage.pdx-ai-stage-flash {
+  color: #fff;
+  opacity: 1;
+}
+
+.pdx-ai-analysis__hint {
+  font: 10px/1.3 ui-monospace, Consolas, monospace;
+  color: #484f58;
+}
+
+.pdx-ai-analysis__progress {
+  width: 100%;
+  max-width: 220px;
+  height: 3px;
+  margin-top: 0.35rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.pdx-ai-analysis__progress-bar {
+  display: block;
+  height: 100%;
+  width: 12%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--pdx-ai-accent), transparent);
+  animation: pdx-ai-progress 8s ease-in-out infinite;
+}
+
+@keyframes pdx-ai-progress {
+  0% {
+    transform: translateX(-120%);
+    width: 28%;
+  }
+  45% {
+    width: 55%;
+  }
+  100% {
+    transform: translateX(420%);
+    width: 28%;
+  }
+}
+
+/* Inside deep pipeline slot */
+.pdx-dp-intel-slot .pdx-ai-analysis {
+  margin-bottom: 0;
+}
+
+.pdx-dp-intel-slot .pdx-ai-analysis__glass {
+  border-radius: 12px;
+  padding: 1rem 0.75rem 0.85rem;
+}
+
+.pdx-dp-intel-slot .pdx-ai-chip-loader {
+  max-width: 360px;
+}
+
+/* Standalone (fast path legacy mount) */
+.pdx-scan-running--ai {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+@media (max-width: 520px) {
+  .pdx-ai-chip-loader {
+    max-width: 100%;
+  }
+  .pdx-ai-analysis__title {
+    font-size: 12px;
+  }
+  .pdx-ai-analysis__glass {
+    padding: 1rem 0.65rem 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pdx-ai-trace-flow,
+  .pdx-ai-analysis__glass,
+  .pdx-ai-analysis__scanline,
+  .pdx-ai-analysis__progress-bar,
+  .pdx-ai-node,
+  .pdx-ai-chip-label {
+    animation: none !important;
+  }
+  .pdx-ai-trace-flow {
+    stroke-dashoffset: 200;
+  }
+}

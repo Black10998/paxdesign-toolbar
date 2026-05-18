@@ -571,7 +571,7 @@
       if (forensics.punycode_detected) html += '<span class="pdx-intel-hero__chip">Punycode / IDN</span>';
       if (forensics.infrastructure_fingerprint) html += '<span class="pdx-intel-hero__chip">Infra fingerprint</span>';
       html += '<span class="pdx-intel-hero__chip">Verdict: ' + escHtml(verdict) + '</span></div></div>';
-      return html.replace(/<motion\.div/g, '<div').replace(/<\/motion\.motion\.div>/g, '</div>');
+      return html;
     }
 
     /* ── Panel renderer ───────────────────────────────────── */
@@ -702,7 +702,6 @@
         btn: btn,
         result: result,
         module: 'trust',
-        fast: true,
         id: 'pdx-trust-pipeline',
         stages: trustStages,
         title: 'TrustCheck — ' + domain,
@@ -2743,6 +2742,29 @@
     ══════════════════════════════════════════════════════ */
 
     var PDX_PIPELINE_SPEED = 0.28;
+    var PDX_INTEL_MODULES = { trust: 1, osint: 1, threat: 1, investigation: 1, graph: 1 };
+    var PDX_INTEL_MIN_DISPLAY_MS = 9200;
+
+    function isIntelModule(mod) {
+      return !!(mod && PDX_INTEL_MODULES[mod]);
+    }
+
+    function pipelineSpeedForModule(mod, cfgSpeed) {
+      if (typeof cfgSpeed === 'number') return cfgSpeed;
+      return isIntelModule(mod) ? 1.05 : PDX_PIPELINE_SPEED;
+    }
+
+    function minDisplayForPipeline(cfg) {
+      if (typeof cfg.minDisplayMs === 'number') return cfg.minDisplayMs;
+      return isIntelModule(cfg && cfg.module) ? PDX_INTEL_MIN_DISPLAY_MS : 0;
+    }
+
+    function whenMinDisplayElapsed(startedAt, minMs) {
+      if (!minMs || minMs <= 0) return Promise.resolve();
+      var remain = minMs - (Date.now() - startedAt);
+      if (remain <= 0) return Promise.resolve();
+      return new Promise(function (resolve) { setTimeout(resolve, remain); });
+    }
 
     function setBtnBusy(btn, busy, busyLabel) {
       if (!btn) return;
@@ -4171,17 +4193,26 @@
       // Show pipeline in detail area while canvas is hidden
       canvas.style.display = 'none';
       detail.innerHTML = buildDeepPipeline('pdx-graph-pipeline', graphStages, {
-        title: 'Infrastructure Graph — ' + value, showLog: true,
+        title: 'Infrastructure Graph — ' + value, showLog: true, module: 'graph',
       });
 
-      var apiDone = false, pipelineDone = false, apiData = null;
-      runDeepPipeline('pdx-graph-pipeline', graphStages, { logLines: graphLogLines }).then(function() {
+      var apiDone = false, pipelineDone = false, minDone = false, apiData = null;
+      var graphStarted = Date.now();
+      function tryGraphFinish() {
+        if (!apiDone || !pipelineDone || !minDone) return;
+        finalizeGraph(canvas, detail, controls, apiData, value);
+      }
+      runDeepPipeline('pdx-graph-pipeline', graphStages, { logLines: graphLogLines, module: 'graph' }).then(function() {
         pipelineDone = true;
-        if (apiDone) finalizeGraph(canvas, detail, controls, apiData, value);
+        tryGraphFinish();
+      });
+      whenMinDisplayElapsed(graphStarted, PDX_INTEL_MIN_DISPLAY_MS).then(function () {
+        minDone = true;
+        tryGraphFinish();
       });
       apiFetch('POST', '/intel/correlate', { value: value }).then(function(data) {
         apiData = data; apiDone = true;
-        if (pipelineDone) finalizeGraph(canvas, detail, controls, data, value);
+        tryGraphFinish();
       });
     }
 
@@ -4577,7 +4608,7 @@
       runIntelPipeline({
         btn: btn,
         result: res,
-        module: 'threat',
+        module: 'investigation',
         id: 'pdx-corr-pipeline',
         stages: corrStages,
         title: 'IOC Correlation — ' + value,
@@ -4967,9 +4998,9 @@
               { label: 'Correlating affected software',        detail: 'Mapping CPE entries to affected product versions',    duration: 560 },
               { label: 'Retrieving remediation guidance',      detail: 'Fetching vendor advisories and patch information',    duration: 420 },
             ];
-            res.innerHTML = buildDeepPipeline('pdx-cve-pipeline', cveStages, { title: 'CVE Analysis — ' + q, showLog: true });
+            res.innerHTML = buildDeepPipeline('pdx-cve-pipeline', cveStages, { title: 'CVE Analysis — ' + q, showLog: true, module: 'threat' });
             var apiDone = false, pipelineDone = false, apiData = null;
-            runDeepPipeline('pdx-cve-pipeline', cveStages, {
+            runDeepPipeline('pdx-cve-pipeline', cveStages, { module: 'threat',
               logLines: [
                 'CVE lookup initialized for: ' + q,
                 'Querying NVD REST API v2.0…',
@@ -5014,9 +5045,9 @@
               { label: 'Checking for known vulnerabilities',   detail: 'Matching services against CVE database',              duration: 680 },
               { label: 'Mapping attack surface',               detail: 'Compiling exposure report with risk ratings',         duration: 480 },
             ];
-            res.innerHTML = buildDeepPipeline('pdx-surf-pipeline', surfStages, { title: 'Attack Surface — ' + domain, showLog: true });
+            res.innerHTML = buildDeepPipeline('pdx-surf-pipeline', surfStages, { title: 'Attack Surface — ' + domain, showLog: true, module: 'threat' });
             var apiDone = false, pipelineDone = false, apiData = null;
-            runDeepPipeline('pdx-surf-pipeline', surfStages, {
+            runDeepPipeline('pdx-surf-pipeline', surfStages, { module: 'threat',
               logLines: [
                 'Attack surface scanner initialized for: ' + domain,
                 'Running subdomain enumeration…',

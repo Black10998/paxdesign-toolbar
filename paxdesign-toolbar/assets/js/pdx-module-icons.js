@@ -284,6 +284,11 @@
   }
 
   function buildIntelActivity(moduleId, title) {
+    if (typeof global.pdxBuildAiAnalysisLoader === 'function') {
+      return global.pdxBuildAiAnalysisLoader(moduleId, {
+        title: title || 'Intelligence analysis in progress',
+      });
+    }
     var mod = MODULE_ICONS[moduleId] ? moduleId : moduleId || 'trust';
     if (!MODULE_ICONS[mod]) mod = 'trust';
     var label = title || 'Intelligence scan in progress';

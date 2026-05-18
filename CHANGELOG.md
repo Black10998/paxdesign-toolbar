@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 8.6.2 — 2026-05-17
+
+**Cinematic AI analysis loader (TrustCheck, OSINT, Investigation, Graph, Threat Intel)**
+
+### UX
+- New chip + data-flow SVG loader with glassmorphism and per-module accent colors (`pdx-ai-analysis-loader.js` / `.css`).
+- TrustCheck now uses the full staged deep pipeline (no fast skip); minimum ~9.2s analysis display so loaders do not flash away.
+- Staged labels rotate during analysis; Investigation correlate uses investigation (cyan) theme.
+
+**Install:** `releases/paxdesign-toolbar-8.6.2.zip` — tag `v8.6.2`
+
 ## 8.6.1 — 2026-05-17
 
 **Updater PHP 8.1 — complete null scrub + Update URI hook**

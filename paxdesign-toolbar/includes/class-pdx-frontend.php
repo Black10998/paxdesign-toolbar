@@ -72,9 +72,16 @@ class PDX_Frontend {
 		);
 
 		wp_enqueue_style(
+			'pdx-ai-analysis-loader',
+			PDX_URL . 'assets/css/pdx-ai-analysis-loader.css',
+			[ 'pdx-intel-activity' ],
+			$this->asset_version( 'assets/css/pdx-ai-analysis-loader.css' )
+		);
+
+		wp_enqueue_style(
 			'pdx-icons',
 			PDX_URL . 'assets/css/pdx-icons.css',
-			[ 'pdx-intel-activity' ],
+			[ 'pdx-ai-analysis-loader' ],
 			$this->asset_version( 'assets/css/pdx-icons.css' )
 		);
 
@@ -91,9 +98,16 @@ class PDX_Frontend {
 		$script_args = [ 'strategy' => 'defer', 'in_footer' => true ];
 
 		wp_enqueue_script(
+			'pdx-ai-analysis-loader',
+			PDX_URL . 'assets/js/pdx-ai-analysis-loader.js',
+			[],
+			$this->asset_version( 'assets/js/pdx-ai-analysis-loader.js' ),
+			$script_args
+		);
+		wp_enqueue_script(
 			'pdx-module-icons',
 			PDX_URL . 'assets/js/pdx-module-icons.js',
-			[],
+			[ 'pdx-ai-analysis-loader' ],
 			$this->asset_version( 'assets/js/pdx-module-icons.js' ),
 			$script_args
 		);
