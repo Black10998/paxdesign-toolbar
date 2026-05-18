@@ -1,72 +1,45 @@
-name: Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write
-
-jobs:
-  build-release:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Read version from tag
-        id: ver
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Sync plugin version
-        run: |
-          VER="${{ steps.ver.outputs.version }}"
-          sed -i "s/Version:.*/Version:      ${VER}/" paxdesign-toolbar/paxdesign-toolbar.php
-          sed -i "s/define( 'PDX_VERSION'.*/define( 'PDX_VERSION',   '${VER}' );/" paxdesign-toolbar/paxdesign-toolbar.php
-
-      - name: PHP lint (required before release)
-        run: |
-          set -e
-          while IFS= read -r -d '' file; do
-            php -l "$file" >/dev/null
-          done < <(find paxdesign-toolbar -name '*.php' -print0)
-          echo "All PHP files passed syntax check."
-
-      - name: Build ZIP
-        run: |
-          VER="${{ steps.ver.outputs.version }}"
-          STAGING="/tmp/pdx-release"
-          rm -rf "$STAGING"
-          mkdir -p "$STAGING/paxdesign-toolbar"
-          rsync -a --exclude='.git' --exclude='.github' --exclude='releases' --exclude='scripts' --exclude='node_modules' --exclude='.cursor' \
-            paxdesign-toolbar/ "$STAGING/paxdesign-toolbar/"
-          test -f "$STAGING/paxdesign-toolbar/paxdesign-toolbar.php"
-          test ! -f "$STAGING/paxdesign-toolbar/paxdesign-toolbar/paxdesign-toolbar.php"
-          mkdir -p releases
-          (cd "$STAGING" && zip -rq "$GITHUB_WORKSPACE/releases/paxdesign-toolbar-${VER}.zip" paxdesign-toolbar)
-          sha256sum "releases/paxdesign-toolbar-${VER}.zip" | tee "releases/paxdesign-toolbar-${VER}.zip.sha256"
-
-      - name: Verify WordPress ZIP layout
-        run: |
-          VER="${{ steps.ver.outputs.version }}"
-          ZIP="releases/paxdesign-toolbar-${VER}.zip"
-          test -f "$ZIP"
-          ROOTS=$(unzip -Z1 "$ZIP" | awk -F/ 'NF{print $1}' | sort -u)
-          echo "ZIP roots: $ROOTS"
-          test "$ROOTS" = "paxdesign-toolbar"
-          unzip -Z1 "$ZIP" | grep -qx 'paxdesign-toolbar/paxdesign-toolbar.php'
-          ! unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar/paxdesign-toolbar/'
-          ! unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar-[0-9]'
-          unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar/includes/'
-          unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar/assets/'
-          unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar/templates/'
-          echo "WordPress plugin ZIP layout OK"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            releases/paxdesign-toolbar-${{ steps.ver.outputs.version }}.zip
-            releases/paxdesign-toolbar-${{ steps.ver.outputs.version }}.zip.sha256
-          generate_release_notes: true
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Sync plugin version in source
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          sed -i "s/Version:.*/Version:      ${VER}/" paxdesign-toolbar/paxdesign-toolbar.php
+          sed -i "s/define( 'PDX_VERSION'.*/define( 'PDX_VERSION',   '${VER}' );/" paxdesign-toolbar/paxdesign-toolbar.php
+
+      - name: Build and verify release ZIP
+        run: |
+          chmod +x scripts/build-release.sh scripts/verify-wp-plugin-zip.sh
+          bash scripts/build-release.sh
+
+      - name: Simulate WordPress plugin detection
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          php scripts/simulate-wp-plugin-detect.php "releases/paxdesign-toolbar-${VER}.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            releases/paxdesign-toolbar-${{ steps.ver.outputs.version }}.zip
+            releases/paxdesign-toolbar-${{ steps.ver.outputs.version }}.zip.sha256
+          generate_release_notes: true
+

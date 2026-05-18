@@ -1,11 +1,5 @@
 # Build WordPress-installable ZIP: paxdesign-toolbar-<version>.zip
 # Run from repository root: .\scripts\build-release.ps1
-#
-# Required ZIP layout (WordPress → Plugins → Add New → Upload Plugin):
-#   paxdesign-toolbar/paxdesign-toolbar.php
-#   paxdesign-toolbar/includes/
-#   paxdesign-toolbar/assets/
-#   paxdesign-toolbar/templates/
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -60,7 +54,6 @@ Get-ChildItem $sourceRoot -Recurse -Force | ForEach-Object {
     }
 }
 
-# Sanity: refuse double-nested staging.
 $nestedMain = Join-Path $pluginRoot 'paxdesign-toolbar\paxdesign-toolbar.php'
 if (Test-Path $nestedMain) {
     throw "Staging is double-nested ($nestedMain). Fix source tree before building."
@@ -73,15 +66,26 @@ if (-not (Test-Path $stagedMain)) {
 New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
-# Match GitHub Actions: zip the paxdesign-toolbar folder inside staging (one root in archive).
+# Forward-slash entry names (WordPress/Linux expect paxdesign-toolbar/... not backslashes).
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-[System.IO.Compression.ZipFile]::CreateFromDirectory(
-    $stagingRoot,
-    $zipPath,
-    [System.IO.Compression.CompressionLevel]::Optimal,
-    $false
-)
 
+$zipStream = [System.IO.File]::Create($zipPath)
+$zip       = New-Object System.IO.Compression.ZipArchive($zipStream, [System.IO.Compression.ZipArchiveMode]::Create)
+
+Get-ChildItem $pluginRoot -Recurse -File | ForEach-Object {
+    $rel = $_.FullName.Substring($pluginRoot.Length).TrimStart('\', '/').Replace('\', '/')
+    $entryName = "paxdesign-toolbar/$rel"
+    [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+        $zip,
+        $_.FullName,
+        $entryName,
+        [System.IO.Compression.CompressionLevel]::Optimal
+    )
+}
+
+$zip.Dispose()
+$zipStream.Dispose()
 Remove-Item $stagingRoot -Recurse -Force
 
 $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash
@@ -95,21 +99,37 @@ if (-not (Test-Path $verify)) {
 }
 & $verify -ZipPath $zipPath
 
-$verifyLegacy = Join-Path $PSScriptRoot 'verify-release-zip.ps1'
-if (Test-Path $verifyLegacy) {
-    & $verifyLegacy -ZipPath $zipPath
+if (-not $env:PHP_BIN) {
+    $localPhp = Join-Path $root '.tools\php\php.exe'
+    if (Test-Path $localPhp) { $env:PHP_BIN = $localPhp }
 }
-
-$smoke = Join-Path $PSScriptRoot 'wp-bootstrap-smoke.php'
-if (Test-Path $smoke) {
-    if (-not $env:PHP_BIN) {
-        $localPhp = Join-Path $root '.tools\php\php.exe'
-        if (Test-Path $localPhp) { $env:PHP_BIN = $localPhp }
-    }
-    if ($env:PHP_BIN) {
+if ($env:PHP_BIN) {
+    $smoke = Join-Path $PSScriptRoot 'wp-bootstrap-smoke.php'
+    if (Test-Path $smoke) {
         & $env:PHP_BIN $smoke
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Plugin bootstrap smoke test failed.'
+        if ($LASTEXITCODE -ne 0) { throw 'Plugin bootstrap smoke test failed.' }
+    }
+    $hasZipArchive = & $env:PHP_BIN -r "echo class_exists('ZipArchive') ? '1' : '0';"
+    if ($hasZipArchive -eq '1') {
+        $detect = Join-Path $PSScriptRoot 'simulate-wp-plugin-detect.php'
+        if (Test-Path $detect) {
+            & $env:PHP_BIN $detect $zipPath
+            if ($LASTEXITCODE -ne 0) { throw 'WordPress plugin detection simulation failed.' }
         }
+    } else {
+        $tmpDetect = Join-Path $env:TEMP "pdx-wp-detect-$(Get-Random)"
+        Expand-Archive -Path $zipPath -DestinationPath $tmpDetect -Force
+        $detectMain = Join-Path $tmpDetect 'paxdesign-toolbar\paxdesign-toolbar.php'
+        if (-not (Test-Path $detectMain)) {
+            Remove-Item $tmpDetect -Recurse -Force -ErrorAction SilentlyContinue
+            throw "WordPress detection failed: missing $detectMain after extract"
+        }
+        $hdr = Get-Content $detectMain -TotalCount 15 | Out-String
+        if ($hdr -notmatch 'Plugin Name:') {
+            Remove-Item $tmpDetect -Recurse -Force -ErrorAction SilentlyContinue
+            throw 'WordPress detection failed: Plugin Name header missing'
+        }
+        Remove-Item $tmpDetect -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "OK: WordPress would detect paxdesign-toolbar/paxdesign-toolbar.php (Expand-Archive test)"
     }
 }
