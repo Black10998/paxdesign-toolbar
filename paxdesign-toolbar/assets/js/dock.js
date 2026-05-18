@@ -571,7 +571,7 @@
       if (forensics.punycode_detected) html += '<span class="pdx-intel-hero__chip">Punycode / IDN</span>';
       if (forensics.infrastructure_fingerprint) html += '<span class="pdx-intel-hero__chip">Infra fingerprint</span>';
       html += '<span class="pdx-intel-hero__chip">Verdict: ' + escHtml(verdict) + '</span></div></div>';
-      return html;
+      return html.replace(/<motion\.div/g, '<div').replace(/<\/motion\.motion\.div>/g, '</div>');
     }
 
     /* ── Panel renderer ───────────────────────────────────── */
@@ -2795,43 +2795,29 @@
       if (!resultEl) return;
       if (isBtnBusy(btn)) return;
 
-      if (cfg.fast) {
-        setBtnBusy(btn, true, cfg.busyLabel || 'Running…');
-        resultEl.innerHTML = (typeof win.pdxBuildIntelActivity === 'function')
-          ? win.pdxBuildIntelActivity(cfg.module || 'trust', cfg.title || 'Running analysis…')
-          : '<div class="pdx-scan-running"><div class="pdx-dp-pulse-ring"></div><span>' + escHtml(cfg.title || 'Running analysis…') + '</span></div>';
-        Promise.resolve(cfg.api()).then(function (data) {
-          setBtnBusy(btn, false);
-          if (!data || data.error) {
-            if (cfg.onError) cfg.onError(resultEl, data);
-            else resultEl.innerHTML = '<div class="pdx-error">' + escHtml(cfg.errorMsg || 'Operation failed.') + '</div>';
-            return;
-          }
-          if (data.error === 'payment_required' && cfg.onPayment) { cfg.onPayment(resultEl, data); return; }
-          if (cfg.onSuccess) cfg.onSuccess(resultEl, data);
-        }).catch(function () {
-          setBtnBusy(btn, false);
-          if (cfg.onError) cfg.onError(resultEl, null);
-          else resultEl.innerHTML = '<div class="pdx-error">' + escHtml(cfg.errorMsg || 'Operation failed.') + '</div>';
-        });
-        return;
-      }
+      var mod = cfg.module || 'osint';
+      var startedAt = Date.now();
+      var minMs = minDisplayForPipeline(cfg);
 
       setBtnBusy(btn, true, cfg.busyLabel || 'Running…');
       resultEl.innerHTML = buildDeepPipeline(cfg.id, cfg.stages, {
         title: cfg.title,
         showLog: cfg.showLog !== false,
-        module: cfg.module || 'osint',
+        module: mod,
       });
 
       var apiDone = false;
       var pipelineDone = false;
+      var minDone = false;
       var apiData = null;
       var finished = false;
 
       function finish() {
         if (finished) return;
         finished = true;
+        if (typeof win.pdxStopAiStageRotator === 'function') {
+          win.pdxStopAiStageRotator('#' + cfg.id);
+        }
         setBtnBusy(btn, false);
         if (!apiData || apiData.error) {
           if (cfg.onError) cfg.onError(resultEl, apiData);
@@ -2850,24 +2836,35 @@
         if (cfg.onSuccess) cfg.onSuccess(resultEl, apiData);
       }
 
+      function tryFinish() {
+        if (!apiDone || !pipelineDone || !minDone) return;
+        finish();
+      }
+
       runDeepPipeline(cfg.id, cfg.stages, {
         logLines: cfg.logLines,
-        speed: cfg.speed,
+        speed: pipelineSpeedForModule(mod, cfg.speed),
         findings: cfg.findings,
         onStage: cfg.onStage,
+        module: mod,
       }).then(function () {
         pipelineDone = true;
-        if (apiDone) finish();
+        tryFinish();
+      });
+
+      whenMinDisplayElapsed(startedAt, minMs).then(function () {
+        minDone = true;
+        tryFinish();
       });
 
       Promise.resolve(cfg.api()).then(function (data) {
         apiData = data;
         apiDone = true;
-        if (pipelineDone) finish();
+        tryFinish();
       }).catch(function () {
         apiData = null;
         apiDone = true;
-        if (pipelineDone) finish();
+        tryFinish();
       });
     }
 
@@ -2944,6 +2941,12 @@
       var container = document.getElementById(pipelineId);
       if (!container) return Promise.resolve();
 
+      if (isIntelModule(opts.module) && typeof win.pdxWireAiStageRotatorInPipeline === 'function') {
+        requestAnimationFrame(function () {
+          win.pdxWireAiStageRotatorInPipeline(pipelineId);
+        });
+      }
+
       var timerEl   = document.getElementById(pipelineId + '-timer');
       var logEl     = document.getElementById(pipelineId + '-log');
       var findingsEl = document.getElementById(pipelineId + '-findings');
@@ -2952,7 +2955,7 @@
       container.classList.add('pdx-dp--running');
       container.classList.remove('pdx-dp--complete');
 
-      var speed = typeof opts.speed === 'number' ? opts.speed : PDX_PIPELINE_SPEED;
+      var speed = pipelineSpeedForModule(opts.module, opts.speed);
       var startTime = Date.now();
       var timerInterval = setInterval(function() {
         if (!document.body.contains(container)) { clearInterval(timerInterval); return; }
@@ -2970,7 +2973,9 @@
         'Compiling risk assessment framework…',
         'Finalizing intelligence report…',
       ];
-      var logLines = opts.logLines || defaultLogs;
+      var logLines = opts.logLines || (isIntelModule(opts.module) && typeof win.pdxDefaultAiStages === 'function'
+        ? win.pdxDefaultAiStages()
+        : defaultLogs);
 
       function appendLog(msg) {
         if (!logEl) return;

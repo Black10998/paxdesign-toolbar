@@ -23,6 +23,19 @@
     graph: '#a78bfa',
   };
 
+  /** Canonical rotating labels — shown on every intel-module analysis loader. */
+  var DEFAULT_AI_STAGES = [
+    'Initializing analysis…',
+    'Scanning components…',
+    'Processing logic…',
+    'Optimizing results…',
+    'Finalizing response…',
+  ];
+
+  function getDefaultAiStages() {
+    return DEFAULT_AI_STAGES.slice();
+  }
+
   function esc(s) {
     return String(s || '')
       .replace(/&/g, '&amp;')
@@ -162,10 +175,9 @@
     var mod = MODULE_NAMES[moduleId] ? moduleId : 'trust';
     var accent = MODULE_ACCENTS[mod] || '#399fff';
     var title = opts.title || 'Intelligence analysis in progress';
-    var stage =
-      opts.stage ||
-      (opts.stages && opts.stages[0]) ||
-      'Initializing deep intelligence core…';
+    var stages =
+      opts.stages && opts.stages.length ? opts.stages : getDefaultAiStages();
+    var stage = opts.stage || stages[0];
     var modLabel = MODULE_NAMES[mod] || 'Analysis';
 
     return (
@@ -173,6 +185,8 @@
       mod +
       '" data-pdx-ai-id="' +
       id +
+      '" data-pdx-ai-stages="' +
+      esc(stages.join('|')) +
       '" role="status" aria-live="polite" aria-busy="true">' +
       '<div class="pdx-ai-analysis__glass">' +
       '<div class="pdx-ai-analysis__scanline" aria-hidden="true"></div>' +
@@ -211,8 +225,31 @@
    * @param {string[]} stages
    * @param {number} intervalMs
    */
+  /**
+   * Start rotator on a mounted loader element (or container holding one).
+   * @param {Element|string} root
+   * @param {number} [intervalMs]
+   */
+  function startAiAnalysisRotator(root, intervalMs) {
+    var el =
+      typeof root === 'string' ? document.querySelector(root) : root;
+    if (!el) return;
+    var loader = el.classList && el.classList.contains('pdx-ai-analysis')
+      ? el
+      : el.querySelector('.pdx-ai-analysis');
+    if (!loader) return;
+    var stages = getDefaultAiStages();
+    var encoded = loader.getAttribute('data-pdx-ai-stages');
+    if (encoded) {
+      stages = encoded.split('|').filter(Boolean);
+    }
+    wireAiStageRotator(loader, stages, intervalMs || 1850);
+  }
+
   function wireAiStageRotator(rootSelector, stages, intervalMs) {
-    if (!stages || !stages.length) return;
+    if (!stages || !stages.length) {
+      stages = getDefaultAiStages();
+    }
     stopRotator(rootSelector);
     var root =
       typeof rootSelector === 'string'
@@ -241,11 +278,13 @@
     if (!container) return;
     var slot = container.querySelector('.pdx-dp-intel-slot .pdx-ai-analysis');
     if (slot) {
-      wireAiStageRotator(slot, stages, 2600);
+      wireAiStageRotator(slot, stages && stages.length ? stages : getDefaultAiStages(), 1850);
     }
   }
 
+  global.pdxDefaultAiStages = getDefaultAiStages;
   global.pdxBuildAiAnalysisLoader = buildAiAnalysisLoader;
+  global.pdxStartAiAnalysisRotator = startAiAnalysisRotator;
   global.pdxWireAiStageRotator = wireAiStageRotator;
   global.pdxWireAiStageRotatorInPipeline = wireAiStageRotatorInPipeline;
   global.pdxStopAiStageRotator = stopRotator;

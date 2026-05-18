@@ -285,8 +285,13 @@
 
   function buildIntelActivity(moduleId, title) {
     if (typeof global.pdxBuildAiAnalysisLoader === 'function') {
+      var stages =
+        typeof global.pdxDefaultAiStages === 'function'
+          ? global.pdxDefaultAiStages()
+          : undefined;
       return global.pdxBuildAiAnalysisLoader(moduleId, {
         title: title || 'Intelligence analysis in progress',
+        stages: stages,
       });
     }
     var mod = MODULE_ICONS[moduleId] ? moduleId : moduleId || 'trust';
