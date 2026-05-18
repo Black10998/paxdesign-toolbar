@@ -41,9 +41,27 @@ jobs:
           mkdir -p "$STAGING/paxdesign-toolbar"
           rsync -a --exclude='.git' --exclude='.github' --exclude='releases' --exclude='scripts' --exclude='node_modules' --exclude='.cursor' \
             paxdesign-toolbar/ "$STAGING/paxdesign-toolbar/"
+          test -f "$STAGING/paxdesign-toolbar/paxdesign-toolbar.php"
+          test ! -f "$STAGING/paxdesign-toolbar/paxdesign-toolbar/paxdesign-toolbar.php"
           mkdir -p releases
           (cd "$STAGING" && zip -rq "$GITHUB_WORKSPACE/releases/paxdesign-toolbar-${VER}.zip" paxdesign-toolbar)
           sha256sum "releases/paxdesign-toolbar-${VER}.zip" | tee "releases/paxdesign-toolbar-${VER}.zip.sha256"
+
+      - name: Verify WordPress ZIP layout
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          ZIP="releases/paxdesign-toolbar-${VER}.zip"
+          test -f "$ZIP"
+          ROOTS=$(unzip -Z1 "$ZIP" | awk -F/ 'NF{print $1}' | sort -u)
+          echo "ZIP roots: $ROOTS"
+          test "$ROOTS" = "paxdesign-toolbar"
+          unzip -Z1 "$ZIP" | grep -qx 'paxdesign-toolbar/paxdesign-toolbar.php'
+          ! unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar/paxdesign-toolbar/'
+          ! unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar-[0-9]'
+          unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar/includes/'
+          unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar/assets/'
+          unzip -Z1 "$ZIP" | grep -q '^paxdesign-toolbar/templates/'
+          echo "WordPress plugin ZIP layout OK"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

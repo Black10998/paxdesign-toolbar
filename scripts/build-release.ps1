@@ -1,5 +1,11 @@
 # Build WordPress-installable ZIP: paxdesign-toolbar-<version>.zip
 # Run from repository root: .\scripts\build-release.ps1
+#
+# Required ZIP layout (WordPress → Plugins → Add New → Upload Plugin):
+#   paxdesign-toolbar/paxdesign-toolbar.php
+#   paxdesign-toolbar/includes/
+#   paxdesign-toolbar/assets/
+#   paxdesign-toolbar/templates/
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -26,22 +32,25 @@ if (Test-Path $lint) {
 }
 
 $releasesDir = Join-Path $root 'releases'
-$stagingDir  = Join-Path $env:TEMP "pdx-release-$version"
+$stagingRoot = Join-Path $env:TEMP "pdx-release-$version"
+$pluginRoot  = Join-Path $stagingRoot 'paxdesign-toolbar'
 $zipName     = "paxdesign-toolbar-$version.zip"
 $zipPath     = Join-Path $releasesDir $zipName
 
-if (Test-Path $stagingDir) { Remove-Item $stagingDir -Recurse -Force }
-New-Item -ItemType Directory -Path (Join-Path $stagingDir 'paxdesign-toolbar') -Force | Out-Null
+if (Test-Path $stagingRoot) { Remove-Item $stagingRoot -Recurse -Force }
+New-Item -ItemType Directory -Path $pluginRoot -Force | Out-Null
 
 $exclude = @('.git', '.github', '.devcontainer', 'releases', 'scripts', 'node_modules', '.cursor')
-Get-ChildItem (Join-Path $root 'paxdesign-toolbar') -Recurse -Force | ForEach-Object {
-    $rel = $_.FullName.Substring((Join-Path $root 'paxdesign-toolbar').Length + 1)
+$sourceRoot = Join-Path $root 'paxdesign-toolbar'
+Get-ChildItem $sourceRoot -Recurse -Force | ForEach-Object {
+    $rel = $_.FullName.Substring($sourceRoot.Length + 1)
     $skip = $false
     foreach ($e in $exclude) {
         if ($rel -like "$e*") { $skip = $true; break }
     }
     if ($skip) { return }
-    $dest = Join-Path (Join-Path $stagingDir 'paxdesign-toolbar') $rel
+
+    $dest = Join-Path $pluginRoot $rel
     if ($_.PSIsContainer) {
         New-Item -ItemType Directory -Path $dest -Force | Out-Null
     } else {
@@ -51,31 +60,44 @@ Get-ChildItem (Join-Path $root 'paxdesign-toolbar') -Recurse -Force | ForEach-Ob
     }
 }
 
+# Sanity: refuse double-nested staging.
+$nestedMain = Join-Path $pluginRoot 'paxdesign-toolbar\paxdesign-toolbar.php'
+if (Test-Path $nestedMain) {
+    throw "Staging is double-nested ($nestedMain). Fix source tree before building."
+}
+$stagedMain = Join-Path $pluginRoot 'paxdesign-toolbar.php'
+if (-not (Test-Path $stagedMain)) {
+    throw "Staging missing main file: $stagedMain"
+}
+
 New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
-# Archive MUST contain exactly one root folder: paxdesign-toolbar/
-# (Compress-Archive -Path folder can omit the wrapper on some hosts — use .NET ZIP API.)
+# Match GitHub Actions: zip the paxdesign-toolbar folder inside staging (one root in archive).
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$sourceFolder = Join-Path $stagingDir 'paxdesign-toolbar'
-if (-not (Test-Path $sourceFolder)) { throw "Staging folder missing: $sourceFolder" }
 [System.IO.Compression.ZipFile]::CreateFromDirectory(
-    $sourceFolder,
+    $stagingRoot,
     $zipPath,
     [System.IO.Compression.CompressionLevel]::Optimal,
-    $true
+    $false
 )
 
-Remove-Item $stagingDir -Recurse -Force
+Remove-Item $stagingRoot -Recurse -Force
 
 $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash
 Write-Host "Built: $zipPath"
 Write-Host "Version: $version"
 Write-Host "SHA256: $hash"
 
-$verify = Join-Path $PSScriptRoot 'verify-release-zip.ps1'
-if (Test-Path $verify) {
-    & $verify -ZipPath $zipPath
+$verify = Join-Path $PSScriptRoot 'verify-wp-plugin-zip.ps1'
+if (-not (Test-Path $verify)) {
+    throw "Missing verifier: $verify"
+}
+& $verify -ZipPath $zipPath
+
+$verifyLegacy = Join-Path $PSScriptRoot 'verify-release-zip.ps1'
+if (Test-Path $verifyLegacy) {
+    & $verifyLegacy -ZipPath $zipPath
 }
 
 $smoke = Join-Path $PSScriptRoot 'wp-bootstrap-smoke.php'
