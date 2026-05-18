@@ -186,7 +186,8 @@ $sanitize = $ref->getMethod( 'sanitize_stored_update_transient' );
 $sanitize->setAccessible( true );
 
 $canonical = $updater->canonical_plugin_basename();
-$orphan    = 'paxdesign-toolbar-8.4.3/paxdesign-toolbar.php';
+$orphan        = 'paxdesign-toolbar-8.4.3/paxdesign-toolbar.php';
+$orphan_nested = 'paxdesign-toolbar-8.6.4/paxdesign-toolbar/paxdesign-toolbar.php';
 
 $corrupt = (object) [
 	'url'         => null,
@@ -202,11 +203,13 @@ $corrupt = (object) [
 
 $transient = (object) [
 	'response'  => [
-		$canonical => clone $corrupt,
-		$orphan    => clone $corrupt,
+		$canonical      => clone $corrupt,
+		$orphan         => clone $corrupt,
+		$orphan_nested  => clone $corrupt,
 	],
 	'no_update' => [
-		$orphan => clone $corrupt,
+		$orphan        => clone $corrupt,
+		$orphan_nested => clone $corrupt,
 	],
 ];
 
@@ -221,7 +224,8 @@ if ( isset( $transient->no_update[ $canonical ] ) ) {
 	simulate_wp_core_update_row_handling( $transient->no_update[ $canonical ] );
 }
 
-if ( isset( $transient->response[ $orphan ] ) || isset( $transient->no_update[ $orphan ] ) ) {
+if ( isset( $transient->response[ $orphan ] ) || isset( $transient->no_update[ $orphan ] )
+	|| isset( $transient->response[ $orphan_nested ] ) || isset( $transient->no_update[ $orphan_nested ] ) ) {
 	fwrite( STDERR, "FAIL: orphan transient keys were not removed\n" );
 	exit( 1 );
 }

@@ -30,6 +30,15 @@ class PDX_Updater {
 	/** @var bool */
 	private bool $upgrade_finalized = false;
 
+	/** @var bool */
+	private bool $pending_update_transient_persist = false;
+
+	/** @var object|null */
+	private ?object $pending_update_transient = null;
+
+	/** @var bool */
+	private bool $shutdown_persist_registered = false;
+
 	public static function instance(): self {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
@@ -54,6 +63,7 @@ class PDX_Updater {
 		add_filter( 'upgrader_post_install', [ $this, 'verify_install' ], 10, 3 );
 		add_filter( 'upgrader_install_package_result', [ $this, 'on_install_package_result' ], 10, 2 );
 
+		add_action( 'plugins_loaded', [ $this, 'repair_broken_install_layout' ], -1 );
 		add_action( 'plugins_loaded', [ $this, 'enforce_canonical_install' ], 0 );
 		add_action( 'plugins_loaded', [ $this, 'repair_stored_update_transient' ], 1 );
 		add_action( 'plugins_loaded', [ $this, 'bootstrap_recovery' ], 2 );
@@ -91,14 +101,11 @@ class PDX_Updater {
 
 	/**
 	 * Basename for the canonical install path (wp-content/plugins/paxdesign-toolbar/).
+	 *
+	 * Always the fixed path — never a versioned or double-nested folder (prevents null update rows).
 	 */
 	public function canonical_plugin_basename(): string {
-		$canonical_main = $this->canonical_plugin_dir() . '/' . self::PLUGIN_MAIN_FILE;
-		if ( is_readable( $canonical_main ) ) {
-			return plugin_basename( $canonical_main );
-		}
-
-		return $this->loaded_plugin_basename();
+		return self::PLUGIN_FOLDER . '/' . self::PLUGIN_MAIN_FILE;
 	}
 
 	/**
@@ -116,18 +123,24 @@ class PDX_Updater {
 
 		$patterns = [
 			WP_PLUGIN_DIR . '/paxdesign-toolbar-*',
+			WP_PLUGIN_DIR . '/paxdesign-toolbar-*/' . self::PLUGIN_FOLDER,
 			WP_PLUGIN_DIR . '/' . self::PLUGIN_FOLDER . '/paxdesign-toolbar-*',
 		];
 
 		foreach ( $patterns as $pattern ) {
 			foreach ( glob( $pattern, GLOB_ONLYDIR ) ?: [] as $dir ) {
-				$main = $dir . '/' . self::PLUGIN_MAIN_FILE;
-				if ( ! is_readable( $main ) || ! $this->is_our_plugin_header_file( $main ) ) {
-					continue;
-				}
-				$basename = plugin_basename( $main );
-				if ( ! in_array( $basename, $basenames, true ) ) {
-					$basenames[] = $basename;
+				$candidates = [
+					$dir . '/' . self::PLUGIN_MAIN_FILE,
+					$dir . '/' . self::PLUGIN_FOLDER . '/' . self::PLUGIN_MAIN_FILE,
+				];
+				foreach ( $candidates as $main ) {
+					if ( ! is_readable( $main ) || ! $this->is_our_plugin_header_file( $main ) ) {
+						continue;
+					}
+					$basename = plugin_basename( $main );
+					if ( ! in_array( $basename, $basenames, true ) ) {
+						$basenames[] = $basename;
+					}
 				}
 			}
 		}
@@ -136,7 +149,11 @@ class PDX_Updater {
 	}
 
 	public function is_plugin_basename_ours( string $basename ): bool {
-		return in_array( $basename, $this->all_plugin_basenames(), true );
+		if ( $basename === $this->canonical_plugin_basename() ) {
+			return true;
+		}
+
+		return str_contains( $basename, self::PLUGIN_FOLDER . '/' . self::PLUGIN_MAIN_FILE );
 	}
 
 	/**
@@ -253,6 +270,62 @@ class PDX_Updater {
 	 */
 	private function is_pdx_plugin_transient_key( string $key ): bool {
 		return str_contains( $key, self::PLUGIN_FOLDER );
+	}
+
+	/**
+	 * Non-canonical PaxDesign plugin basenames (versioned, double-nested, or orphan paths).
+	 */
+	private function is_noncanonical_pdx_basename( string $basename ): bool {
+		return $this->is_pdx_plugin_transient_key( $basename )
+			&& $basename !== $this->canonical_plugin_basename();
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $row
+	 * @return array<string, mixed>
+	 */
+	private function sanitize_plugin_header_row( array $row ): array {
+		foreach ( [
+			'Name',
+			'PluginURI',
+			'Description',
+			'Version',
+			'Author',
+			'AuthorURI',
+			'TextDomain',
+			'DomainPath',
+			'Title',
+			'AuthorName',
+		] as $field ) {
+			if ( array_key_exists( $field, $row ) ) {
+				$row[ $field ] = $this->string_field( $row[ $field ] ?? null, '' );
+			}
+		}
+
+		return $row;
+	}
+
+	/**
+	 * Schedule persisting a repaired update_plugins transient (safe during read filters).
+	 */
+	private function schedule_update_transient_persist( object $transient ): void {
+		$this->pending_update_transient_persist = true;
+		$this->pending_update_transient         = $transient;
+
+		if ( ! $this->shutdown_persist_registered ) {
+			add_action( 'shutdown', [ $this, 'persist_pending_update_transient' ], 1 );
+			$this->shutdown_persist_registered = true;
+		}
+	}
+
+	public function persist_pending_update_transient(): void {
+		if ( ! $this->pending_update_transient_persist || ! is_object( $this->pending_update_transient ) ) {
+			return;
+		}
+
+		$this->pending_update_transient_persist = false;
+		set_site_transient( 'update_plugins', $this->pending_update_transient );
+		$this->pending_update_transient = null;
 	}
 
 	/**
@@ -794,7 +867,9 @@ class PDX_Updater {
 			return $transient;
 		}
 
-		$this->scrub_pdx_entries_in_update_transient( $transient );
+		if ( $this->scrub_pdx_entries_in_update_transient( $transient ) ) {
+			$this->schedule_update_transient_persist( $transient );
+		}
 
 		return $transient;
 	}
@@ -1082,18 +1157,67 @@ class PDX_Updater {
 		}
 
 		$canonical = $this->canonical_plugin_basename();
-		$has_canon = isset( $plugins[ $canonical ] );
 
 		foreach ( array_keys( $plugins ) as $basename ) {
-			if ( ! $this->is_versioned_plugin_basename( $basename ) ) {
-				continue;
-			}
-			if ( $has_canon || $basename !== $this->newest_versioned_basename( $plugins ) ) {
+			if ( $this->is_noncanonical_pdx_basename( $basename ) ) {
 				unset( $plugins[ $basename ] );
 			}
 		}
 
+		if ( isset( $plugins[ $canonical ] ) && is_array( $plugins[ $canonical ] ) ) {
+			$plugins[ $canonical ] = $this->sanitize_plugin_header_row( $plugins[ $canonical ] );
+		}
+
 		return $plugins;
+	}
+
+	/**
+	 * Repair double-nested installs (paxdesign-toolbar-8.6.4/paxdesign-toolbar/) and purge orphan metadata.
+	 */
+	public function repair_broken_install_layout(): void {
+		static $ran = false;
+		if ( $ran || ! defined( 'WP_PLUGIN_DIR' ) ) {
+			return;
+		}
+		$ran = true;
+
+		$canonical = $this->canonical_plugin_dir();
+		$canon_main = $canonical . '/' . self::PLUGIN_MAIN_FILE;
+		$changed    = false;
+
+		foreach ( glob( WP_PLUGIN_DIR . '/paxdesign-toolbar-*', GLOB_ONLYDIR ) ?: [] as $versioned_dir ) {
+			if ( $this->is_canonical_plugin_dir( $versioned_dir ) ) {
+				continue;
+			}
+
+			$nested_dir  = $versioned_dir . '/' . self::PLUGIN_FOLDER;
+			$nested_main = $nested_dir . '/' . self::PLUGIN_MAIN_FILE;
+			$flat_main   = $versioned_dir . '/' . self::PLUGIN_MAIN_FILE;
+
+			if ( is_readable( $nested_main ) && $this->is_our_plugin_header_file( $nested_main ) ) {
+				wp_mkdir_p( $canonical );
+				$this->copy_directory( $nested_dir, $canonical );
+				$changed = true;
+			} elseif ( is_readable( $flat_main ) && $this->is_our_plugin_header_file( $flat_main ) ) {
+				wp_mkdir_p( $canonical );
+				$this->copy_directory( $versioned_dir, $canonical );
+				$changed = true;
+			}
+
+			if ( is_dir( $versioned_dir ) ) {
+				$this->delete_directory( $versioned_dir );
+				$changed = true;
+			}
+		}
+
+		if ( $changed || ! is_readable( $canon_main ) ) {
+			$this->consolidate_versioned_install_into_canonical();
+			$this->remove_all_versioned_plugin_directories();
+			$this->maybe_repair_active_plugins_list();
+			$this->clear_all_caches();
+			$this->repair_stored_update_transient();
+			$this->flush_plugin_cache();
+		}
 	}
 
 	/**
@@ -2184,7 +2308,14 @@ class PDX_Updater {
 	}
 
 	private function is_versioned_plugin_basename( string $basename ): bool {
-		return (bool) preg_match( '#^paxdesign-toolbar-[^/]+/paxdesign-toolbar\.php$#', $basename );
+		if ( $basename === $this->canonical_plugin_basename() ) {
+			return false;
+		}
+
+		return (bool) preg_match(
+			'#^paxdesign-toolbar-[^/]+/(?:paxdesign-toolbar/)?paxdesign-toolbar\.php$#',
+			$basename
+		);
 	}
 
 	private function is_plugin_active_basename( string $basename ): bool {

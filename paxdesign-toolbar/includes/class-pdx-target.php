@@ -54,7 +54,7 @@ class PDX_Target {
 		$parse_input = $raw;
 		if ( ! preg_match( '#^[a-z][a-z0-9+.-]*://#i', $parse_input ) ) {
 			// Hostname with query/path but no scheme — parse_url needs a scheme.
-			if ( preg_match( '#[/?#]#', $parse_input ) ) {
+			if ( preg_match( '~[/?#]~', $parse_input ) ) {
 				$parse_input = 'http://' . $parse_input;
 			}
 		}
