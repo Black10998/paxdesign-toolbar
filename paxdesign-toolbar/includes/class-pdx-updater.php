@@ -513,7 +513,9 @@ class PDX_Updater {
 			return;
 		}
 
-		if ( $this->scrub_pdx_entries_in_update_transient( $transient ) ) {
+		$before = $this->encode_for_compare( $transient );
+		$this->prepare_update_transient_for_storage( $transient );
+		if ( $this->encode_for_compare( $transient ) !== $before ) {
 			set_site_transient( 'update_plugins', $transient );
 		}
 	}
@@ -787,10 +789,12 @@ class PDX_Updater {
 			return false;
 		}
 
-		return $this->normalize_update_uri_payload(
+		$payload = $this->normalize_update_uri_payload(
 			[
+				'id'           => self::UPDATE_URI,
 				'slug'         => PDX_SLUG,
-				'version'      => $release['version'],
+				'plugin'       => $this->canonical_plugin_basename(),
+				'new_version'  => $release['version'],
 				'url'          => $release['url'],
 				'package'      => $release['package'],
 				'tested'       => $this->wp_version_for_update_meta(),
@@ -801,27 +805,65 @@ class PDX_Updater {
 				'banners_rtl'  => [],
 			]
 		);
+
+		if ( ! $this->update_uri_payload_is_valid( $payload ) ) {
+			return false;
+		}
+
+		return $payload;
 	}
 
 	/**
-	 * Update URI hook payloads must be JSON-serializable with string values only.
+	 * Update URI hook payloads must match update_plugins transient field names (new_version, not version).
 	 *
 	 * @param array<string, mixed> $payload
 	 * @return array<string, mixed>
 	 */
 	private function normalize_update_uri_payload( array $payload ): array {
+		$new_version = $this->string_field( $payload['new_version'] ?? $payload['version'] ?? null, '' );
+
 		return [
-			'slug'         => $this->string_field( $payload['slug'] ?? null, PDX_SLUG ),
-			'version'      => $this->string_field( $payload['version'] ?? null, '' ),
-			'url'          => $this->string_field( $payload['url'] ?? null, self::UPDATE_URI ),
-			'package'      => $this->string_field( $payload['package'] ?? null, '' ),
-			'tested'       => $this->string_field( $payload['tested'] ?? null, $this->wp_version_for_update_meta() ),
-			'requires'     => $this->string_field( $payload['requires'] ?? null, '6.0' ),
-			'requires_php' => $this->string_field( $payload['requires_php'] ?? null, '8.0' ),
-			'icons'        => $this->sanitize_url_map( $payload['icons'] ?? null ),
-			'banners'      => $this->sanitize_url_map( $payload['banners'] ?? null ),
-			'banners_rtl'  => $this->sanitize_url_map( $payload['banners_rtl'] ?? null ),
+			'id'            => $this->string_field( $payload['id'] ?? null, self::UPDATE_URI ),
+			'slug'          => $this->string_field( $payload['slug'] ?? null, PDX_SLUG ),
+			'plugin'        => $this->string_field( $payload['plugin'] ?? null, $this->canonical_plugin_basename() ),
+			'new_version'   => $new_version,
+			'url'           => $this->string_field( $payload['url'] ?? null, self::UPDATE_URI ),
+			'package'       => $this->string_field( $payload['package'] ?? null, '' ),
+			'tested'        => $this->string_field( $payload['tested'] ?? null, $this->wp_version_for_update_meta() ),
+			'requires'      => $this->string_field( $payload['requires'] ?? null, '6.0' ),
+			'requires_php'  => $this->string_field( $payload['requires_php'] ?? null, '8.0' ),
+			'icons'         => $this->sanitize_url_map( $payload['icons'] ?? null ),
+			'banners'       => $this->sanitize_url_map( $payload['banners'] ?? null ),
+			'banners_rtl'   => $this->sanitize_url_map( $payload['banners_rtl'] ?? null ),
+			'compatibility' => (object) [],
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function update_uri_payload_is_valid( array $payload ): bool {
+		return '' !== ( $payload['plugin'] ?? '' )
+			&& '' !== ( $payload['new_version'] ?? '' )
+			&& '' !== ( $payload['package'] ?? '' )
+			&& '' !== ( $payload['url'] ?? '' )
+			&& '' !== ( $payload['slug'] ?? '' );
+	}
+
+	/**
+	 * Ensure update_plugins buckets exist and every PaxDesign row is valid before storage.
+	 */
+	private function prepare_update_transient_for_storage( object $transient ): object {
+		if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+			$transient->response = [];
+		}
+		if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
+			$transient->no_update = [];
+		}
+
+		$this->scrub_pdx_entries_in_update_transient( $transient );
+
+		return $transient;
 	}
 
 	/**
@@ -835,9 +877,7 @@ class PDX_Updater {
 			return $transient;
 		}
 
-		$this->scrub_pdx_entries_in_update_transient( $transient );
-
-		return $transient;
+		return $this->prepare_update_transient_for_storage( $transient );
 	}
 
 	/**
@@ -867,7 +907,9 @@ class PDX_Updater {
 			return $transient;
 		}
 
-		if ( $this->scrub_pdx_entries_in_update_transient( $transient ) ) {
+		$before = $this->encode_for_compare( $transient );
+		$this->prepare_update_transient_for_storage( $transient );
+		if ( $this->encode_for_compare( $transient ) !== $before ) {
 			$this->schedule_update_transient_persist( $transient );
 		}
 
@@ -878,8 +920,17 @@ class PDX_Updater {
 	 * @param mixed $obj
 	 */
 	private function sanitize_update_object( $obj ): object {
+		if ( is_array( $obj ) ) {
+			$obj = (object) $obj;
+		}
 		if ( ! is_object( $obj ) ) {
 			$obj = (object) [];
+		}
+
+		// Malformed Update URI payloads use "version" — promote before field coercion.
+		$legacy_version = $this->string_field( $obj->version ?? null, '' );
+		if ( '' !== $legacy_version && '' === $this->string_field( $obj->new_version ?? null, '' ) ) {
+			$obj->new_version = $legacy_version;
 		}
 
 		$fallback = self::UPDATE_URI;
@@ -971,13 +1022,17 @@ class PDX_Updater {
 		$release = $this->fetch_release( false );
 		if ( '' !== $release['error'] || '' === $release['version'] || '' === $release['package'] ) {
 			$this->clear_pdx_update_transient_entries( $transient );
-			return $transient;
+			return $this->prepare_update_transient_for_storage( $transient );
 		}
 
 		$up_to_date = version_compare( $installed_ver, $release['version'], '>=' );
 
 		foreach ( $this->update_transient_basenames() as $plugin ) {
 			$offer = $this->build_update_offer( $release, $plugin );
+			if ( ! $this->update_object_is_valid( $offer ) ) {
+				unset( $transient->response[ $plugin ], $transient->no_update[ $plugin ] );
+				continue;
+			}
 			if ( $up_to_date ) {
 				unset( $transient->response[ $plugin ] );
 				$transient->no_update[ $plugin ] = $offer;
@@ -987,14 +1042,19 @@ class PDX_Updater {
 			}
 		}
 
-		$this->scrub_pdx_entries_in_update_transient( $transient );
-
-		return $transient;
+		return $this->prepare_update_transient_for_storage( $transient );
 	}
 
 	public function plugins_api( $result, $action, $args ) {
-		$slug = is_object( $args ) ? $this->string_field( $args->slug ?? null, '' ) : '';
-		if ( 'plugin_information' !== $action || PDX_SLUG !== $slug ) {
+		if ( ! is_string( $action ) || 'plugin_information' !== $action ) {
+			return $result;
+		}
+
+		$slug = is_object( $args ) && isset( $args->slug )
+			? (string) $args->slug
+			: '';
+
+		if ( PDX_SLUG !== $slug ) {
 			return $result;
 		}
 

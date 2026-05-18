@@ -323,6 +323,33 @@ if ( ! is_array( $uri_payload ) || '' === ( $uri_payload['package'] ?? '' ) ) {
 	fwrite( STDERR, "FAIL: filter_update_plugins_uri did not return package URL\n" );
 	exit( 1 );
 }
+if ( '' === ( $uri_payload['new_version'] ?? '' ) || '8.6.1' !== $uri_payload['new_version'] ) {
+	fwrite( STDERR, "FAIL: filter_update_plugins_uri must return new_version (not version)\n" );
+	exit( 1 );
+}
+if ( $canonical !== ( $uri_payload['plugin'] ?? '' ) ) {
+	fwrite( STDERR, "FAIL: filter_update_plugins_uri missing canonical plugin basename\n" );
+	exit( 1 );
+}
+if ( isset( $uri_payload['version'] ) && '' !== (string) $uri_payload['version'] && empty( $uri_payload['new_version'] ) ) {
+	fwrite( STDERR, "FAIL: URI payload must not use version without new_version\n" );
+	exit( 1 );
+}
+
+// 2d) Malformed version-only transient rows are promoted to new_version on scrub.
+$malformed_uri_row = (object) [
+	'slug'    => PDX_SLUG,
+	'version' => '8.6.1',
+	'url'     => 'https://github.com/Black10998/paxdesign-toolbar/releases/tag/v8.6.1',
+	'package' => 'https://github.com/Black10998/paxdesign-toolbar/releases/download/v8.6.1/paxdesign-toolbar-8.6.1.zip',
+];
+$sanitize_obj = $ref->getMethod( 'sanitize_update_object' );
+$sanitize_obj->setAccessible( true );
+$fixed_row = $sanitize_obj->invoke( $updater, $malformed_uri_row );
+if ( '8.6.1' !== ( $fixed_row->new_version ?? '' ) || '' === ( $fixed_row->plugin ?? '' ) ) {
+	fwrite( STDERR, "FAIL: sanitize_update_object did not promote version to new_version\n" );
+	exit( 1 );
+}
 
 // 3) repair_stored_update_transient persists scrubbed site transient.
 $GLOBALS['pdx_site_transients']['update_plugins'] = (object) [
