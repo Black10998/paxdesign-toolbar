@@ -115,6 +115,11 @@ if ( ! function_exists( 'get_bloginfo' ) ) {
 		return '6.7';
 	}
 }
+if ( ! function_exists( 'wp_kses_post' ) ) {
+	function wp_kses_post( $data ) {
+		return is_string( $data ) ? $data : '';
+	}
+}
 if ( ! function_exists( 'get_file_data' ) ) {
 	function get_file_data( $file, $headers, $context = '' ) {
 		$c   = file_get_contents( $file );
@@ -345,6 +350,58 @@ $fetch->setAccessible( true );
 $release = $fetch->invoke( $updater, false );
 if ( ! is_string( $release['url'] ) || '' === $release['url'] ) {
 	fwrite( STDERR, "FAIL: fetch_release did not normalize null url\n" );
+	exit( 1 );
+}
+
+// 5) plugins_api must return JSON-safe plugin information (REST/thickbox paths).
+$plugins_api = $ref->getMethod( 'plugins_api' );
+$plugins_api->setAccessible( true );
+$info = $plugins_api->invoke(
+	$updater,
+	false,
+	'plugin_information',
+	(object) [ 'slug' => PDX_SLUG ],
+);
+if ( ! is_object( $info ) ) {
+	fwrite( STDERR, "FAIL: plugins_api did not return object\n" );
+	exit( 1 );
+}
+foreach ( [ 'name', 'slug', 'version', 'homepage', 'download_link', 'tested', 'requires', 'requires_php' ] as $field ) {
+	if ( property_exists( $info, $field ) && ! is_string( $info->$field ) ) {
+		fwrite( STDERR, "FAIL: plugins_api {$field} is not a string\n" );
+		exit( 1 );
+	}
+	strpos( $info->$field ?? '', 'http' );
+	str_replace( '.', '', $info->$field ?? '' );
+}
+if ( isset( $info->sections ) && is_array( $info->sections ) ) {
+	foreach ( $info->sections as $section ) {
+		strpos( (string) $section, 'PaxDesign' );
+	}
+}
+$info_json = wp_json_encode( $info );
+if ( ! is_string( $info_json ) || '' === $info_json || 'null' === $info_json ) {
+	fwrite( STDERR, "FAIL: plugins_api object is not JSON-encodable\n" );
+	exit( 1 );
+}
+$decoded = json_decode( $info_json, true );
+if ( ! is_array( $decoded ) || JSON_ERROR_NONE !== json_last_error() ) {
+	fwrite( STDERR, "FAIL: plugins_api JSON decode error: " . json_last_error_msg() . "\n" );
+	exit( 1 );
+}
+
+// 6) Full update_plugins transient must round-trip as valid JSON (fixes block editor invalid JSON).
+$GLOBALS['pdx_site_transients']['update_plugins'] = $out;
+$finalized = $ref->getMethod( 'finalize_update_transient' );
+$finalized->setAccessible( true );
+$final_transient = $finalized->invoke( $updater, clone $out );
+$transient_json    = wp_json_encode( $final_transient );
+if ( ! is_string( $transient_json ) || '' === $transient_json ) {
+	fwrite( STDERR, "FAIL: update_plugins transient is not JSON-encodable\n" );
+	exit( 1 );
+}
+if ( null === json_decode( $transient_json ) ) {
+	fwrite( STDERR, "FAIL: update_plugins transient JSON is invalid\n" );
 	exit( 1 );
 }
 

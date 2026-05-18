@@ -256,16 +256,55 @@ class PDX_Updater {
 	}
 
 	/**
+	 * Recursively replace null scalars (arrays/objects) so wp_json_encode/json_encode and WP core never see null.
+	 *
+	 * @param mixed $data
+	 * @return mixed
+	 */
+	private function deep_null_scalars_to_empty( $data ) {
+		if ( null === $data ) {
+			return '';
+		}
+
+		if ( is_array( $data ) ) {
+			foreach ( $data as $key => $value ) {
+				$data[ $key ] = $this->deep_null_scalars_to_empty( $value );
+			}
+			return $data;
+		}
+
+		if ( is_object( $data ) ) {
+			foreach ( get_object_vars( $data ) as $key => $value ) {
+				$data->$key = $this->deep_null_scalars_to_empty( $value );
+			}
+			return $data;
+		}
+
+		return $data;
+	}
+
+	/**
+	 * @param mixed $data
+	 */
+	private function json_encode_safe( $data ): string {
+		$data = $this->deep_null_scalars_to_empty( $data );
+
+		if ( function_exists( 'wp_json_encode' ) ) {
+			$json = wp_json_encode( $data );
+			if ( is_string( $json ) && '' !== $json && 'null' !== $json ) {
+				return $json;
+			}
+		}
+
+		$json = json_encode( $data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		return is_string( $json ) && false !== $json ? $json : '{}';
+	}
+
+	/**
 	 * Coerce mixed values to string for WordPress core (strpos/str_replace reject null on PHP 8.1+).
 	 */
 	private function encode_for_compare( mixed $data ): string {
-		if ( function_exists( 'wp_json_encode' ) ) {
-			$json = wp_json_encode( $data );
-			return is_string( $json ) ? $json : '';
-		}
-
-		$json = json_encode( $data );
-		return is_string( $json ) ? $json : '';
+		return $this->json_encode_safe( $data );
 	}
 
 	private function string_field( mixed $value, string $default = '' ): string {
@@ -562,7 +601,7 @@ class PDX_Updater {
 				'url'     => $body['html_url'] ?? 'https://github.com/' . self::GITHUB_REPO,
 				'name'    => 'PaxDesign Utility Dock',
 				'notes'   => $body['body'] ?? '',
-				'error'   => null,
+				'error'   => '',
 			]
 		);
 
@@ -581,19 +620,23 @@ class PDX_Updater {
 	private function normalize_release_data( array $data ): array {
 		$fallback_url = 'https://github.com/' . self::GITHUB_REPO;
 
-		$data['version'] = isset( $data['version'] ) && null !== $data['version'] ? (string) $data['version'] : '';
-		$data['package'] = isset( $data['package'] ) && null !== $data['package'] ? (string) $data['package'] : '';
-		$data['url']     = ( isset( $data['url'] ) && null !== $data['url'] && '' !== (string) $data['url'] ) ? (string) $data['url'] : $fallback_url;
-		$data['name']    = ( isset( $data['name'] ) && null !== $data['name'] && '' !== (string) $data['name'] ) ? (string) $data['name'] : 'PaxDesign Utility Dock';
-		$data['notes']   = isset( $data['notes'] ) && null !== $data['notes'] ? (string) $data['notes'] : '';
-		// 'error' must be a string or absent — never null (null triggers PHP 8.1 warnings in core).
-		if ( array_key_exists( 'error', $data ) ) {
-			$data['error'] = null !== $data['error'] ? (string) $data['error'] : '';
-		} else {
-			$data['error'] = '';
+		$normalized = [
+			'version' => $this->string_field( $data['version'] ?? null, '' ),
+			'package' => $this->string_field( $data['package'] ?? null, '' ),
+			'url'     => $this->string_field( $data['url'] ?? null, $fallback_url ),
+			'name'    => $this->string_field( $data['name'] ?? null, 'PaxDesign Utility Dock' ),
+			'notes'   => $this->string_field( $data['notes'] ?? null, '' ),
+			'error'   => $this->string_field( $data['error'] ?? null, '' ),
+		];
+
+		if ( '' === $normalized['url'] ) {
+			$normalized['url'] = $fallback_url;
+		}
+		if ( '' === $normalized['name'] ) {
+			$normalized['name'] = 'PaxDesign Utility Dock';
 		}
 
-		return $data;
+		return $normalized;
 	}
 
 	/**
@@ -643,7 +686,7 @@ class PDX_Updater {
 			return $update;
 		}
 
-		$update_uri = isset( $plugin_data['UpdateURI'] ) ? (string) $plugin_data['UpdateURI'] : '';
+		$update_uri = $this->string_field( $plugin_data['UpdateURI'] ?? null, '' );
 		if ( '' === $update_uri ) {
 			return $update;
 		}
@@ -671,17 +714,40 @@ class PDX_Updater {
 			return false;
 		}
 
+		return $this->normalize_update_uri_payload(
+			[
+				'slug'         => PDX_SLUG,
+				'version'      => $release['version'],
+				'url'          => $release['url'],
+				'package'      => $release['package'],
+				'tested'       => $this->wp_version_for_update_meta(),
+				'requires'     => '6.0',
+				'requires_php' => '8.0',
+				'icons'        => [],
+				'banners'      => [],
+				'banners_rtl'  => [],
+			]
+		);
+	}
+
+	/**
+	 * Update URI hook payloads must be JSON-serializable with string values only.
+	 *
+	 * @param array<string, mixed> $payload
+	 * @return array<string, mixed>
+	 */
+	private function normalize_update_uri_payload( array $payload ): array {
 		return [
-			'slug'         => PDX_SLUG,
-			'version'      => $release['version'],
-			'url'          => $release['url'],
-			'package'      => $release['package'],
-			'tested'       => $this->wp_version_for_update_meta(),
-			'requires'     => '6.0',
-			'requires_php' => '8.0',
-			'icons'        => [],
-			'banners'      => [],
-			'banners_rtl'  => [],
+			'slug'         => $this->string_field( $payload['slug'] ?? null, PDX_SLUG ),
+			'version'      => $this->string_field( $payload['version'] ?? null, '' ),
+			'url'          => $this->string_field( $payload['url'] ?? null, self::UPDATE_URI ),
+			'package'      => $this->string_field( $payload['package'] ?? null, '' ),
+			'tested'       => $this->string_field( $payload['tested'] ?? null, $this->wp_version_for_update_meta() ),
+			'requires'     => $this->string_field( $payload['requires'] ?? null, '6.0' ),
+			'requires_php' => $this->string_field( $payload['requires_php'] ?? null, '8.0' ),
+			'icons'        => $this->sanitize_url_map( $payload['icons'] ?? null ),
+			'banners'      => $this->sanitize_url_map( $payload['banners'] ?? null ),
+			'banners_rtl'  => $this->sanitize_url_map( $payload['banners_rtl'] ?? null ),
 		];
 	}
 
@@ -705,6 +771,13 @@ class PDX_Updater {
 	 * Drop PaxDesign rows from both update buckets (e.g. GitHub fetch failed).
 	 */
 	private function clear_pdx_update_transient_entries( object $transient ): void {
+		if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+			$transient->response = [];
+		}
+		if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
+			$transient->no_update = [];
+		}
+
 		foreach ( $this->update_transient_basenames() as $plugin ) {
 			unset( $transient->response[ $plugin ], $transient->no_update[ $plugin ] );
 		}
@@ -845,7 +918,8 @@ class PDX_Updater {
 	}
 
 	public function plugins_api( $result, $action, $args ) {
-		if ( 'plugin_information' !== $action || ( $args->slug ?? '' ) !== PDX_SLUG ) {
+		$slug = is_object( $args ) ? $this->string_field( $args->slug ?? null, '' ) : '';
+		if ( 'plugin_information' !== $action || PDX_SLUG !== $slug ) {
 			return $result;
 		}
 
