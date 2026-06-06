@@ -59,6 +59,11 @@ class PDX_Scan_Orchestrator {
 			$target_type
 		);
 		$report['confidence'] = $this->intel->compute_confidence( $report['source_status'], $target_type );
+		$report['report_quality'] = $this->intel->assess_report_quality(
+			$report['source_status'],
+			$target_type,
+			$report['risk']
+		);
 
 		$narrative = $this->intel->build_narrative( $report['target'], $report );
 		$report['ai_summary']      = $narrative['summary'];
@@ -102,6 +107,7 @@ class PDX_Scan_Orchestrator {
 		$dns     = $sources['dns'] ?? [];
 		$geo     = $sources['geo'] ?? $sources['geolocation'] ?? [];
 		$rdap    = $sources['rdap'] ?? [];
+		$ip_net  = $sources['ip_network'] ?? [];
 
 		$phish = $url_forensics['phishing'] ?? [];
 		$phish_verdict = $phish['verdict'] ?? null;
@@ -124,8 +130,10 @@ class PDX_Scan_Orchestrator {
 			'external_form_action'=> ! empty( $url_forensics['page_signals']['external_form_action'] ),
 			'malware_indicators'  => (array) ( $phish['malware_indicators'] ?? [] ),
 			'asn'                 => $geo['asn'] ?? null,
-			'org'                 => $geo['org'] ?? $geo['isp'] ?? null,
+			'org'                 => $geo['org'] ?? $geo['isp'] ?? $ip_net['organization'] ?? null,
 			'registrar'           => $rdap['registrar'] ?? null,
+			'network_org'         => $ip_net['organization'] ?? null,
+			'network_cidr'        => $ip_net['cidr'] ?? null,
 			'mx_configured'       => ! empty( $dns['mx'] ),
 			'spf_configured'      => ! empty( $dns['spf'] ),
 			'dmarc_configured'    => ! empty( $dns['dmarc'] ),

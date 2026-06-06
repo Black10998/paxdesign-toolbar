@@ -474,11 +474,20 @@ class PDX_REST_API {
 		$module_id = $req->get_param( 'module_id' );
 		if ( ! $this->commerce->is_configured() ) return new WP_REST_Response( [ 'error' => 'Payment system not configured.' ], 503 );
 
+		$pending = PDX_Access::get_by_order( (string) $order_id );
+		if ( ! $pending || 'pending' !== ( $pending['status'] ?? '' ) ) {
+			return new WP_REST_Response( [ 'error' => 'No pending order found for this payment.' ], 404 );
+		}
+		if ( ( $pending['module_id'] ?? '' ) !== $module_id ) {
+			return new WP_REST_Response( [ 'error' => 'Module does not match the pending order.' ], 400 );
+		}
+
 		$capture = $this->commerce->capture_order( $order_id );
 		if ( is_wp_error( $capture ) ) return new WP_REST_Response( [ 'error' => $capture->get_error_message() ], 502 );
 		if ( ( $capture['status'] ?? '' ) !== 'COMPLETED' ) return new WP_REST_Response( [ 'error' => 'Payment not completed.', 'status' => $capture['status'] ?? '' ], 402 );
 
-		$payer_email = $capture['payer']['email_address'] ?? '';
+		$payer_email  = $capture['payer']['email_address'] ?? '';
+		$module_granted = (string) $pending['module_id'];
 		PDX_Access::activate( $order_id, $payer_email ?: null );
 
 		if ( ! is_user_logged_in() ) {
@@ -487,10 +496,10 @@ class PDX_REST_API {
 				$token = wp_generate_password( 32, false );
 				setcookie( 'pdx_guest', $token, time() + YEAR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
 			}
-			PDX_Access::grant_guest_access( $token, $module_id );
+			PDX_Access::grant_guest_access( $token, $module_granted );
 		}
 
-		return new WP_REST_Response( [ 'ok' => true, 'status' => 'active', 'module_id' => $module_id, 'message' => 'Payment confirmed. Access unlocked.' ], 200 );
+		return new WP_REST_Response( [ 'ok' => true, 'status' => 'active', 'module_id' => $module_granted, 'message' => 'Payment confirmed. Access unlocked.' ], 200 );
 	}
 
 	/* ── Access status ───────────────────────────────────── */

@@ -2605,6 +2605,14 @@ body.pdx-no-scroll { overflow: hidden !important; }
   background: var(--pdx-accent, var(--pdx-accent)); flex-shrink: 0;
 }
 .pdx-scan-complete-time { margin-left: auto; font: 11px/1 var(--pdx-mono, monospace); color: var(--pdx-mid, #8b949e); }
+.pdx-scan-complete--warn {
+  background: rgba(255, 193, 7, 0.08);
+  border-color: rgba(255, 193, 7, 0.28);
+  color: var(--pdx-warn, #c9a227);
+}
+.pdx-scan-complete--warn .pdx-scan-complete-dot {
+  background: var(--pdx-warn, #c9a227);
+}
 
 .pdx-source-row {
   display: flex; align-items: center; gap: 6px;
@@ -2616,6 +2624,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 .pdx-source-status { font-size: 10px; color: var(--pdx-mid, #8b949e); }
 .pdx-source-status--ok   { color: var(--pdx-green, var(--pdx-accent)); }
 .pdx-source-status--warn { color: var(--pdx-yellow, var(--pdx-warn)); }
+.pdx-source-status--na   { color: var(--pdx-mid, #8b949e); }
 
 .pdx-ioc-chip-v5 {
   display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 3px;

@@ -767,7 +767,7 @@
         data: data,
         paymentRequired: data.error === 'payment_required',
       });
-      addToScanHistory('trust', domain, data.risk);
+      addToScanHistory('trust', scanTarget, data.risk);
       renderScanHistory('trust');
       if (data.workspace_id) showNotif('Scan saved to workspace', 'info');
       if (data.anomalies && data.anomalies.length) showNotif('Anomaly detected: ' + data.anomalies[0].message, 'warn');
@@ -796,8 +796,11 @@
         };
       }
       var geo       = src.geo || src.geolocation || {};
+      var ipNetwork = src.ip_network || {};
+      var reverseDns = src.reverse_dns || {};
       var hibp      = src.hibp || {};
       var srcStatus = data.source_status || {};
+      var banner    = scanBannerMeta(data, displayTarget, 'Analysis complete');
       var anomalies = data.anomalies  || [];
       var behavioral= data.behavioral || [];
       var confidence= data.confidence != null ? data.confidence : (risk.confidence || 0);
@@ -829,11 +832,9 @@
       var html = '<div class="pdx-result">';
 
       /* ── Scan complete banner ── */
-      html += '<div class="pdx-scan-complete' + (verdict === 'insufficient_data' ? ' pdx-scan-complete--warn' : '') + '">' +
+      html += '<div class="pdx-scan-complete' + (banner.warn ? ' pdx-scan-complete--warn' : '') + '">' +
         '<div class="pdx-scan-complete-dot"></div>' +
-        '<span>' + (verdict === 'insufficient_data'
-          ? 'Insufficient data — could not verify safety for ' + escHtml(displayTarget)
-          : 'Analysis complete — ' + escHtml(displayTarget)) + '</span>' +
+        '<span>' + escHtml(banner.message) + '</span>' +
         '<span class="pdx-scan-complete-time">' + (data.duration ? data.duration + 's' : '') + '</span>' +
       '</div>';
 
@@ -853,7 +854,7 @@
           '<div class="pdx-risk-ring-label"><div class="pdx-risk-ring-num">' + score + '</div><div class="pdx-risk-ring-text">Risk</div></div>' +
         '</div>' +
         '<div class="pdx-risk-meta">' +
-          '<div class="pdx-risk-domain">' + escHtml(domain) + '</div>' +
+          '<div class="pdx-risk-domain">' + escHtml(displayTarget) + '</div>' +
           '<div style="margin-top:4px"><span class="pdx-tag" style="background:' + ringStroke + '22;color:' + ringStroke + ';border-color:' + ringStroke + '44">' + verdictLabel + '</span></div>' +
           (data.scan_id ? '<div class="pdx-risk-scan-id" style="margin-top:6px">Scan ID: ' + escHtml(data.scan_id) + '</div>' : '') +
         '</div>' +
@@ -921,8 +922,44 @@
         html += '</div>';
       }
 
-      /* ── RDAP / Registration ── */
-      if (rdap.registrar || rdap.registered) {
+      /* ── IP Network Registration (IP targets only) ── */
+      if (targetType === 'ip' && (ipNetwork.organization || ipNetwork.cidr || ipNetwork.handle || srcStatus.ip_network)) {
+        html += '<div class="pdx-evidence-section" id="pdx-trust-ip-network">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            'IP Network Registration <span class="pdx-evidence-toggle-arrow">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        if (ipNetwork.organization) html += kvRow('Organization', ipNetwork.organization);
+        if (ipNetwork.cidr)         html += kvRow('CIDR', ipNetwork.cidr);
+        if (ipNetwork.asn)          html += kvRow('ASN', ipNetwork.asn);
+        if (ipNetwork.registry)     html += kvRow('Registry', ipNetwork.registry);
+        if (ipNetwork.handle)       html += kvRow('Handle', ipNetwork.handle);
+        if (ipNetwork.start_address) html += kvRow('Start Address', ipNetwork.start_address);
+        if (ipNetwork.end_address)   html += kvRow('End Address', ipNetwork.end_address);
+        if (ipNetwork.country)       html += kvRow('Country', ipNetwork.country);
+        if (ipNetwork.status)        html += kvRow('Status', Array.isArray(ipNetwork.status) ? ipNetwork.status.join(', ') : ipNetwork.status);
+        if (srcStatus.ip_network && srcStatus.ip_network.state === 'error') {
+          html += kvRow('Lookup status', formatSourceStatusNote(srcStatus.ip_network) || 'Registration lookup failed');
+        }
+        html += '</div></div></div>';
+      }
+
+      /* ── Reverse DNS (IP targets only — separate from network registration) ── */
+      if (targetType === 'ip' && (reverseDns.hostname || reverseDns.no_record || srcStatus.reverse_dns)) {
+        html += '<div class="pdx-evidence-section" id="pdx-trust-reverse-dns">' +
+          '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
+            'Reverse DNS (PTR) <span class="pdx-evidence-toggle-arrow">▼</span>' +
+          '</button>' +
+          '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        if (reverseDns.hostname) html += kvRow('PTR Hostname', reverseDns.hostname);
+        else if (reverseDns.no_record) html += kvRow('PTR Record', 'No reverse DNS record');
+        else html += kvRow('PTR Record', formatSourceStatusNote(srcStatus.reverse_dns) || 'Unavailable');
+        if (reverseDns.hostname) html += kvRow('Note', 'PTR hostname reflects DNS naming — not IP network registration ownership.');
+        html += '</div></div></div>';
+      }
+
+      /* ── RDAP / Domain Registration (non-IP targets) ── */
+      if (targetType !== 'ip' && (rdap.registrar || rdap.registered)) {
         html += '<div class="pdx-evidence-section" id="pdx-trust-rdap">' +
           '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
             'Registration & WHOIS <span class="pdx-evidence-toggle-arrow">▼</span>' +
@@ -939,8 +976,8 @@
         html += '</div></div></div>';
       }
 
-      /* ── SSL / TLS ── */
-      if (ssl.grade || ssl.issuer || ssl.subject) {
+      /* ── SSL / TLS (not applicable to raw IPs) ── */
+      if (targetType !== 'ip' && (ssl.grade || ssl.issuer || ssl.subject)) {
         var gradeClass = (ssl.grade === 'A+' || ssl.grade === 'A') ? 'pdx-grade--good' : ssl.grade === 'B' ? 'pdx-grade--warn' : 'pdx-grade--bad';
         html += '<div class="pdx-evidence-section" id="pdx-trust-ssl">' +
           '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
@@ -963,8 +1000,8 @@
         html += '</div></div></div>';
       }
 
-      /* ── DNS Infrastructure ── */
-      if (dns.a || dns.mx || dns.ns || dns.txt) {
+      /* ── DNS Infrastructure (not applicable to raw IPs) ── */
+      if (targetType !== 'ip' && (dns.a || dns.mx || dns.ns || dns.txt)) {
         html += '<div class="pdx-evidence-section" id="pdx-trust-dns">' +
           '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
             'DNS Infrastructure <span class="pdx-evidence-toggle-arrow">▼</span>' +
@@ -981,18 +1018,22 @@
       }
 
       /* ── Threat Intelligence ── */
-      if (threat.malicious !== undefined || threat.feeds) {
+      if (threat.checked || srcStatus.threat || threat.malicious !== undefined) {
         html += '<div class="pdx-evidence-section" id="pdx-trust-threat">' +
           '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
             'Threat Intelligence <span class="pdx-evidence-toggle-arrow">▼</span>' +
           '</button>' +
           '<div class="pdx-evidence-body"><div class="pdx-kv-grid">';
-        if (threat.malicious !== undefined) html += kvRow('Malicious', threat.malicious ? '⚠ Yes' : '✓ No');
-        if (threat.suspicious !== undefined) html += kvRow('Suspicious', threat.suspicious ? '⚠ Yes' : '✓ No');
-        if (threat.harmless !== undefined)   html += kvRow('Harmless engines', safeStr(threat.harmless));
-        if (threat.feeds && threat.feeds.length) html += kvRow('Feed hits', threat.feeds.slice(0,3).join(', '));
-        if (threat.categories && threat.categories.length) html += kvRow('Categories', threat.categories.join(', '));
-        if (threat.last_seen) html += kvRow('Last seen', threat.last_seen);
+        if (!threat.checked) {
+          html += kvRow('Reputation', formatSourceStatusNote(srcStatus.threat) || 'Threat feeds did not respond — not verified clean');
+        } else {
+          if (threat.malicious !== undefined) html += kvRow('Malicious', formatThreatBool(threat.malicious, true));
+          if (threat.suspicious !== undefined) html += kvRow('Suspicious', formatThreatBool(threat.suspicious, true));
+          if (threat.harmless !== undefined)   html += kvRow('Harmless engines', safeStr(threat.harmless));
+          if (threat.feeds && threat.feeds.length) html += kvRow('Feed hits', threat.feeds.slice(0,3).join(', '));
+          if (threat.categories && threat.categories.length) html += kvRow('Categories', threat.categories.join(', '));
+          if (threat.last_seen) html += kvRow('Last seen', threat.last_seen);
+        }
         html += '</div></div></div>';
       }
 
@@ -1008,15 +1049,19 @@
 
       /* ── Intelligence Sources ── */
       html += '<div class="pdx-section"><div class="pdx-section-title">Intelligence Sources</div>';
-      var sources = [
-        { name: 'RDAP / WHOIS Registry',    status: mapSourceState(srcStatus.rdap) || (rdap.registrar ? 'ok' : 'err'),    note: formatSourceStatusNote(srcStatus.rdap) || (rdap.registrar ? 'Data retrieved' : 'Unavailable') },
-        { name: 'SSL Labs Assessment',       status: mapSourceState(srcStatus.ssl) || (ssl.assessed ? 'ok' : 'err'),         note: ssl.assessed ? ('Grade ' + ssl.grade + (formatSourceStatusNote(srcStatus.ssl) ? ' · ' + formatSourceStatusNote(srcStatus.ssl) : '')) : (formatSourceStatusNote(srcStatus.ssl) || 'Not assessed') },
-        { name: 'DNS Resolver',              status: mapSourceState(srcStatus.dns) || ((dns.a && dns.a.length) ? 'ok' : 'err'), note: (dns.a && dns.a.length) ? (dns.a.length + ' A record(s)' + (formatSourceStatusNote(srcStatus.dns) ? ' · ' + formatSourceStatusNote(srcStatus.dns) : '')) : (formatSourceStatusNote(srcStatus.dns) || 'No records') },
-        { name: 'Threat Intelligence Feeds', status: mapSourceState(srcStatus.threat) || (!threat.checked ? 'err' : (threat.malicious > 0 ? 'warn' : (threat.suspicious > 0 ? 'warn' : 'ok'))), note: formatSourceStatusNote(srcStatus.threat) || (!threat.checked ? 'Not checked' : (threat.malicious > 0 ? (threat.malicious + ' malicious') : (threat.suspicious > 0 ? (threat.suspicious + ' suspicious') : 'No malicious hits (open feeds)'))) },
-      ];
-      sources.forEach(function(s) {
+      var sourceRows = buildIntelSourceRows(targetType, {
+        srcStatus: srcStatus,
+        rdap: rdap,
+        ssl: ssl,
+        dns: dns,
+        threat: threat,
+        geo: geo,
+        ipNetwork: ipNetwork,
+        reverseDns: reverseDns
+      });
+      sourceRows.forEach(function(s) {
         html += '<div class="pdx-source-row">' +
-          '<div class="pdx-source-dot" style="background:' + (s.status === 'ok' ? 'var(--pdx-green)' : s.status === 'err' ? 'var(--pdx-red)' : 'var(--pdx-yellow)') + '"></div>' +
+          '<div class="pdx-source-dot" style="background:' + sourceDotColor(s.status) + '"></div>' +
           '<span class="pdx-source-name">' + escHtml(s.name) + '</span>' +
           '<span class="pdx-source-status pdx-source-status--' + s.status + '">' + escHtml(s.note) + '</span>' +
         '</div>';
@@ -1060,7 +1105,7 @@
       }
 
       /* ── AI Intelligence Summary (always shown) ── */
-      var summaryText = data.ai_summary || generateSummary(targetType, domain, data);
+      var summaryText = data.ai_summary || generateSummary(targetType, displayTarget, data);
       var recs = (data.recommendations && data.recommendations.length)
         ? data.recommendations.map(safeStr)
         : generateRecommendations(targetType, data);
@@ -1083,7 +1128,7 @@
       container.innerHTML = html;
 
       var expBtn = container.querySelector('.pdx-export-btn');
-      if (expBtn) expBtn.addEventListener('click', function() { exportJSON('trust-' + domain, data); });
+      if (expBtn) expBtn.addEventListener('click', function() { exportJSON('trust-' + displayTarget.replace(/[^a-z0-9.-]+/gi, '_'), data); });
     }
 
 
@@ -1192,6 +1237,8 @@
     }
 
     function renderOsintResult(container, data, target) {
+      var displayTarget = (data && data.target) ? data.target : target;
+      var targetType = (data && data.target_type) || detectTargetTypeFromString(displayTarget);
       var risk    = data.risk    || {};
       var sources = data.sources || {};
       var paywall = data.paywall;
@@ -1200,16 +1247,27 @@
       var timeline= data.timeline|| [];
       var anomalies = data.anomalies || [];
       var confidence = data.confidence || 0;
+      var srcStatus = data.source_status || {};
+      var threat = sources.threat || {};
+      if (!threat.checked && sources.virustotal && sources.virustotal.malicious !== undefined) {
+        threat = {
+          malicious: sources.virustotal.malicious,
+          suspicious: sources.virustotal.suspicious,
+          harmless: sources.virustotal.harmless,
+          feeds: ['VirusTotal'],
+          categories: sources.virustotal.categories || [],
+          checked: true
+        };
+      }
+      var banner = scanBannerMeta(data, displayTarget, 'OSINT investigation complete');
 
       var scoreColor = risk.verdict === 'clean' ? 'var(--pdx-green)' : risk.verdict === 'low' ? '#7e7e7e' : risk.verdict === 'medium' ? 'var(--pdx-yellow)' : risk.verdict === 'insufficient_data' ? 'var(--pdx-lo)' : 'var(--pdx-red)';
       var html = '<div class="pdx-result">';
 
       /* ── Scan complete banner ── */
-      html += '<div class="pdx-scan-complete' + (risk.verdict === 'insufficient_data' ? ' pdx-scan-complete--warn' : '') + '">' +
+      html += '<div class="pdx-scan-complete' + (banner.warn ? ' pdx-scan-complete--warn' : '') + '">' +
         '<div class="pdx-scan-complete-dot"></div>' +
-        '<span>' + (risk.verdict === 'insufficient_data'
-          ? 'Insufficient data — OSINT could not verify ' + escHtml(target)
-          : 'OSINT investigation complete — ' + escHtml(target)) + '</span>' +
+        '<span>' + escHtml(banner.message) + '</span>' +
         (data.scan_id ? '<span class="pdx-scan-complete-time">' + escHtml(data.scan_id) + '</span>' : '') +
       '</div>';
 
@@ -1225,7 +1283,7 @@
             '<div class="pdx-risk-ring-label"><div class="pdx-risk-ring-num">' + risk.score + '</div><div class="pdx-risk-ring-text">Risk</div></div>' +
           '</div>' +
           '<div class="pdx-risk-meta">' +
-            '<div class="pdx-risk-domain">' + escHtml(target) + '</div>' +
+            '<div class="pdx-risk-domain">' + escHtml(displayTarget) + '</div>' +
             '<div style="margin-top:4px"><span class="pdx-tag" style="background:' + ringStroke + '22;color:' + ringStroke + '">' + escHtml(risk.label || risk.verdict || 'Unknown') + '</span></div>' +
           '</div>' +
           (data.paid ? '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn">Export</button>' : '') +
@@ -1250,19 +1308,32 @@
       var srcKeys = Object.keys(sources);
       /* Friendly labels and field renderers per source type */
       var srcMeta = {
-        rdap:    { label: 'Domain Registration (RDAP/WHOIS)', icon: 'rdap' },
-        whois:   { label: 'WHOIS Record',                     icon: 'whois' },
-        ssl:     { label: 'SSL / TLS Certificate',            icon: 'ssl-cert' },
-        dns:     { label: 'DNS Infrastructure',               icon: 'dns-records' },
-        geo:     { label: 'Geolocation & Network',            icon: 'geo-pin' },
-        vt:      { label: 'VirusTotal Analysis',              icon: 'virus-scan' },
-        shodan:  { label: 'Shodan Infrastructure',            icon: 'shodan-radar' },
-        hibp:    { label: 'Data Breach Check (HIBP)',         icon: 'breach-check' },
-        hunter:  { label: 'Email Discovery (Hunter.io)',      icon: 'email-hunter' },
-        abuse:   { label: 'Abuse.ch Intelligence',            icon: 'abuse-ch' },
-        threat:  { label: 'Threat Intelligence Feeds',        icon: 'threat-feed' },
+        ip_network: { label: 'IP Network Registration',          icon: 'rdap' },
+        reverse_dns:{ label: 'Reverse DNS (PTR)',                icon: 'dns-records' },
+        rdap:       { label: 'Domain Registration (RDAP/WHOIS)', icon: 'rdap' },
+        whois:      { label: 'WHOIS Record',                     icon: 'whois' },
+        ssl:        { label: 'SSL / TLS Certificate',            icon: 'ssl-cert' },
+        dns:        { label: 'DNS Infrastructure',               icon: 'dns-records' },
+        geo:        { label: 'Geolocation & Network',            icon: 'geo-pin' },
+        geolocation:{ label: 'Geolocation & Network',            icon: 'geo-pin' },
+        vt:         { label: 'VirusTotal Analysis',              icon: 'virus-scan' },
+        virustotal: { label: 'VirusTotal Analysis',              icon: 'virus-scan' },
+        shodan:     { label: 'Shodan Infrastructure',            icon: 'shodan-radar' },
+        hibp:       { label: 'Data Breach Check (HIBP)',         icon: 'breach-check' },
+        hunter:     { label: 'Email Discovery (Hunter.io)',      icon: 'email-hunter' },
+        abuse:      { label: 'Abuse.ch Intelligence',            icon: 'abuse-ch' },
+        threat:     { label: 'Threat Intelligence Feeds',        icon: 'threat-feed' },
+        url_forensics: { label: 'URL Forensics',                 icon: 'threat-feed' },
       };
-      srcKeys.forEach(function(key) {
+      var srcOrder = targetType === 'ip'
+        ? ['ip_network', 'reverse_dns', 'geo', 'geolocation', 'threat', 'virustotal', 'shodan']
+        : targetType === 'hash'
+        ? ['threat', 'virustotal']
+        : ['rdap', 'dns', 'ssl', 'geo', 'geolocation', 'threat', 'virustotal', 'shodan', 'hunter', 'hibp', 'url_forensics'];
+      var seenKeys = {};
+      srcOrder.concat(srcKeys).forEach(function(key) {
+        if (seenKeys[key]) return;
+        seenKeys[key] = true;
         var src = sources[key];
         if (!src) return;
         var meta  = srcMeta[key] || {};
@@ -1280,7 +1351,10 @@
           /* Format value nicely */
           var valStr = safeStr(v);
           /* Special formatting */
-          if (k === 'malicious' || k === 'suspicious') valStr = v ? '⚠ Yes' : '✓ No';
+          if (k === 'malicious' || k === 'suspicious') {
+            if (key === 'threat' && !src.checked) valStr = 'Not verified';
+            else valStr = formatThreatBool(!!v, key !== 'threat' || src.checked);
+          }
           if (k === 'breached')  valStr = v ? '⚠ Breached' : '✓ Not found';
           if (k === 'proxy' || k === 'tor' || k === 'hosting') valStr = v ? '⚠ Yes' : 'No';
           if (k === 'age_days' && typeof v === 'number') valStr = v + ' days' + (v < 30 ? ' ⚠ Very new' : v < 180 ? ' ⚠ Recent' : '');
@@ -1387,14 +1461,14 @@
       html += '</div>';
       savePanelState('osint', {
         view: 'result',
-        target: target,
+        target: displayTarget,
         data: data,
         paymentRequired: data.error === 'payment_required',
       });
       container.innerHTML = html;
 
       var expBtn = container.querySelector('.pdx-export-btn');
-      if (expBtn) expBtn.addEventListener('click', function() { exportJSON('osint-' + target, data); });
+      if (expBtn) expBtn.addEventListener('click', function() { exportJSON('osint-' + displayTarget.replace(/[^a-z0-9.-]+/gi, '_'), data); });
       var unlockBtn = container.querySelector('.pdx-unlock-btn');
       if (unlockBtn) unlockBtn.addEventListener('click', function() { initiatePayment('osint', parseFloat(unlockBtn.dataset.price), unlockBtn.dataset.currency); });
     }
@@ -2858,12 +2932,14 @@
           win.pdxStopAiStageRotator('#' + cfg.id);
         }
         setBtnBusy(btn, false);
-        if (!apiData || apiData.error) {
+        if (!apiData || apiData.error || apiData._ok === false) {
           if (cfg.onError) cfg.onError(resultEl, apiData);
           else {
+            var errDetail = (apiData && (apiData.error || apiData.message)) ? ': ' + (apiData.error || apiData.message) : '';
             resultEl.innerHTML =
               '<div class="pdx-error">' +
               escHtml(cfg.errorMsg || 'Operation failed. Please try again.') +
+              escHtml(errDetail) +
               '</div>';
           }
           return;
@@ -3432,7 +3508,114 @@
       if (!st || !st.state) return '';
       if (st.state === 'ok') return 'ok';
       if (st.state === 'partial') return 'warn';
+      if (st.state === 'skipped') return 'na';
       return 'err';
+    }
+
+    function sourceDotColor(status) {
+      if (status === 'ok') return 'var(--pdx-green)';
+      if (status === 'warn') return 'var(--pdx-yellow)';
+      if (status === 'na') return 'var(--pdx-mute, #484f58)';
+      return 'var(--pdx-red)';
+    }
+
+    function isReportUnreliable(data) {
+      var risk = (data && data.risk) || {};
+      var q = (data && data.report_quality) || {};
+      if (risk.verdict === 'insufficient_data') return true;
+      if (q.reliable === false) return true;
+      if (q.failed_sources && q.failed_sources.length) return true;
+      return false;
+    }
+
+    function scanBannerMeta(data, displayTarget, completePrefix) {
+      var unreliable = isReportUnreliable(data);
+      var q = (data && data.report_quality) || {};
+      var msg = unreliable
+        ? (q.message || 'Insufficient or failed intelligence — do not treat as verified safe') + ' — ' + displayTarget
+        : (completePrefix || 'Analysis complete') + ' — ' + displayTarget;
+      return { warn: unreliable, message: msg };
+    }
+
+    function formatThreatBool(val, checked) {
+      if (!checked) return 'Not verified';
+      return val ? '⚠ Yes' : '✓ No (feeds checked)';
+    }
+
+    function buildIntelSourceRows(targetType, ctx) {
+      var rows = [];
+      var threatNote = function () {
+        if (!ctx.threat.checked) return formatSourceStatusNote(ctx.srcStatus.threat) || 'Not checked — reputation unverified';
+        if (ctx.threat.malicious > 0) return (ctx.threat.malicious + ' malicious') + (formatSourceStatusNote(ctx.srcStatus.threat) ? ' · ' + formatSourceStatusNote(ctx.srcStatus.threat) : '');
+        if (ctx.threat.suspicious > 0) return (ctx.threat.suspicious + ' suspicious') + (formatSourceStatusNote(ctx.srcStatus.threat) ? ' · ' + formatSourceStatusNote(ctx.srcStatus.threat) : '');
+        return formatSourceStatusNote(ctx.srcStatus.threat) || 'No malicious hits (feeds checked)';
+      };
+      var threatStatus = mapSourceState(ctx.srcStatus.threat) || (!ctx.threat.checked ? 'err' : (ctx.threat.malicious > 0 ? 'warn' : (ctx.threat.suspicious > 0 ? 'warn' : 'ok')));
+
+      if (targetType === 'ip') {
+        rows.push({
+          name: 'IP Network Registration (RDAP)',
+          status: mapSourceState(ctx.srcStatus.ip_network) || (ctx.ipNetwork && (ctx.ipNetwork.organization || ctx.ipNetwork.cidr) ? 'ok' : 'err'),
+          note: formatSourceStatusNote(ctx.srcStatus.ip_network) || (ctx.ipNetwork && ctx.ipNetwork.organization ? 'Network data retrieved' : 'Unavailable')
+        });
+        rows.push({
+          name: 'Reverse DNS (PTR)',
+          status: mapSourceState(ctx.srcStatus.reverse_dns) || (ctx.reverseDns && ctx.reverseDns.hostname ? 'ok' : (ctx.reverseDns && ctx.reverseDns.no_record ? 'na' : 'err')),
+          note: formatSourceStatusNote(ctx.srcStatus.reverse_dns) || (ctx.reverseDns && ctx.reverseDns.hostname ? ctx.reverseDns.hostname : (ctx.reverseDns && ctx.reverseDns.no_record ? 'No PTR record' : 'Unavailable'))
+        });
+        rows.push({
+          name: 'Geolocation & ASN',
+          status: mapSourceState(ctx.srcStatus.geo) || (ctx.geo && ctx.geo.country ? 'ok' : 'err'),
+          note: formatSourceStatusNote(ctx.srcStatus.geo) || (ctx.geo && ctx.geo.country ? [ctx.geo.country, ctx.geo.asn || ctx.geo.org].filter(Boolean).join(' · ') : 'Unavailable')
+        });
+        rows.push({ name: 'Threat Intelligence Feeds', status: threatStatus, note: threatNote() });
+        return rows;
+      }
+
+      if (targetType === 'hash') {
+        rows.push({ name: 'Threat Intelligence Feeds', status: threatStatus, note: threatNote() });
+        return rows;
+      }
+
+      if (targetType === 'email') {
+        rows.push({
+          name: 'Domain Registration (RDAP)',
+          status: mapSourceState(ctx.srcStatus.rdap) || (ctx.rdap.registrar ? 'ok' : 'err'),
+          note: formatSourceStatusNote(ctx.srcStatus.rdap) || (ctx.rdap.registrar ? 'Data retrieved' : 'Unavailable')
+        });
+        rows.push({
+          name: 'DNS / Email Auth',
+          status: mapSourceState(ctx.srcStatus.dns) || ((ctx.dns.mx && ctx.dns.mx.length) || ctx.dns.spf ? 'ok' : 'err'),
+          note: formatSourceStatusNote(ctx.srcStatus.dns) || ((ctx.dns.mx && ctx.dns.mx.length) ? ctx.dns.mx.length + ' MX record(s)' : 'No MX/SPF data')
+        });
+        rows.push({ name: 'Threat Intelligence Feeds', status: threatStatus, note: threatNote() });
+        return rows;
+      }
+
+      rows.push({
+        name: 'RDAP / WHOIS Registry',
+        status: mapSourceState(ctx.srcStatus.rdap) || (ctx.rdap.registrar ? 'ok' : 'err'),
+        note: formatSourceStatusNote(ctx.srcStatus.rdap) || (ctx.rdap.registrar ? 'Data retrieved' : 'Unavailable')
+      });
+      rows.push({
+        name: 'SSL Labs Assessment',
+        status: mapSourceState(ctx.srcStatus.ssl) || (ctx.ssl.assessed ? 'ok' : (mapSourceState(ctx.srcStatus.ssl) === 'na' ? 'na' : 'err')),
+        note: ctx.ssl.assessed ? ('Grade ' + ctx.ssl.grade + (formatSourceStatusNote(ctx.srcStatus.ssl) ? ' · ' + formatSourceStatusNote(ctx.srcStatus.ssl) : '')) : (formatSourceStatusNote(ctx.srcStatus.ssl) || 'Not assessed')
+      });
+      rows.push({
+        name: 'DNS Resolver',
+        status: mapSourceState(ctx.srcStatus.dns) || ((ctx.dns.a && ctx.dns.a.length) ? 'ok' : 'err'),
+        note: (ctx.dns.a && ctx.dns.a.length) ? (ctx.dns.a.length + ' A record(s)' + (formatSourceStatusNote(ctx.srcStatus.dns) ? ' · ' + formatSourceStatusNote(ctx.srcStatus.dns) : '')) : (formatSourceStatusNote(ctx.srcStatus.dns) || 'No records')
+      });
+      if (targetType === 'url') {
+        rows.push({
+          name: 'URL Forensics',
+          status: mapSourceState(ctx.srcStatus.url_forensics) || 'na',
+          note: formatSourceStatusNote(ctx.srcStatus.url_forensics) || 'Redirect & page analysis'
+        });
+      }
+      rows.push({ name: 'Threat Intelligence Feeds', status: threatStatus, note: threatNote() });
+      return rows;
     }
 
     /* ══════════════════════════════════════════════════════
@@ -3496,11 +3679,14 @@
 
       if (type === 'ip') {
         var geo = (data.sources && data.sources.geo) || {};
+        var ipNet = (data.sources && data.sources.ip_network) || {};
         var country = geo.country || '';
-        var asn = geo.asn || geo.org || '';
+        var asn = geo.asn || geo.org || ipNet.organization || '';
         var parts = ['IP address ' + target + ' analysis completed — ' + verdictText + '.'];
+        if (ipNet.organization) parts.push('Network registrant: ' + ipNet.organization + (ipNet.cidr ? ' (' + ipNet.cidr + ')' : '') + '.');
         if (country) parts.push('Geolocation: ' + country + (asn ? ' (' + asn + ')' : '') + '.');
-        if (threat.malicious) parts.push('This IP has been flagged by threat intelligence feeds.');
+        if (threat.checked && threat.malicious) parts.push('This IP has been flagged by threat intelligence feeds.');
+        else if (!threat.checked) parts.push('Threat feed reputation was not verified.');
         if (anomalies.length) parts.push(anomalies.length + ' anomal' + (anomalies.length === 1 ? 'y' : 'ies') + ' detected.');
         parts.push('Risk score: ' + score + '/100.');
         return parts.join(' ');
@@ -3565,6 +3751,8 @@
     function generateRecommendations(type, data) {
       var recs = [];
       var risk   = data.risk   || {};
+      var quality = data.report_quality || {};
+      var reliable = quality.reliable !== false && risk.verdict !== 'insufficient_data';
       var rdap   = (data.sources && data.sources.rdap) || {};
       var ssl    = (data.sources && data.sources.ssl)  || {};
       var dns    = (data.sources && data.sources.dns)  || {};
@@ -3576,11 +3764,12 @@
         if (ssl.grade && ssl.grade !== 'A+' && ssl.grade !== 'A') recs.push('SSL/TLS configuration should be reviewed. Consider enabling HSTS and upgrading cipher suites.');
         if (!dns.spf)   recs.push('No SPF record detected. Configure SPF to prevent email spoofing from this domain.');
         if (!dns.dmarc) recs.push('No DMARC policy detected. Implement DMARC to protect against domain impersonation.');
-        if (threat.malicious) recs.push('This domain has been flagged as malicious. Block at the network perimeter and investigate any recent connections.');
+        if (threat.checked && threat.malicious) recs.push('This domain has been flagged as malicious. Block at the network perimeter and investigate any recent connections.');
         if (anomalies.length) recs.push('Investigate the detected anomalies — they may indicate infrastructure abuse or compromise.');
       }
       if (type === 'ip') {
-        if (threat.malicious) recs.push('Block this IP at the firewall. It has been flagged by threat intelligence feeds.');
+        if (threat.checked && threat.malicious) recs.push('Block this IP at the firewall. It has been flagged by threat intelligence feeds.');
+        else if (!threat.checked) recs.push('Threat feeds did not respond — do not treat this IP as verified clean.');
         if (anomalies.length) recs.push('Review network logs for connections to/from this IP address.');
       }
       if (type === 'email') {
@@ -3590,12 +3779,14 @@
       }
       if (type === 'hash') {
         var threat2 = (data.sources && data.sources.threat) || {};
-        if (threat2.malicious) recs.push('Quarantine and remove this file immediately. Conduct a full endpoint investigation.');
+        if (threat2.checked && threat2.malicious) recs.push('Quarantine and remove this file immediately. Conduct a full endpoint investigation.');
+        else if (!threat2.checked) recs.push('Hash reputation was not verified — do not assume this file is safe.');
         else recs.push('Continue monitoring — a clean result does not guarantee safety for all environments.');
       }
-      if (!recs.length && risk.verdict === 'insufficient_data') recs.push('Re-run the scan after verifying server outbound HTTPS and API connectivity.');
+      if (!recs.length && !reliable) recs.push('Re-run the scan after verifying server outbound HTTPS and API connectivity.');
+      if (!recs.length && risk.verdict === 'insufficient_data') recs.push('Do not treat this target as safe until intelligence sources return verified data.');
       if (!recs.length && risk.score > 50) recs.push('Elevated risk score detected. Conduct further investigation before trusting this target.');
-      if (!recs.length && (risk.verdict === 'clean' || risk.verdict === 'low')) recs.push('No immediate action required. Continue routine monitoring.');
+      if (!recs.length && reliable && (risk.verdict === 'clean' || risk.verdict === 'low')) recs.push('No immediate action required. Continue routine monitoring.');
       return recs;
     }
 

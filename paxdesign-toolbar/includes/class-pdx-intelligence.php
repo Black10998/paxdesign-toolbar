@@ -53,18 +53,21 @@ class PDX_Intelligence {
 		switch ( $target_type ) {
 			case 'ip':
 				$resolved_ip = $target;
-				$rdap        = $this->fetch_rdap_ip( $target );
-				$report['source_status']['rdap'] = $rdap['status'];
-				if ( ! empty( $rdap['data'] ) ) {
-					$report['sources']['rdap'] = $this->parse_rdap_ip( $rdap['data'] );
+				$ip_rdap     = $this->fetch_rdap_ip( $target );
+				$report['source_status']['ip_network'] = $ip_rdap['status'];
+				if ( ! empty( $ip_rdap['data'] ) ) {
+					$report['sources']['ip_network'] = $this->parse_rdap_ip( $ip_rdap['data'], $target );
 				}
-				$report['source_status']['ssl'] = $this->skipped_status( 'SSL/TLS analysis applies to domains and URLs, not raw IP addresses.' );
+				$report['source_status']['rdap'] = $this->skipped_status( 'Domain WHOIS does not apply to IP addresses — see IP Network Registration.' );
+
+				$report['source_status']['ssl'] = $this->skipped_status( 'SSL/TLS certificate analysis applies to domains and URLs, not raw IP addresses.' );
 
 				$reverse = $this->fetch_reverse_dns( $target );
-				$report['source_status']['dns'] = $reverse['status'];
+				$report['source_status']['reverse_dns'] = $reverse['status'];
 				if ( ! empty( $reverse['data'] ) ) {
-					$report['sources']['dns'] = $reverse['data'];
+					$report['sources']['reverse_dns'] = $reverse['data'];
 				}
+				$report['source_status']['dns'] = $this->skipped_status( 'Forward DNS record lookup is not applicable to IP targets — see Reverse DNS.' );
 				break;
 
 			case 'hash':
@@ -244,6 +247,7 @@ class PDX_Intelligence {
 
 		$report['risk']           = $this->compute_risk( $report['sources'], $report['source_status'], [], $target_type );
 		$report['confidence']     = $this->compute_confidence( $report['source_status'], $target_type );
+		$report['report_quality'] = $this->assess_report_quality( $report['source_status'], $target_type, $report['risk'] );
 		$narrative                = $this->build_narrative( $target, $report );
 		$report['ai_summary']      = $narrative['summary'];
 		$report['recommendations'] = $narrative['recommendations'];
@@ -278,6 +282,13 @@ class PDX_Intelligence {
 				'factors' => [],
 			],
 			'confidence'      => 0,
+			'report_quality'  => [
+				'reliable'        => false,
+				'failed_sources'  => [ 'normalize' ],
+				'skipped_sources' => [],
+				'partial_sources' => [],
+				'message'         => 'Target could not be normalized — no intelligence was collected.',
+			],
 			'ai_summary'      => 'Target could not be normalized: ' . $error->get_error_message(),
 			'recommendations' => [ 'Enter a valid domain (e.g. example.com), IP, or URL without typos.' ],
 			'debug'           => [],
@@ -475,29 +486,48 @@ class PDX_Intelligence {
 	 * @param array<string, mixed> $rdap
 	 * @return array<string, mixed>
 	 */
-	private function parse_rdap_ip( array $rdap ): array {
-		$org  = null;
-		$cidr = $rdap['cidr0_cidrs'][0]['v4prefix'] ?? $rdap['cidr0_cidrs'][0]['v6prefix'] ?? null;
+	private function parse_rdap_ip( array $rdap, string $ip ): array {
+		$org         = null;
+		$cidr_block  = null;
+		$cidr_entry  = $rdap['cidr0_cidrs'][0] ?? null;
+
+		if ( is_array( $cidr_entry ) ) {
+			$prefix = $cidr_entry['v4prefix'] ?? $cidr_entry['v6prefix'] ?? null;
+			$length = $cidr_entry['length'] ?? null;
+			if ( $prefix && null !== $length ) {
+				$cidr_block = $prefix . '/' . $length;
+			} elseif ( $prefix ) {
+				$cidr_block = (string) $prefix;
+			}
+		}
+
 		foreach ( $rdap['entities'] ?? [] as $ent ) {
 			$roles = $ent['roles'] ?? [];
-			if ( ! in_array( 'registrant', $roles, true ) && ! in_array( 'administrative', $roles, true ) ) {
+			if ( ! array_intersect( $roles, [ 'registrant', 'administrative', 'technical' ] ) ) {
 				continue;
 			}
 			$vc = $ent['vcardArray'][1] ?? [];
 			foreach ( $vc as $v ) {
-				if ( 'fn' === ( $v[0] ?? '' ) ) {
-					$org = $v[3];
+				if ( 'fn' === ( $v[0] ?? '' ) && ! empty( $v[3] ) ) {
+					$org = (string) $v[3];
 					break 2;
 				}
 			}
 		}
 
 		return [
-			'label'      => 'IP Registration',
-			'registrar'  => $org ?? 'Unknown',
-			'network'    => $cidr ?? ( $rdap['name'] ?? null ),
-			'country'    => $rdap['country'] ?? null,
-			'status'     => array_slice( $rdap['status'] ?? [], 0, 5 ),
+			'label'        => 'IP Network Registration',
+			'type'         => 'ip_network',
+			'ip'           => $ip,
+			'handle'       => $rdap['handle'] ?? null,
+			'name'         => $rdap['name'] ?? null,
+			'cidr'         => $cidr_block,
+			'organization' => $org,
+			'country'      => $rdap['country'] ?? null,
+			'registry'     => 'RDAP',
+			'start_address'=> $rdap['startAddress'] ?? null,
+			'end_address'  => $rdap['endAddress'] ?? null,
+			'status'       => array_slice( $rdap['status'] ?? [], 0, 5 ),
 		];
 	}
 
@@ -1456,59 +1486,99 @@ class PDX_Intelligence {
 			return 'insufficient_data';
 		}
 
+		$verdict = 'clean';
 		if ( $score >= 75 ) {
-			return 'critical';
-		}
-		if ( $score >= 50 ) {
-			return 'high';
-		}
-		if ( $score >= 25 ) {
-			return 'medium';
-		}
-		if ( $score >= 10 ) {
-			return 'low';
+			$verdict = 'critical';
+		} elseif ( $score >= 50 ) {
+			$verdict = 'high';
+		} elseif ( $score >= 25 ) {
+			$verdict = 'medium';
+		} elseif ( $score >= 10 ) {
+			$verdict = 'low';
 		}
 
-		return 'clean';
+		// Never return Clean unless threat reputation was successfully queried.
+		if ( in_array( $verdict, [ 'clean', 'low' ], true ) && ! $this->threat_reputation_verified( $source_status ) ) {
+			return 'insufficient_data';
+		}
+
+		return $verdict;
+	}
+
+	/**
+	 * Threat feeds must respond successfully before a non-elevated verdict is issued.
+	 */
+	private function threat_reputation_verified( array $source_status ): bool {
+		return 'ok' === ( $source_status['threat']['state'] ?? 'error' );
 	}
 
 	/**
 	 * @param list<array<string, mixed>> $factors
 	 */
 	private function scan_has_sufficient_coverage( array $source_status, string $target_type, array $factors ): bool {
-		$threat_state = $source_status['threat']['state'] ?? 'error';
-
-		if ( 'error' === $threat_state && empty( $factors ) ) {
-			return false;
+		if ( ! empty( $factors ) ) {
+			return true;
 		}
 
 		$required = match ( $target_type ) {
 			'ip'    => [ 'geo', 'threat' ],
 			'hash'  => [ 'threat' ],
 			'email' => [ 'dns', 'threat' ],
-			'url'   => [ 'threat' ],
+			'url'   => [ 'threat', 'url_forensics' ],
 			default => [ 'dns', 'threat' ],
 		};
 
-		$ok = 0;
 		foreach ( $required as $key ) {
 			$state = $source_status[ $key ]['state'] ?? 'error';
-			if ( in_array( $state, [ 'ok', 'partial' ], true ) ) {
-				++$ok;
+			if ( ! in_array( $state, [ 'ok', 'partial' ], true ) ) {
+				return false;
 			}
 		}
 
-		if ( $ok > 0 || ! empty( $factors ) ) {
-			return true;
-		}
+		return true;
+	}
 
-		foreach ( [ 'rdap', 'ssl', 'geo', 'virustotal' ] as $fallback ) {
-			if ( 'ok' === ( $source_status[ $fallback ]['state'] ?? 'skipped' ) ) {
-				return 'error' !== $threat_state;
+	/**
+	 * Summarize whether the report is reliable enough for customer-facing verdicts.
+	 *
+	 * @param array<string, mixed> $risk
+	 * @return array{reliable:bool,failed_sources:list<string>,skipped_sources:list<string>,partial_sources:list<string>,message:string}
+	 */
+	public function assess_report_quality( array $source_status, string $target_type, array $risk = [] ): array {
+		$failed   = [];
+		$skipped  = [];
+		$partial  = [];
+
+		foreach ( $source_status as $key => $meta ) {
+			if ( ! is_array( $meta ) ) {
+				continue;
+			}
+			$state = $meta['state'] ?? 'error';
+			if ( 'error' === $state ) {
+				$failed[] = (string) $key;
+			} elseif ( 'skipped' === $state ) {
+				$skipped[] = (string) $key;
+			} elseif ( 'partial' === $state ) {
+				$partial[] = (string) $key;
 			}
 		}
 
-		return false;
+		$verdict  = (string) ( $risk['verdict'] ?? 'insufficient_data' );
+		$reliable = 'insufficient_data' !== $verdict && empty( $failed ) && $this->scan_has_sufficient_coverage( $source_status, $target_type, (array) ( $risk['factors'] ?? [] ) );
+
+		$message = $reliable
+			? 'Required intelligence sources responded successfully.'
+			: ( ! empty( $failed )
+				? 'One or more required intelligence sources failed — results are not verified safe.'
+				: 'Insufficient intelligence coverage — do not treat this target as verified safe.' );
+
+		return [
+			'reliable'         => $reliable,
+			'failed_sources'   => $failed,
+			'skipped_sources'  => $skipped,
+			'partial_sources'  => $partial,
+			'message'          => $message,
+		];
 	}
 
 	/**
@@ -1516,7 +1586,7 @@ class PDX_Intelligence {
 	 */
 	public function compute_confidence( array $source_status, string $target_type = 'domain' ): int {
 		$weights = match ( $target_type ) {
-			'ip'    => [ 'rdap' => 20, 'dns' => 20, 'geo' => 30, 'threat' => 30 ],
+			'ip'    => [ 'ip_network' => 25, 'reverse_dns' => 15, 'geo' => 30, 'threat' => 30 ],
 			'hash'  => [ 'threat' => 70, 'virustotal' => 30 ],
 			'email' => [ 'rdap' => 20, 'dns' => 35, 'ssl' => 15, 'threat' => 30 ],
 			'url'   => [ 'rdap' => 15, 'dns' => 15, 'ssl' => 15, 'threat' => 35, 'url_forensics' => 20 ],
@@ -1605,8 +1675,11 @@ class PDX_Intelligence {
 			$parts[] = 'HTTP redirect chain: ' . (int) $sources['url_forensics']['redirect_count'] . ' hop(s) analyzed.';
 		}
 
-		if ( ( $status['rdap']['state'] ?? '' ) === 'error' ) {
+		if ( ( $status['rdap']['state'] ?? '' ) === 'error' && 'ip' !== ( $report['target_type'] ?? '' ) ) {
 			$recs[] = 'WHOIS/RDAP lookup failed; registration ownership could not be verified.';
+		}
+		if ( ( $status['ip_network']['state'] ?? '' ) === 'error' && 'ip' === ( $report['target_type'] ?? '' ) ) {
+			$recs[] = 'IP network registration lookup failed; ASN/CIDR ownership could not be verified.';
 		}
 		if ( ( $status['dns']['state'] ?? '' ) === 'error' ) {
 			$recs[] = 'DNS resolution failed from this server; verify resolver connectivity.';

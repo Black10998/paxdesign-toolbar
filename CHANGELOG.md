@@ -1,5 +1,27 @@
 ﻿# Changelog
 
+## 8.7.5 — 2026-06-06
+
+**Platform audit — accuracy, UI honesty, and security hardening**
+
+### Intelligence accuracy
+- IP scans: separate **IP Network Registration** (RDAP) from **Reverse DNS (PTR)** — domain WHOIS never shown for IP targets.
+- Recompute `report_quality` after URL forensics rescore so verdicts reflect full pipeline coverage.
+- IP confidence weights use `ip_network` + `reverse_dns` instead of irrelevant domain RDAP/DNS slots.
+- Server narratives distinguish IP network registration failures from domain WHOIS failures.
+
+### UI / UX honesty
+- Scan banners use `report_quality` — warn when sources failed, not just when verdict is `insufficient_data`.
+- Threat panels show **Not verified** instead of ✓ No when feeds did not respond.
+- Type-aware Intelligence Sources panel (IP, hash, email, domain/URL) with neutral styling for skipped sources.
+- Pipeline treats HTTP/API failures (`_ok === false`) as errors, not success.
+- Recommendations no longer say “No immediate action required” unless the report is reliable.
+
+### Security
+- PayPal capture validates `module_id` against the pending order record before granting access.
+
+**Install:** `releases/paxdesign-toolbar-8.7.5.zip` — tag `v8.7.5`
+
 ## 8.7.4 — 2026-06-06
 
 **Intelligence engine — type-aware routing and scoring**
