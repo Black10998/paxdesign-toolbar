@@ -620,7 +620,25 @@
 }
 
 /* ─── Responsive ────────────────────────────────────────── */
+html:has(#pdx-root) {
+  scrollbar-gutter: stable;
+}
+
 @media (max-width: 680px) {
+  html:has(#pdx-root),
+  body:has(#pdx-root) {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+
+  #pdx-root,
+  #pdx-dock,
+  #pdx-panel,
+  #pdx-panel-inner {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
   #pdx-panel {
     border-radius: var(--pdx-radius-lg) var(--pdx-radius-lg) 0 0;
   }

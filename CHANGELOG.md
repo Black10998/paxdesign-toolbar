@@ -1,5 +1,24 @@
 ﻿# Changelog
 
+## 8.7.3 — 2026-06-06
+
+**UI responsiveness + mobile layout fixes**
+
+### Performance
+- Open dock panels immediately from cached access data instead of waiting for `/pay/status` on every click.
+- Show a compact loading shell only when access data is not yet available.
+- Defer non-critical init requests (billing, workers, queue, teams, SSE) until the browser is idle.
+- Show scan/analysis results as soon as the API responds — staged pipeline animation no longer blocks for 9+ seconds.
+- Faster panel transitions (200ms) and quicker pipeline stage timing.
+
+### Mobile / responsive
+- Remove `100vw !important` panel width that caused horizontal overflow and left-shift on mobile.
+- Fix command palette and graph/investigation panel widths for small viewports.
+- Reset admin dashboard negative margin on narrow screens; clip horizontal overflow.
+- Stabilize scroll lock without layout jump; prevent module header negative margins from bleeding on mobile.
+
+**Install:** `releases/paxdesign-toolbar-8.7.3.zip` — tag `v8.7.3`
+
 ## 8.7.2 — 2026-06-06
 
 **WordPress Plugins screen update fix (8.6.8 → latest)**

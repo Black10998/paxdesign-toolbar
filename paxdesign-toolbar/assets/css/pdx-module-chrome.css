@@ -267,3 +267,20 @@
   height: 1px;
   overflow: hidden;
 }
+
+@media (max-width: 680px) {
+  .pdx-ph--trust .pdx-ph-hd,
+  .pdx-ph--osint .pdx-ph-hd,
+  .pdx-ph--threat .pdx-ph-hd,
+  .pdx-ph--personas .pdx-ph-hd,
+  .pdx-ph--builder .pdx-ph-hd,
+  .pdx-ph--pipeline .pdx-ph-hd,
+  .pdx-ph--automation .pdx-ph-hd,
+  .pdx-ph--investigation .pdx-ph-hd,
+  .pdx-ph--graph .pdx-ph-hd,
+  .pdx-ph--memory .pdx-ph-hd,
+  .pdx-ph--team .pdx-ph-hd {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}

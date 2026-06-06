@@ -28,6 +28,19 @@ body.wp-admin .pdx-admin-wrap {
   }
 }
 
+@media (max-width: 782px) {
+  body.wp-admin .pdx-admin-wrap {
+    margin-left: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+}
+
+body.wp-admin .pdx-shell {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 .pdx-admin-wrap * {
   box-sizing: border-box;
 }

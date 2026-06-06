@@ -37,7 +37,7 @@
     panelState: {},
   };
 
-  var PANEL_ANIM_MS = 280;
+  var PANEL_ANIM_MS = 200;
 
   function panelStateStorageKey(moduleId) {
     var uid = (typeof PDX_CONFIG !== 'undefined' && PDX_CONFIG.userId) ? String(PDX_CONFIG.userId) : '0';
@@ -233,17 +233,17 @@
     function lockBodyScroll() {
       if (_bodyScrollLocked || !isMobileViewport()) return;
       _scrollY = window.scrollY || window.pageYOffset;
-      document.body.style.top   = '-' + _scrollY + 'px';
-      document.body.style.width = '100%';
+      document.documentElement.style.setProperty('--pdx-scroll-lock-top', '-' + _scrollY + 'px');
+      document.documentElement.classList.add('pdx-no-scroll');
       document.body.classList.add('pdx-no-scroll');
       _bodyScrollLocked = true;
     }
 
     function unlockBodyScroll() {
       if (!_bodyScrollLocked) return;
+      document.documentElement.classList.remove('pdx-no-scroll');
       document.body.classList.remove('pdx-no-scroll');
-      document.body.style.top   = '';
-      document.body.style.width = '';
+      document.documentElement.style.removeProperty('--pdx-scroll-lock-top');
       window.scrollTo(0, _scrollY);
       _bodyScrollLocked = false;
     }
@@ -253,6 +253,15 @@
       var target = panel.querySelector('#pdx-panel-close') ||
         panel.querySelector('input, button, [href], textarea, select');
       if (target && target.focus) target.focus();
+    }
+
+    function showPanelLoadingShell() {
+      panelInner = resolvePanelInner();
+      if (!panelInner) return;
+      panelInner.innerHTML =
+        '<div class="pdx-panel-loading" aria-busy="true" aria-live="polite">' +
+          '<div class="pdx-loading">Opening panel…</div>' +
+        '</div>';
     }
 
     function openPanel(moduleId) {
@@ -284,25 +293,41 @@
         b.classList.toggle('is-active', b.dataset.module === mid);
         b.setAttribute('aria-expanded', b.dataset.module === mid ? 'true' : 'false');
       });
-        // Always fetch fresh access status before rendering — this is the
-      // single source of truth for tier/price/locked state. No stale
-      // PDX_CONFIG.modules values are used for access decisions.
-      apiFetch('GET', '/pay/status').then(function(s) {
-        if (s) state.accessStatus = s;
-        // Only render if this open request is still current (prevents stale panel content).
-        if (renderGen !== _panelRenderGen || state.activeModule !== mid || !panel.classList.contains('is-open')) return;
+
+      // Render immediately from cached access — no blank panel while /pay/status loads.
+      if (state.accessStatus) {
         renderPanel(mid);
         injectCloseBtnGlobal();
         focusPanel();
+        var _bodyCached = panel.querySelector('.pdx-ph-body');
+        if (_bodyCached && !state._skipPanelScrollReset) _bodyCached.scrollTop = 0;
+        state._skipPanelScrollReset = false;
+      } else {
+        showPanelLoadingShell();
+        injectCloseBtnGlobal();
+      }
+
+      // Refresh access tier/pricing in background; re-render when data arrives or changes.
+      apiFetch('GET', '/pay/status').then(function(s) {
+        var prevMid = state.accessStatus && state.accessStatus[mid] ? JSON.stringify(state.accessStatus[mid]) : '';
+        if (s) state.accessStatus = s;
+        if (renderGen !== _panelRenderGen || state.activeModule !== mid || !panel.classList.contains('is-open')) return;
+        var nextMid = s && s[mid] ? JSON.stringify(s[mid]) : '';
+        if (!state.accessStatus || prevMid !== nextMid || !panel.querySelector('.pdx-ph')) {
+          renderPanel(mid);
+          injectCloseBtnGlobal();
+          focusPanel();
+        }
         var _body = panel.querySelector('.pdx-ph-body');
         if (_body && !state._skipPanelScrollReset) _body.scrollTop = 0;
         state._skipPanelScrollReset = false;
       }).catch(function() {
-        // Fallback: render with whatever state we have.
         if (renderGen !== _panelRenderGen || state.activeModule !== mid || !panel.classList.contains('is-open')) return;
-        renderPanel(mid);
-        injectCloseBtnGlobal();
-        focusPanel();
+        if (!panel.querySelector('.pdx-ph')) {
+          renderPanel(mid);
+          injectCloseBtnGlobal();
+          focusPanel();
+        }
       });
       if (C.analytics) logEvent(mid, 'panel_open');
     }
@@ -388,8 +413,6 @@
 
     /* ── Load access status ───────────────────────────────── */
     // Fetched once at init so the first openPanel() has state immediately.
-    // openPanel() also re-fetches on every open, so state is always current.
-    // No polling — /pay/status has Cache-Control: no-store so it is always live.
     apiFetch('GET', '/pay/status').then(function(data) {
       if (data) state.accessStatus = data;
     });
@@ -401,37 +424,45 @@
       });
     }
 
-    /* ── v4: Load billing status ──────────────────────────── */
-    apiFetch('GET', '/billing/status').then(function(data) {
-      if (!data) return;
-      state.billingPlan    = data.plan;
-      state.billingCredits = data.credits || 0;
-      updateBillingBadge();
-    });
+    /* ── Defer non-critical prefetch until idle (faster first paint / clicks) ── */
+    function loadDeferredInitData() {
+      apiFetch('GET', '/billing/status').then(function(data) {
+        if (!data) return;
+        state.billingPlan    = data.plan;
+        state.billingCredits = data.credits || 0;
+        updateBillingBadge();
+      });
 
-    /* ── v4: Load worker nodes ────────────────────────────── */
-    apiFetch('GET', '/workers').then(function(data) {
-      if (data && data.workers) {
-        state.workers = data.workers;
-        var workerEl = document.getElementById('pdx-worker-status');
-        if (workerEl) renderWorkerStatus(workerEl);
-      }
-    });
+      apiFetch('GET', '/workers').then(function(data) {
+        if (data && data.workers) {
+          state.workers = data.workers;
+          var workerEl = document.getElementById('pdx-worker-status');
+          if (workerEl) renderWorkerStatus(workerEl);
+        }
+      });
 
-    apiFetch('GET', '/queue/stats').then(function(data) {
-      if (data) {
-        state.queueStats = data;
-        updateQueueBadge(data);
-      }
-    });
+      apiFetch('GET', '/queue/stats').then(function(data) {
+        if (data) {
+          state.queueStats = data;
+          updateQueueBadge(data);
+        }
+      });
 
-    /* ── v4: Load teams ───────────────────────────────────── */
-    apiFetch('GET', '/teams').then(function(data) {
-      if (data && data.teams && data.teams.length) {
-        state.teams = data.teams;
-        state.activeTeam = data.teams[0].team_id;
-      }
-    });
+      apiFetch('GET', '/teams').then(function(data) {
+        if (data && data.teams && data.teams.length) {
+          state.teams = data.teams;
+          state.activeTeam = data.teams[0].team_id;
+        }
+      });
+
+      startLiveStreams();
+    }
+
+    if (typeof win.requestIdleCallback === 'function') {
+      win.requestIdleCallback(loadDeferredInitData, { timeout: 2500 });
+    } else {
+      setTimeout(loadDeferredInitData, 350);
+    }
 
     /* ── v4: SSE activity + queue (pause when tab hidden) ─── */
     function ingestActivityEvents(payload) {
@@ -471,7 +502,9 @@
       startSSE('queue', onQueueSSE);
     }
 
-    startSSEChannels();
+    function startLiveStreams() {
+      startSSEChannels();
+    }
 
     document.addEventListener('visibilitychange', function() {
       if (document.hidden) {
@@ -2741,9 +2774,9 @@
        INTERACTION + PIPELINE ENGINE  v7.0
     ══════════════════════════════════════════════════════ */
 
-    var PDX_PIPELINE_SPEED = 0.28;
+    var PDX_PIPELINE_SPEED = 0.45;
     var PDX_INTEL_MODULES = { trust: 1, osint: 1, threat: 1, investigation: 1, graph: 1 };
-    var PDX_INTEL_MIN_DISPLAY_MS = 9200;
+    var PDX_INTEL_MIN_DISPLAY_MS = 600;
 
     function isIntelModule(mod) {
       return !!(mod && PDX_INTEL_MODULES[mod]);
@@ -2837,7 +2870,13 @@
       }
 
       function tryFinish() {
-        if (!apiDone || !pipelineDone || !minDone) return;
+        if (!apiDone) return;
+        // Show results as soon as the API responds — staged animation is non-blocking.
+        if (apiData !== null) {
+          finish();
+          return;
+        }
+        if (!pipelineDone || !minDone) return;
         finish();
       }
 
