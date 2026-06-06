@@ -10,6 +10,9 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 
 class PDX_Intelligence {
 
+	/** @var array|WP_Error|null Last raw paid-API response for status messaging. */
+	private array|WP_Error|null $last_paid_api_response = null;
+
 	public function __construct( private PDX_Settings $settings ) {}
 
 	/* ── Orchestration ──────────────────────────────────── */
@@ -102,7 +105,8 @@ class PDX_Intelligence {
 		}
 
 		if ( $paid ) {
-			$vt = $this->fetch_virustotal( $target );
+			$vt_key = (string) $this->settings->get( 'api_keys.virustotal', '' );
+			$vt     = $this->fetch_virustotal( $target );
 			if ( $vt ) {
 				$vt_threat = $this->map_vt_to_threat( $vt );
 				$report['sources']['virustotal'] = $vt;
@@ -123,21 +127,40 @@ class PDX_Intelligence {
 					);
 				}
 				$report['source_status']['threat'] = [ 'state' => 'ok', 'message' => 'VirusTotal + open feeds' ];
+				$report['source_status']['virustotal'] = [ 'state' => 'ok', 'message' => 'VirusTotal data retrieved' ];
 				$report['indicators']              = array_merge( $report['indicators'], $this->extract_iocs( $vt ) );
-			}
-
-			$shodan = $this->fetch_shodan( $resolved_ip ?: $target );
-			if ( $shodan ) {
-				$report['sources']['shodan']           = $shodan;
-				$report['source_status']['shodan']     = [ 'state' => 'ok', 'message' => 'Host data retrieved' ];
 			} else {
-				$report['source_status']['shodan'] = [ 'state' => 'skipped', 'message' => 'Shodan API key missing or host not indexed.' ];
+				$report['source_status']['virustotal'] = $this->paid_api_status(
+					'VirusTotal',
+					$this->last_paid_api_response,
+					'' !== $vt_key
+				);
 			}
 
-			$hunter = $this->fetch_hunter( $target );
+			$shodan_key = (string) $this->settings->get( 'api_keys.shodan', '' );
+			$shodan     = $this->fetch_shodan( $resolved_ip ?: $target );
+			if ( $shodan ) {
+				$report['sources']['shodan']       = $shodan;
+				$report['source_status']['shodan'] = [ 'state' => 'ok', 'message' => 'Host data retrieved' ];
+			} else {
+				$report['source_status']['shodan'] = $this->paid_api_status(
+					'Shodan',
+					$this->last_paid_api_response,
+					'' !== $shodan_key
+				);
+			}
+
+			$hunter_key = (string) $this->settings->get( 'api_keys.hunter', '' );
+			$hunter     = $this->fetch_hunter( $target );
 			if ( $hunter ) {
 				$report['sources']['hunter']       = $hunter;
 				$report['source_status']['hunter'] = [ 'state' => 'ok', 'message' => 'Email discovery complete' ];
+			} else {
+				$report['source_status']['hunter'] = $this->paid_api_status(
+					'Hunter.io',
+					$this->last_paid_api_response,
+					'' !== $hunter_key
+				);
 			}
 		}
 
@@ -190,6 +213,33 @@ class PDX_Intelligence {
 	 */
 	private function with_http_log( array $status, array $log ): array {
 		return PDX_Http::enrich_status( $status, $log );
+	}
+
+	/**
+	 * @param array|WP_Error|null $response
+	 * @return array{state:string,message:string}
+	 */
+	private function paid_api_status( string $label, $response, bool $has_key ): array {
+		if ( ! $has_key ) {
+			return [ 'state' => 'skipped', 'message' => $label . ' API key not configured.' ];
+		}
+		if ( is_wp_error( $response ) ) {
+			return [ 'state' => 'partial', 'message' => $label . ' temporarily unavailable.' ];
+		}
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 401 === $code || 403 === $code ) {
+			return [ 'state' => 'partial', 'message' => $label . ' API key rejected or unauthorized.' ];
+		}
+		if ( 404 === $code ) {
+			return [ 'state' => 'skipped', 'message' => $label . ' has no data for this target.' ];
+		}
+		if ( 429 === $code ) {
+			return [ 'state' => 'partial', 'message' => $label . ' rate limit reached. Try again later.' ];
+		}
+		if ( 200 !== $code ) {
+			return [ 'state' => 'partial', 'message' => $label . ' ' . PDX_Http::http_error_message( $code ) . '.' ];
+		}
+		return [ 'state' => 'skipped', 'message' => $label . ' returned no usable data for this target.' ];
 	}
 
 	/* ── RDAP ───────────────────────────────────────────── */
@@ -724,8 +774,14 @@ class PDX_Intelligence {
 		if ( is_wp_error( $resp ) ) {
 			return null;
 		}
+		$code = (int) wp_remote_retrieve_response_code( $resp );
+		if ( 200 !== $code ) {
+			return null;
+		}
 		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
-		if ( ( $data['status'] ?? '' ) !== 'success' ) return null;
+		if ( ! is_array( $data ) || ( $data['status'] ?? '' ) !== 'success' ) {
+			return null;
+		}
 
 		return [
 			'label'    => 'IP Geolocation',
@@ -747,13 +803,19 @@ class PDX_Intelligence {
 
 	public function fetch_virustotal( string $target ): ?array {
 		$key = $this->settings->get( 'api_keys.virustotal', '' );
-		if ( ! $key ) return null;
+		if ( ! $key ) {
+			$this->last_paid_api_response = null;
+			return null;
+		}
 
 		$resp = wp_remote_get(
 			'https://www.virustotal.com/api/v3/domains/' . rawurlencode( $target ),
 			[ 'timeout' => 12, 'headers' => [ 'x-apikey' => $key ] ]
 		);
-		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) return null;
+		$this->last_paid_api_response = $resp;
+		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) {
+			return null;
+		}
 
 		$data  = json_decode( wp_remote_retrieve_body( $resp ), true );
 		$attrs = $data['data']['attributes'] ?? [];
@@ -787,13 +849,19 @@ class PDX_Intelligence {
 
 	public function fetch_shodan( string $target ): ?array {
 		$key = $this->settings->get( 'api_keys.shodan', '' );
-		if ( ! $key ) return null;
+		if ( ! $key ) {
+			$this->last_paid_api_response = null;
+			return null;
+		}
 
 		$resp = wp_remote_get(
 			'https://api.shodan.io/shodan/host/' . rawurlencode( $target ) . '?key=' . rawurlencode( $key ),
 			[ 'timeout' => 10 ]
 		);
-		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) return null;
+		$this->last_paid_api_response = $resp;
+		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) {
+			return null;
+		}
 
 		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
 		if ( empty( $data ) || isset( $data['error'] ) ) return null;
@@ -819,13 +887,19 @@ class PDX_Intelligence {
 
 	public function fetch_hunter( string $domain ): ?array {
 		$key = $this->settings->get( 'api_keys.hunter', '' );
-		if ( ! $key ) return null;
+		if ( ! $key ) {
+			$this->last_paid_api_response = null;
+			return null;
+		}
 
 		$resp = wp_remote_get(
 			'https://api.hunter.io/v2/domain-search?domain=' . rawurlencode( $domain ) . '&api_key=' . rawurlencode( $key ) . '&limit=10',
 			[ 'timeout' => 8 ]
 		);
-		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) return null;
+		$this->last_paid_api_response = $resp;
+		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) {
+			return null;
+		}
 
 		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
 		$d    = $data['data'] ?? [];
@@ -1309,11 +1383,7 @@ class PDX_Intelligence {
 				}
 			}
 
-			// Log NVD failures for debugging without crashing.
-			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
-				$err = is_wp_error( $nvd_resp ) ? $nvd_resp->get_error_message() : "HTTP {$nvd_code}";
-				error_log( "[PDX] NVD API failed for '{$query}': {$err}" );
-			}
+			// NVD miss is expected for many keyword searches — fall through to CIRCL without logging.
 		} catch ( Throwable $e ) {
 			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
 				error_log( '[PDX] fetch_cve NVD block exception: ' . $e->getMessage() );
@@ -1339,10 +1409,6 @@ class PDX_Intelligence {
 					}
 				}
 
-				if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
-					$err = is_wp_error( $circl_resp ) ? $circl_resp->get_error_message() : "HTTP {$circl_code}";
-					error_log( "[PDX] CIRCL API failed for '{$query}': {$err}" );
-				}
 			} else {
 				$circl_url  = 'https://cve.circl.lu/api/search/' . rawurlencode( $query );
 				$circl_resp = wp_remote_get( $circl_url, [ 'timeout' => 10 ] );

@@ -72,21 +72,35 @@ class PDX_Threat_Feeds {
 		if ( ! $host ) {
 			return [ 'state' => 'error', 'message' => 'Invalid domain for OTX lookup.' ];
 		}
-		$http = PDX_Http::get( 'https://otx.alienvault.com/api/v1/indicators/domain/' . rawurlencode( $host ) . '/general', [ 'timeout' => 10 ], 'otx_probe' );
-		if ( is_wp_error( $http['response'] ) ) {
-			return [ 'state' => 'error', 'message' => $http['response']->get_error_message() ];
-		}
-		$code = (int) wp_remote_retrieve_response_code( $http['response'] );
-		if ( 200 !== $code ) {
-			return [ 'state' => 'error', 'message' => "OTX HTTP {$code}" ];
-		}
-		$data = json_decode( wp_remote_retrieve_body( $http['response'] ), true );
-		$pulse = (int) ( $data['pulse_info']['count'] ?? 0 );
-		return [
-			'state'      => 'ok',
-			'message'    => $pulse > 0 ? "{$pulse} pulse(s) for {$host}" : "No pulses for {$host}",
-			'indicators' => $pulse,
-		];
+
+		return PDX_Cache::remember(
+			'feed_probe_otx_' . md5( $host ),
+			300,
+			static function () use ( $host ) {
+				$http = PDX_Http::get(
+					'https://otx.alienvault.com/api/v1/indicators/domain/' . rawurlencode( $host ) . '/general',
+					[ 'timeout' => 10 ],
+					'otx_probe'
+				);
+				if ( is_wp_error( $http['response'] ) ) {
+					return [ 'state' => 'error', 'message' => 'OTX temporarily unavailable.' ];
+				}
+				$code = (int) wp_remote_retrieve_response_code( $http['response'] );
+				if ( 200 !== $code ) {
+					return [
+						'state'   => in_array( $code, [ 401, 403, 404, 429 ], true ) ? 'partial' : 'error',
+						'message' => 'OTX ' . PDX_Http::http_error_message( $code ),
+					];
+				}
+				$data  = json_decode( wp_remote_retrieve_body( $http['response'] ), true );
+				$pulse = (int) ( $data['pulse_info']['count'] ?? 0 );
+				return [
+					'state'      => 'ok',
+					'message'    => $pulse > 0 ? "{$pulse} pulse(s) for {$host}" : "No pulses for {$host}",
+					'indicators' => $pulse,
+				];
+			}
+		);
 	}
 
 	/**
@@ -100,21 +114,38 @@ class PDX_Threat_Feeds {
 		if ( ! $host ) {
 			return [ 'state' => 'error', 'message' => 'Invalid host for URLhaus.' ];
 		}
-		$http = PDX_Http::post(
-			'https://urlhaus-api.abuse.ch/v1/host/',
-			[ 'timeout' => 10, 'body' => [ 'host' => $host ] ],
-			'urlhaus_probe'
+
+		return PDX_Cache::remember(
+			'feed_probe_urlhaus_' . md5( $host ),
+			300,
+			static function () use ( $host ) {
+				$http = PDX_Http::post(
+					'https://urlhaus-api.abuse.ch/v1/host/',
+					[ 'timeout' => 10, 'body' => [ 'host' => $host ] ],
+					'urlhaus_probe'
+				);
+				if ( is_wp_error( $http['response'] ) ) {
+					return [ 'state' => 'error', 'message' => 'URLhaus temporarily unavailable.' ];
+				}
+				$code = (int) wp_remote_retrieve_response_code( $http['response'] );
+				if ( 200 !== $code ) {
+					return [
+						'state'   => in_array( $code, [ 401, 403, 404, 429 ], true ) ? 'partial' : 'error',
+						'message' => 'URLhaus ' . PDX_Http::http_error_message( $code ),
+					];
+				}
+				$data = json_decode( wp_remote_retrieve_body( $http['response'] ), true );
+				if ( ! is_array( $data ) ) {
+					return [ 'state' => 'partial', 'message' => 'URLhaus returned an unexpected response.' ];
+				}
+				$cnt = (int) ( $data['url_count'] ?? 0 );
+				return [
+					'state'      => 'ok',
+					'message'    => $cnt > 0 ? "{$cnt} malicious URL(s)" : 'Host clean in URLhaus',
+					'indicators' => $cnt,
+				];
+			}
 		);
-		if ( is_wp_error( $http['response'] ) ) {
-			return [ 'state' => 'error', 'message' => $http['response']->get_error_message() ];
-		}
-		$data = json_decode( wp_remote_retrieve_body( $http['response'] ), true );
-		$cnt  = (int) ( $data['url_count'] ?? 0 );
-		return [
-			'state'      => 'ok',
-			'message'    => $cnt > 0 ? "{$cnt} malicious URL(s)" : 'Host clean in URLhaus',
-			'indicators' => $cnt,
-		];
 	}
 
 	private static function normalize_host( string $target ): string {

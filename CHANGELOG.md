@@ -1,5 +1,25 @@
 ﻿# Changelog
 
+## 8.7.1 — 2026-06-06
+
+**External API resilience + WordPress update reliability**
+
+### API / intelligence
+- Stop logging every outbound HTTP request; only log actionable failures (skip expected 401/403/404/429 and transient transport errors).
+- Surface third-party failures in `source_status` instead of server error logs.
+- Cache full scan results for 1 hour and threat-feed probes for 5 minutes to reduce duplicate API calls.
+- Fix URLhaus feed probe to validate HTTP status before reporting success.
+- Improve paid API status messages (missing key, auth failure, rate limit, no data).
+- Validate GEO responses by HTTP status; remove noisy NVD/CIRCL miss logging.
+
+### Updater
+- Do not inject GitHub update offers when the installed version is already current.
+- Enforce correct `response` / `no_update` bucket placement on every transient scrub.
+- Recover successful installs when WordPress reports failure but the plugin is healthy and up to date.
+- Refresh PaxDesign update metadata without deleting the entire `update_plugins` transient (avoids side effects on other plugins).
+
+**Install:** `releases/paxdesign-toolbar-8.7.1.zip` — tag `v8.7.1`
+
 ## 8.7.0 — 2026-06-06
 
 **Unified monochrome design system across customer-facing UI**

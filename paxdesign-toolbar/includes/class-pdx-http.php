@@ -68,21 +68,21 @@ class PDX_Http {
 		$duration_ms = (int) round( ( microtime( true ) - $started ) * 1000 );
 
 		$log = [
-			'source'      => $source,
-			'method'      => $method,
-			'url'         => $url,
-			'timeout'     => (int) ( $args['timeout'] ?? 20 ),
-			'sslverify'   => (bool) ( $args['sslverify'] ?? true ),
-			'duration_ms' => $duration_ms,
-			'http_code'   => null,
-			'error'       => null,
-			'parse_status'=> 'n/a',
+			'source'       => $source,
+			'method'       => $method,
+			'url'          => $url,
+			'timeout'      => (int) ( $args['timeout'] ?? 20 ),
+			'sslverify'    => (bool) ( $args['sslverify'] ?? true ),
+			'duration_ms'  => $duration_ms,
+			'http_code'    => null,
+			'error'        => null,
+			'parse_status' => 'n/a',
 		];
 
 		if ( is_wp_error( $response ) ) {
-			$log['error'] = $response->get_error_message();
+			$log['error']        = $response->get_error_message();
 			$log['parse_status'] = 'transport_error';
-			self::$debug_log[] = $log;
+			self::$debug_log[]    = $log;
 			self::write_log( $log );
 			return [ 'response' => $response, 'log' => $log ];
 		}
@@ -91,11 +91,11 @@ class PDX_Http {
 		$body             = wp_remote_retrieve_body( $response );
 		if ( '' === $body && $log['http_code'] >= 400 ) {
 			$log['parse_status'] = 'http_error';
-			$log['error']        = 'HTTP ' . $log['http_code'];
+			$log['error']        = self::http_error_message( $log['http_code'] );
 		} else {
 			$log['parse_status'] = $log['http_code'] >= 200 && $log['http_code'] < 300 ? 'ok' : 'http_error';
 			if ( $log['http_code'] >= 400 ) {
-				$log['error'] = 'HTTP ' . $log['http_code'];
+				$log['error'] = self::http_error_message( $log['http_code'] );
 			}
 		}
 
@@ -106,6 +106,41 @@ class PDX_Http {
 	}
 
 	/**
+	 * Human-readable HTTP status without treating expected API outcomes as hard failures.
+	 */
+	public static function http_error_message( int $code ): string {
+		return match ( true ) {
+			404 === $code => 'Not found',
+			401 === $code => 'Unauthorized',
+			403 === $code => 'Forbidden',
+			429 === $code => 'Rate limited',
+			$code >= 500 => 'Service unavailable',
+			default => 'HTTP ' . $code,
+		};
+	}
+
+	/**
+	 * Expected third-party outcomes that should not pollute server logs.
+	 */
+	public static function is_expected_external_failure( array $log ): bool {
+		if ( ! empty( $log['error'] ) && 'transport_error' === ( $log['parse_status'] ?? '' ) ) {
+			$msg = strtolower( (string) $log['error'] );
+			if ( str_contains( $msg, 'could not resolve host' )
+				|| str_contains( $msg, 'timed out' )
+				|| str_contains( $msg, 'connection refused' ) ) {
+				return true;
+			}
+		}
+
+		$code = (int) ( $log['http_code'] ?? 0 );
+		if ( in_array( $code, [ 401, 403, 404, 429 ], true ) ) {
+			return true;
+		}
+
+		return apply_filters( 'pdx_http_is_expected_failure', false, $log );
+	}
+
+	/**
 	 * Merge HTTP log fields into a source_status array.
 	 *
 	 * @param array<string, mixed> $status
@@ -113,10 +148,10 @@ class PDX_Http {
 	 * @return array<string, mixed>
 	 */
 	public static function enrich_status( array $status, array $log ): array {
-		$status['request_url'] = $log['url'] ?? null;
-		$status['http_code']   = $log['http_code'] ?? null;
-		$status['duration_ms'] = $log['duration_ms'] ?? null;
-		$status['timeout']     = $log['timeout'] ?? null;
+		$status['request_url']  = $log['url'] ?? null;
+		$status['http_code']    = $log['http_code'] ?? null;
+		$status['duration_ms']  = $log['duration_ms'] ?? null;
+		$status['timeout']      = $log['timeout'] ?? null;
 		$status['parse_status'] = $log['parse_status'] ?? null;
 		if ( ! empty( $log['error'] ) && empty( $status['message'] ) ) {
 			$status['message'] = (string) $log['error'];
@@ -133,17 +168,35 @@ class PDX_Http {
 		if ( ! defined( 'WP_DEBUG_LOG' ) || ! WP_DEBUG_LOG ) {
 			return;
 		}
+
+		if ( empty( $log['error'] ) ) {
+			return;
+		}
+
+		if ( self::is_expected_external_failure( $log ) ) {
+			return;
+		}
+
+		/**
+		 * Allow opt-in logging for specific connectors during debugging.
+		 *
+		 * @param bool                 $should_log Default false for expected external failures.
+		 * @param array<string, mixed> $log
+		 */
+		if ( ! apply_filters( 'pdx_http_should_log', true, $log ) ) {
+			return;
+		}
+
 		$code = $log['http_code'] ?? '—';
-		$err  = $log['error'] ? ' err=' . $log['error'] : '';
 		error_log(
 			sprintf(
-				'[PDX][%s] %s %s → HTTP %s (%dms)%s',
+				'[PDX][%s] %s %s failed → HTTP %s (%dms) %s',
 				$log['source'] ?? 'http',
 				$log['method'] ?? 'GET',
 				$log['url'] ?? '',
 				(string) $code,
 				(int) ( $log['duration_ms'] ?? 0 ),
-				$err
+				(string) $log['error']
 			)
 		);
 	}

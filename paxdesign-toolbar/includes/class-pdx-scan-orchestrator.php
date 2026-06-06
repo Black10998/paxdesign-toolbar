@@ -22,6 +22,13 @@ class PDX_Scan_Orchestrator {
 	 * @return array<string, mixed>
 	 */
 	public function run( string $raw_target, bool $paid, string $module = 'trust' ): array {
+		$cache_key_target = strtolower( trim( $raw_target ) ) . '|' . ( $paid ? '1' : '0' );
+		$cached           = PDX_Cache::get_scan( $cache_key_target, $module );
+		if ( is_array( $cached ) && ! empty( $cached['target'] ) ) {
+			$cached['cached'] = true;
+			return $cached;
+		}
+
 		$report = $this->intel->full_scan( $raw_target, $paid );
 
 		if ( empty( $report['target'] ) || ! empty( $report['source_status']['normalize']['state'] ) ) {
@@ -76,6 +83,8 @@ class PDX_Scan_Orchestrator {
 			'score'   => $report['risk']['score'] ?? 0,
 			'verdict' => $report['risk']['verdict'] ?? '',
 		] );
+
+		PDX_Cache::set_scan( $cache_key_target, $module, $report, 3600 );
 
 		return $report;
 	}

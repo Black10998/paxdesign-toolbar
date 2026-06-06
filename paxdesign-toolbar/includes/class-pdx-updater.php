@@ -61,6 +61,7 @@ class PDX_Updater {
 		add_filter( 'upgrader_source_selection', [ $this, 'fix_github_source' ], 10, 4 );
 		add_filter( 'all_plugins', [ $this, 'filter_plugins_list_single_instance' ], 100 );
 		add_filter( 'upgrader_post_install', [ $this, 'verify_install' ], 10, 3 );
+		add_filter( 'upgrader_post_install', [ $this, 'recover_post_install_success' ], 999, 3 );
 		add_filter( 'upgrader_install_package_result', [ $this, 'on_install_package_result' ], 10, 2 );
 
 		add_action( 'plugins_loaded', [ $this, 'repair_broken_install_layout' ], -1 );
@@ -239,10 +240,15 @@ class PDX_Updater {
 	}
 
 	/**
-	 * Drop WordPress plugin update metadata so the next check rebuilds from inject_update().
+	 * Drop only PaxDesign rows from the plugin update transient, then rebuild via wp_update_plugins().
+	 * Avoids wiping update metadata for unrelated plugins.
 	 */
 	public function invalidate_plugin_update_transient(): void {
-		delete_site_transient( 'update_plugins' );
+		$transient = get_site_transient( 'update_plugins' );
+		if ( is_object( $transient ) ) {
+			$this->clear_pdx_update_transient_entries( $transient );
+			set_site_transient( 'update_plugins', $transient );
+		}
 		$this->flush_plugin_cache();
 	}
 
@@ -495,6 +501,58 @@ class PDX_Updater {
 					$modified                          = true;
 				}
 			}
+		}
+
+		$modified = $this->enforce_pdx_update_bucket_placement( $transient ) || $modified;
+
+		return $modified;
+	}
+
+	/**
+	 * Ensure PaxDesign never appears in response when already on the latest release.
+	 *
+	 * @return bool Whether the transient was modified.
+	 */
+	private function enforce_pdx_update_bucket_placement( object $transient ): bool {
+		$modified  = false;
+		$installed = $this->get_installed_version();
+		$canonical = $this->canonical_plugin_basename();
+
+		if ( '' === $installed ) {
+			return false;
+		}
+
+		$row = null;
+		if ( isset( $transient->response[ $canonical ] ) ) {
+			$row = $this->sanitize_update_object( $transient->response[ $canonical ] );
+		} elseif ( isset( $transient->no_update[ $canonical ] ) ) {
+			$row = $this->sanitize_update_object( $transient->no_update[ $canonical ] );
+		}
+
+		if ( ! is_object( $row ) ) {
+			return false;
+		}
+
+		$new_ver = $this->string_field( $row->new_version ?? null, '' );
+		if ( '' === $new_ver ) {
+			return false;
+		}
+
+		$up_to_date = version_compare( $installed, $new_ver, '>=' );
+
+		if ( $up_to_date ) {
+			if ( isset( $transient->response[ $canonical ] ) ) {
+				unset( $transient->response[ $canonical ] );
+				$modified = true;
+			}
+			if ( ! isset( $transient->no_update[ $canonical ] ) ) {
+				$transient->no_update[ $canonical ] = $row;
+				$modified = true;
+			}
+		} elseif ( ! isset( $transient->response[ $canonical ] ) ) {
+			unset( $transient->no_update[ $canonical ] );
+			$transient->response[ $canonical ] = $row;
+			$modified = true;
 		}
 
 		return $modified;
@@ -774,6 +832,12 @@ class PDX_Updater {
 
 		$payload = $this->build_update_uri_payload();
 		if ( false === $payload ) {
+			return false;
+		}
+
+		$installed = $this->get_installed_version();
+		$new_ver   = $this->string_field( $payload['new_version'] ?? null, '' );
+		if ( '' !== $new_ver && '' !== $installed && version_compare( $installed, $new_ver, '>=' ) ) {
 			return false;
 		}
 
@@ -1599,6 +1663,41 @@ class PDX_Updater {
 	}
 
 	/**
+	 * If WordPress marks the upgrade failed but the canonical install is healthy and current, recover success.
+	 *
+	 * @param mixed $response
+	 * @param array<string, mixed> $hook_extra
+	 * @param mixed $result
+	 * @return mixed
+	 */
+	public function recover_post_install_success( $response, $hook_extra, $result ) {
+		if ( ! $this->is_our_plugin( is_array( $hook_extra ) ? $hook_extra : null ) ) {
+			return $response;
+		}
+
+		if ( ! is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		if ( ! $this->plugin_passes_health_check() ) {
+			return $response;
+		}
+
+		$installed = $this->get_installed_version();
+		$release   = $this->fetch_release( false );
+		if ( '' !== $installed && '' !== ( $release['version'] ?? '' )
+			&& version_compare( $installed, $release['version'], '>=' ) ) {
+			return is_array( $result ) ? $result : true;
+		}
+
+		if ( $this->is_upgrade_successful() ) {
+			return is_array( $result ) ? $result : true;
+		}
+
+		return $response;
+	}
+
+	/**
 	 * @param array<string, mixed>|\WP_Error $result
 	 * @return array<string, mixed>|\WP_Error
 	 */
@@ -1607,7 +1706,7 @@ class PDX_Updater {
 			return $result;
 		}
 
-		if ( is_wp_error( $result ) && $this->plugin_passes_health_check() ) {
+		if ( is_wp_error( $result ) && ( $this->plugin_passes_health_check() || $this->is_upgrade_successful() ) ) {
 			return true;
 		}
 
