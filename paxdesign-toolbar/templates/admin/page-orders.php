@@ -87,7 +87,7 @@ include __DIR__ . '/partials/header.php';
     <div style="padding:14px 16px;display:flex;gap:6px;align-items:center">
       <?php for ( $p = 1; $p <= $pages; $p++ ) : ?>
       <a href="<?php echo esc_url( add_query_arg( [ 'page' => PDX_SLUG . '-orders', 'paged' => $p ], admin_url( 'admin.php' ) ) ); ?>"
-         class="pdx-btn-ghost" style="padding:5px 10px;font-size:11px<?php echo $p === $page_num ? ';border-color:rgba(63,185,80,.4);color:#3fb950' : ''; ?>">
+         class="pdx-btn-ghost" style="padding:5px 10px;font-size:11px<?php echo $p === $page_num ? ';border-color:rgba(255,255,255,.3);color:#ffffff' : ''; ?>">
         <?php echo $p; ?>
       </a>
       <?php endfor; ?>

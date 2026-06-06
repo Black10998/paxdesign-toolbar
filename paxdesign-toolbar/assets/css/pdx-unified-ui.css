@@ -1,0 +1,653 @@
+/**
+ * PaxDesign Unified UI — global component layer
+ * Applies chat-bot design language across dock, panels, admin, forms, and status UI.
+ */
+
+/* ─── Gradient frame chrome ─────────────────────────────── */
+#pdx-dock,
+#pdx-panel,
+.pdx-cmd-box,
+.pdx-admin-wrap .pdx-card,
+.pdx-admin-wrap .pdx-panel-card {
+  position: relative;
+}
+
+#pdx-dock::before,
+#pdx-panel::before,
+.pdx-cmd-box::before,
+.pdx-admin-wrap .pdx-card::before,
+.pdx-admin-wrap .pdx-panel-card::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 30px;
+  height: 30px;
+  background: var(--pdx-glow-radial);
+  filter: blur(1px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+#pdx-dock,
+#pdx-panel,
+.pdx-cmd-box {
+  background:
+    linear-gradient(var(--pdx-bg-elev), var(--pdx-bg-elev)) padding-box,
+    var(--pdx-gradient-border) border-box;
+  border: 1.5px solid transparent;
+  border-radius: var(--pdx-radius-lg);
+  overflow: hidden;
+}
+
+#pdx-panel-inner {
+  background: var(--pdx-bg-elev);
+  border-radius: calc(var(--pdx-radius-lg) - 2px);
+  min-height: 100%;
+}
+
+#pdx-dock {
+  background:
+    linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)) padding-box,
+    var(--pdx-gradient-border) border-box;
+}
+
+@media (min-width: 681px) {
+  #pdx-dock {
+    flex-direction: column;
+    padding: 6px 5px;
+  }
+}
+
+@media (max-width: 680px) {
+  #pdx-dock {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+  }
+}
+
+/* ─── Typography ────────────────────────────────────────── */
+#pdx-panel,
+#pdx-notif,
+.pdx-cmd-overlay,
+.pdx-admin-wrap {
+  font-family: var(--pdx-font);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--pdx-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.pdx-section-title,
+.pdx-section-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+/* ─── Tags / chips (reference: .tags span) ─────────────── */
+.pdx-cap-tag,
+.pdx-ioc-chip,
+.pdx-ioc-chip-v5,
+.pdx-tag,
+.pdx-badge,
+.pdx-persona-btn,
+.pdx-tpl-card,
+.pdx-admin-wrap .pdx-tag {
+  padding: 4px 8px;
+  font-size: 10px;
+  background-color: var(--pdx-bg);
+  border: 1.5px solid var(--pdx-border);
+  border-radius: var(--pdx-radius-sm);
+  color: var(--pdx-text);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--pdx-ease);
+}
+
+.pdx-cap-tag:hover,
+.pdx-tag:hover,
+.pdx-badge:hover,
+.pdx-persona-btn:hover,
+.pdx-tpl-card:hover {
+  transform: translateY(-2px);
+  color: var(--pdx-text);
+  border-color: var(--pdx-text-muted);
+}
+
+.pdx-persona-btn.is-active,
+.pdx-tpl-card.is-active {
+  color: var(--pdx-text);
+  border-color: var(--pdx-accent-border);
+  background: var(--pdx-accent-dim);
+}
+
+/* ─── Form inputs (reference: textarea) ─────────────────── */
+.pdx-input,
+.pdx-textarea,
+.pdx-select,
+.pdx-cmd-input,
+.pdx-chat-input,
+.pdx-admin-wrap input[type="text"],
+.pdx-admin-wrap input[type="email"],
+.pdx-admin-wrap input[type="url"],
+.pdx-admin-wrap input[type="password"],
+.pdx-admin-wrap input[type="number"],
+.pdx-admin-wrap input[type="search"],
+.pdx-admin-wrap textarea,
+.pdx-admin-wrap select {
+  background-color: transparent;
+  border: none;
+  border-radius: var(--pdx-radius-lg);
+  width: 100%;
+  color: var(--pdx-text);
+  font-family: var(--pdx-font);
+  font-size: 12px;
+  font-weight: 400;
+  padding: 10px;
+  outline: none;
+  resize: none;
+  transition: all var(--pdx-ease);
+}
+
+.pdx-input-wrap,
+.pdx-textarea-wrap,
+.pdx-input-row,
+.pdx-chat-input-row,
+.pdx-admin-wrap .pdx-field-input {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--pdx-gradient-border);
+  border-radius: var(--pdx-radius-lg);
+  padding: 1.5px;
+  overflow: hidden;
+}
+
+.pdx-input-wrap::after,
+.pdx-textarea-wrap::after,
+.pdx-input-row::after,
+.pdx-chat-input-row::after,
+.pdx-admin-wrap .pdx-field-input::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 30px;
+  height: 30px;
+  background: var(--pdx-glow-radial);
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.pdx-input-wrap > *,
+.pdx-textarea-wrap > *,
+.pdx-input-row > .pdx-input,
+.pdx-input-row > .pdx-textarea,
+.pdx-chat-input-row > .pdx-chat-input,
+.pdx-admin-wrap .pdx-field-input > input,
+.pdx-admin-wrap .pdx-field-input > textarea,
+.pdx-admin-wrap .pdx-field-input > select {
+  background: var(--pdx-bg-elev);
+  border-radius: calc(var(--pdx-radius-lg) - 1px);
+}
+
+.pdx-input::placeholder,
+.pdx-textarea::placeholder,
+.pdx-chat-input::placeholder,
+.pdx-cmd-input::placeholder {
+  color: var(--pdx-text-placeholder);
+  transition: all var(--pdx-ease);
+}
+
+.pdx-input:focus::placeholder,
+.pdx-textarea:focus::placeholder,
+.pdx-chat-input:focus::placeholder {
+  color: var(--pdx-border);
+}
+
+.pdx-input,
+.pdx-textarea,
+.pdx-select,
+.pdx-cmd-input,
+.pdx-chat-input {
+  border: 1px solid var(--pdx-border);
+  background: var(--pdx-bg-elev);
+}
+
+.pdx-input:focus,
+.pdx-textarea:focus,
+.pdx-select:focus,
+.pdx-cmd-input:focus,
+.pdx-chat-input:focus {
+  border-color: var(--pdx-text-muted);
+  box-shadow: 0 0 0 2px var(--pdx-accent-dim);
+}
+
+/* Scrollbars */
+.pdx-ph-body::-webkit-scrollbar,
+.pdx-textarea::-webkit-scrollbar,
+.pdx-chat-messages::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.pdx-ph-body::-webkit-scrollbar-track,
+.pdx-textarea::-webkit-scrollbar-track,
+.pdx-chat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pdx-ph-body::-webkit-scrollbar-thumb,
+.pdx-textarea::-webkit-scrollbar-thumb,
+.pdx-chat-messages::-webkit-scrollbar-thumb {
+  background: var(--pdx-scrollbar);
+  border-radius: 5px;
+}
+
+.pdx-ph-body::-webkit-scrollbar-thumb:hover,
+.pdx-textarea::-webkit-scrollbar-thumb:hover,
+.pdx-chat-messages::-webkit-scrollbar-thumb:hover {
+  background: var(--pdx-scrollbar-hover);
+  cursor: pointer;
+}
+
+/* ─── Primary submit button (reference: .btn-submit) ────── */
+.pdx-btn-primary,
+.pdx-admin-wrap .pdx-btn-primary,
+.pdx-admin-wrap button[type="submit"].pdx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  background-image: var(--pdx-gradient-btn);
+  border-radius: var(--pdx-radius-sm);
+  box-shadow: inset 0 6px 2px -4px rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all var(--pdx-ease-fast);
+  color: var(--pdx-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 34px;
+}
+
+.pdx-btn-primary > span,
+.pdx-btn-primary > svg,
+.pdx-btn-primary:not(:has(span)) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: var(--pdx-radius-sm);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.pdx-btn-primary svg {
+  transition: all var(--pdx-ease);
+  color: var(--pdx-text-muted);
+}
+
+.pdx-btn-primary:hover svg,
+.pdx-btn-primary:focus svg {
+  color: var(--pdx-text-placeholder);
+  filter: drop-shadow(0 0 5px #ffffff);
+}
+
+.pdx-btn-primary:focus svg {
+  transform: scale(1.2) rotate(45deg) translateX(-2px) translateY(1px);
+}
+
+.pdx-btn-primary:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.pdx-btn-primary:hover:not(:disabled) {
+  color: var(--pdx-text-placeholder);
+}
+
+.pdx-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ─── Ghost / icon buttons (reference: .btns-add button) ── */
+.pdx-btn-ghost,
+.pdx-btn-icon,
+.pdx-btn-sm,
+.pdx-graph-ctrl,
+.pdx-panel-close,
+.pdx-mobile-close,
+.pdx-admin-wrap .pdx-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pdx-icon-idle);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all var(--pdx-ease);
+  border-radius: var(--pdx-radius-sm);
+  padding: 6px;
+}
+
+.pdx-btn-ghost:hover,
+.pdx-btn-icon:hover,
+.pdx-btn-sm:hover,
+.pdx-graph-ctrl:hover,
+.pdx-panel-close:hover,
+.pdx-mobile-close:hover {
+  transform: translateY(-5px);
+  color: var(--pdx-text);
+}
+
+.pdx-panel-close,
+.pdx-mobile-close {
+  border: 1px solid var(--pdx-border);
+  background: var(--pdx-bg-muted);
+  transform: none;
+}
+
+.pdx-panel-close:hover,
+.pdx-mobile-close:hover {
+  transform: translateY(-2px);
+  background: var(--pdx-bg-hover);
+}
+
+/* ─── Cards & surfaces ──────────────────────────────────── */
+.pdx-result,
+.pdx-ws-item,
+.pdx-worker-row,
+.pdx-activity-item,
+.pdx-cmd-item,
+.pdx-case-card,
+.pdx-conn-card,
+.pdx-metric-card,
+.pdx-factor,
+.pdx-evidence-section,
+.pdx-report-summary,
+.pdx-deep-pipeline,
+.pdx-paywall-box,
+.pdx-admin-wrap .pdx-card,
+.pdx-admin-wrap .pdx-panel-card,
+.pdx-admin-wrap .pdx-stat {
+  background: var(--pdx-bg-elev);
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius-lg);
+  box-shadow: none;
+}
+
+.pdx-admin-wrap .pdx-card,
+.pdx-admin-wrap .pdx-panel-card {
+  padding: 1.5px;
+  background: var(--pdx-gradient-border);
+  overflow: hidden;
+}
+
+.pdx-admin-wrap .pdx-card > *,
+.pdx-admin-wrap .pdx-panel-card > * {
+  background: var(--pdx-bg-elev);
+  border-radius: calc(var(--pdx-radius-lg) - 1px);
+  padding: var(--pdx-space-4);
+}
+
+/* ─── Status indicators (monochrome hierarchy) ──────────── */
+.pdx-conn-status--ok,
+.pdx-notif-item--success,
+.pdx-success,
+.pdx-grade--good,
+.pdx-signal--pos,
+.pdx-hist--clean,
+.pdx-badge--ok,
+.pdx-source-status--ok,
+.pdx-worker--online .pdx-worker-dot,
+.pdx-feed-dot--active,
+.pdx-stage.is-done,
+.pdx-dp-finding--ok,
+.pdx-scan-complete-dot,
+.pdx-module-status-dot--online {
+  background: var(--pdx-accent-dim);
+  color: var(--pdx-success);
+  border-color: var(--pdx-accent-border);
+}
+
+.pdx-conn-status--fail,
+.pdx-notif-item--error,
+.pdx-error,
+.pdx-grade--bad,
+.pdx-signal--neg,
+.pdx-hist--bad,
+.pdx-badge--critical,
+.pdx-badge--high,
+.pdx-dp-finding--critical {
+  background: rgba(136, 136, 136, 0.12);
+  color: var(--pdx-danger);
+  border-color: rgba(136, 136, 136, 0.35);
+}
+
+.pdx-notif-item--warn,
+.pdx-grade--warn,
+.pdx-hist--warn,
+.pdx-section-title--warn,
+.pdx-dp-finding--warn,
+.pdx-source-status--warn {
+  background: rgba(126, 126, 126, 0.12);
+  color: var(--pdx-warn);
+  border-color: rgba(126, 126, 126, 0.35);
+}
+
+.pdx-dp-finding--info,
+.pdx-factor--medium,
+.pdx-badge--medium {
+  background: rgba(139, 139, 139, 0.1);
+  color: var(--pdx-info);
+  border-color: rgba(139, 139, 139, 0.3);
+}
+
+.pdx-factor--critical { border-color: var(--pdx-danger); background: rgba(136, 136, 136, 0.08); }
+.pdx-factor--high     { border-color: var(--pdx-warn); background: rgba(126, 126, 126, 0.08); }
+.pdx-factor--medium   { border-color: var(--pdx-info); background: rgba(139, 139, 139, 0.08); }
+
+/* ─── Chat bubbles ──────────────────────────────────────── */
+.pdx-chat-msg--user .pdx-chat-bubble {
+  background: var(--pdx-bg-muted);
+  color: var(--pdx-text);
+  border: 1px solid var(--pdx-border);
+  border-radius: var(--pdx-radius-sm) var(--pdx-radius-sm) 2px var(--pdx-radius-sm);
+}
+
+.pdx-chat-msg--assistant .pdx-chat-bubble {
+  background: var(--pdx-bg-elev);
+  color: var(--pdx-text);
+  border: 1px solid var(--pdx-border);
+}
+
+.pdx-chat-msg--system .pdx-chat-bubble {
+  background: var(--pdx-accent-dim);
+  color: var(--pdx-text-muted);
+  font-size: 11px;
+}
+
+.pdx-chat-msg--error .pdx-chat-bubble {
+  background: rgba(136, 136, 136, 0.12);
+  color: var(--pdx-danger);
+}
+
+/* ─── Tabs ──────────────────────────────────────────────── */
+.pdx-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px;
+  background: var(--pdx-bg);
+  border: 1.5px solid var(--pdx-border);
+  border-radius: var(--pdx-radius-sm);
+  margin-bottom: 12px;
+}
+
+.pdx-tab {
+  border: none;
+  background: transparent;
+  color: var(--pdx-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: var(--pdx-radius-sm);
+  cursor: pointer;
+  transition: all var(--pdx-ease);
+}
+
+.pdx-tab.is-active {
+  background: var(--pdx-bg-muted);
+  color: var(--pdx-text);
+  border: 1.5px solid var(--pdx-border);
+}
+
+.pdx-tab:hover:not(.is-active) {
+  transform: translateY(-2px);
+  color: var(--pdx-text);
+}
+
+/* ─── Notifications ─────────────────────────────────────── */
+.pdx-notif-item {
+  border-radius: var(--pdx-radius-sm);
+  font-size: 12px;
+  border: 1.5px solid var(--pdx-border);
+  background: var(--pdx-bg);
+  color: var(--pdx-text);
+}
+
+/* ─── Command palette ───────────────────────────────────── */
+.pdx-cmd-overlay.is-open {
+  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.pdx-cmd-item.is-selected {
+  background: var(--pdx-accent-dim);
+  border-left: 2px solid var(--pdx-accent);
+}
+
+/* ─── Dock buttons ──────────────────────────────────────── */
+#pdx-dock .pdx-btn {
+  color: var(--pdx-icon-idle);
+  transition: all var(--pdx-ease);
+}
+
+#pdx-dock .pdx-btn:hover {
+  transform: translateY(-5px);
+  color: var(--pdx-text);
+}
+
+#pdx-dock .pdx-btn.is-active {
+  color: var(--pdx-text);
+  filter: drop-shadow(0 0 5px #ffffff);
+}
+
+#pdx-dock .pdx-btn.is-active::before {
+  background: var(--pdx-text);
+}
+
+/* ─── Admin sidebar & forms ─────────────────────────────── */
+.pdx-admin-wrap .pdx-sidebar__link.is-active {
+  background: var(--pdx-accent-dim);
+  color: var(--pdx-accent);
+  box-shadow: inset 2px 0 0 var(--pdx-accent);
+}
+
+.pdx-admin-wrap .pdx-sidebar__brand svg {
+  stroke: var(--pdx-accent);
+}
+
+.pdx-admin-wrap .pdx-field label {
+  font-size: 10px;
+  color: var(--pdx-text-muted);
+}
+
+.pdx-admin-wrap .pdx-table-wrap {
+  border: 1.5px solid var(--pdx-border);
+  border-radius: var(--pdx-radius-lg);
+  overflow: hidden;
+  background: var(--pdx-bg-elev);
+}
+
+.pdx-admin-wrap .pdx-table th {
+  background: var(--pdx-bg-muted);
+  color: var(--pdx-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pdx-admin-wrap .pdx-table td {
+  border-top: 1px solid var(--pdx-border);
+}
+
+.pdx-admin-wrap .pdx-notice {
+  border-radius: var(--pdx-radius-sm);
+  border: 1.5px solid var(--pdx-border);
+  background: var(--pdx-bg-muted);
+  color: var(--pdx-text);
+}
+
+.pdx-admin-wrap .pdx-notice--success {
+  border-color: var(--pdx-accent-border);
+  color: var(--pdx-success);
+}
+
+.pdx-admin-wrap .pdx-notice--error {
+  border-color: rgba(136, 136, 136, 0.35);
+  color: var(--pdx-danger);
+}
+
+/* ─── Loading spinner ───────────────────────────────────── */
+.pdx-loading::before {
+  border-color: var(--pdx-border);
+  border-top-color: var(--pdx-accent);
+}
+
+/* ─── Backdrop ──────────────────────────────────────────── */
+#pdx-backdrop.is-open {
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+/* ─── Responsive ────────────────────────────────────────── */
+@media (max-width: 680px) {
+  #pdx-panel {
+    border-radius: var(--pdx-radius-lg) var(--pdx-radius-lg) 0 0;
+  }
+
+  .pdx-ph-body {
+    padding: 12px 14px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .pdx-btn-primary:active:not(:disabled),
+  .pdx-btn-ghost:active {
+    transform: scale(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .pdx-btn-ghost:hover,
+  .pdx-btn-icon:hover,
+  #pdx-dock .pdx-btn:hover {
+    transform: none;
+  }
+}

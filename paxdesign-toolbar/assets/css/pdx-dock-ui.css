@@ -1,5 +1,5 @@
 /**
- * PaxDesign Dock UI v6.0.1 — GitHub-inspired surface layer
+ * PaxDesign Dock UI v8.7 — unified monochrome surface layer
  * Loaded after dock.css; maps legacy tokens and polishes all dock surfaces.
  */
 
@@ -50,20 +50,20 @@
 }
 
 #pdx-root {
-  --pdx-hi: var(--pdx-text, #e6edf3);
-  --pdx-mid: var(--pdx-text-muted, #8b949e);
-  --pdx-lo: var(--pdx-text-subtle, #6e7681);
-  --pdx-mute: var(--pdx-text-subtle, #6e7681);
-  --pdx-bg-el: var(--pdx-bg-elev, #161b22);
-  --pdx-bg-el2: var(--pdx-bg-muted, #21262d);
-  --pdx-bg-hov: var(--pdx-bg-hover, #30363d);
-  --pdx-border-mid: var(--pdx-border, #30363d);
-  --pdx-green: var(--pdx-accent, #c2ff00);
-  --pdx-green-dim: var(--pdx-accent-dim, rgba(194, 255, 0, 0.14));
-  --pdx-emerald: var(--pdx-accent, #c2ff00);
-  --pdx-r-sm: var(--pdx-radius, 6px);
-  --pdx-r: var(--pdx-radius, 6px);
-  --pdx-r-lg: var(--pdx-radius-lg, 10px);
+  --pdx-hi: var(--pdx-text, #ffffff);
+  --pdx-mid: var(--pdx-text-muted, #8b8b8b);
+  --pdx-lo: var(--pdx-text-subtle, #555555);
+  --pdx-mute: var(--pdx-text-subtle, #555555);
+  --pdx-bg-el: var(--pdx-bg-elev, rgba(0, 0, 0, 0.5));
+  --pdx-bg-el2: var(--pdx-bg-muted, #292929);
+  --pdx-bg-hov: var(--pdx-bg-hover, #363636);
+  --pdx-border-mid: var(--pdx-border, #363636);
+  --pdx-green: var(--pdx-accent, #ffffff);
+  --pdx-green-dim: var(--pdx-accent-dim, rgba(255, 255, 255, 0.1));
+  --pdx-emerald: var(--pdx-accent, #ffffff);
+  --pdx-r-sm: var(--pdx-radius-sm, 10px);
+  --pdx-r: var(--pdx-radius, 10px);
+  --pdx-r-lg: var(--pdx-radius-lg, 16px);
   font-family: var(--pdx-font);
 }
 

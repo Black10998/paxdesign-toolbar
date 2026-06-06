@@ -157,10 +157,10 @@
     ];
 
     var MODULE_ACCENTS = {
-      trust: '#c2ff00', osint: '#5ecbff', threat: '#ff6b6b', personas: '#c084fc',
-      builder: '#fbbf24', pipeline: '#34d399', automation: '#fb923c',
-      investigation: '#67e8f9', graph: '#a78bfa', memory: '#86efac',
-      team: '#fcd34d', connectors: '#38bdf8', create: '#a3e635', workspace: '#93c5fd'
+      trust: '#ffffff', osint: '#f3f6fd', threat: '#888888', personas: '#7e7e7e',
+      builder: '#555555', pipeline: '#8b8b8b', automation: '#363636',
+      investigation: '#f3f6fd', graph: '#7e7e7e', memory: '#555555',
+      team: '#ffffff', connectors: '#8b8b8b', create: '#7e7e7e', workspace: '#555555'
     };
 
     function normalizeModuleId(moduleId) {
@@ -809,7 +809,7 @@
       /* ── Risk header with score ring ── */
       var circumference = 2 * Math.PI * 26; // r=26
       var dashOffset = circumference - (score / 100) * circumference;
-      var ringStroke = (verdict === 'clean' || verdict === 'low') ? '#c2ff00' : verdict === 'medium' ? '#d29922' : '#f85149';
+      var ringStroke = (verdict === 'clean' || verdict === 'low') ? '#ffffff' : verdict === 'medium' ? '#7e7e7e' : '#888888';
       html += '<div class="pdx-risk-header">' +
         '<div class="pdx-risk-ring">' +
           '<svg viewBox="0 0 64 64"><circle class="pdx-risk-ring-track" cx="32" cy="32" r="26"/>' +
@@ -1178,7 +1178,7 @@
       if (risk.score !== undefined) {
         var circumference = 2 * Math.PI * 26;
         var dashOffset = circumference - (risk.score / 100) * circumference;
-        var ringStroke = (risk.verdict === 'clean' || risk.verdict === 'low') ? '#c2ff00' : risk.verdict === 'medium' ? '#d29922' : '#f85149';
+        var ringStroke = (risk.verdict === 'clean' || risk.verdict === 'low') ? '#ffffff' : risk.verdict === 'medium' ? '#7e7e7e' : '#888888';
         html += '<div class="pdx-risk-header">' +
           '<div class="pdx-risk-ring">' +
             '<svg viewBox="0 0 64 64"><circle class="pdx-risk-ring-track" cx="32" cy="32" r="26"/>' +
@@ -4276,7 +4276,7 @@
       nodes.forEach(function(n) {
         var p = positions[n.id];
         if (!p) return;
-        var color = n.type === 'ip' ? '#f59e0b' : n.type === 'domain' ? '#6366f1' : n.type === 'hash' ? '#ef4444' : n.type === 'email' ? '#10b981' : '#94a3b8';
+        var color = n.type === 'ip' ? '#7e7e7e' : n.type === 'domain' ? '#555555' : n.type === 'hash' ? '#888888' : n.type === 'email' ? '#ffffff' : '#8b8b8b';
         ctx.beginPath();
         ctx.arc(p.x, p.y, 10, 0, 2 * Math.PI);
         ctx.fillStyle = color;
@@ -4322,7 +4322,7 @@
 
     function renderGraphLegend(el) {
       if (!el) return;
-      el.innerHTML = ['ip:#f59e0b', 'domain:#6366f1', 'hash:#ef4444', 'email:#10b981', 'other:#94a3b8'].map(function(s) {
+      el.innerHTML = ['ip:#7e7e7e', 'domain:#555555', 'hash:#888888', 'email:#ffffff', 'other:#8b8b8b'].map(function(s) {
         var parts = s.split(':');
         return '<span class="pdx-legend-item"><span class="pdx-legend-dot" style="background:' + parts[1] + '"></span>' + parts[0] + '</span>';
       }).join('');
@@ -4793,7 +4793,7 @@
         var desc = ev.description || ev.event || ev.title || safeStr(ev);
         var src  = ev.source || ev.feed || '';
         var sev  = ev.severity || ev.risk || '';
-        var dotColor = sev === 'critical' ? '#f85149' : sev === 'high' ? '#d29922' : sev === 'medium' ? '#388bfd' : 'var(--pdx-indigo)';
+        var dotColor = sev === 'critical' ? '#888888' : sev === 'high' ? '#7e7e7e' : sev === 'medium' ? '#555555' : 'var(--pdx-text-muted)';
         html += '<div class="pdx-tl-event-v5">' +
           '<div class="pdx-tl-dot-v5" style="background:' + dotColor + '"></div>' +
           '<div class="pdx-tl-body-v5">' +
@@ -5091,7 +5091,7 @@
       cves.forEach(function(c) {
         var cvss = parseFloat(c.cvss || c.cvss_score || 0);
         var severity = cvss >= 9 ? 'critical' : cvss >= 7 ? 'high' : cvss >= 4 ? 'medium' : 'low';
-        var sevColor = cvss >= 9 ? '#f85149' : cvss >= 7 ? '#d29922' : cvss >= 4 ? '#388bfd' : '#6e7681';
+        var sevColor = cvss >= 9 ? '#888888' : cvss >= 7 ? '#7e7e7e' : cvss >= 4 ? '#555555' : '#8b8b8b';
         html += '<div class="pdx-evidence-section">' +
           '<button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">' +
             '<span style="font-family:var(--pdx-mono);color:var(--pdx-hi)">' + escHtml(c.id || 'CVE') + '</span>' +

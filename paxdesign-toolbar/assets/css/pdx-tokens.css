@@ -1,6 +1,7 @@
 /**
- * PaxDesign Design System — v6
- * GitHub-inspired tokens. Yellow brand accent (#c2ff00).
+ * PaxDesign Design System — v7
+ * Unified monochrome visual language (gradient chrome, glass surfaces, white accent).
+ * Palette: #ffffff, #f3f6fd, #7e7e7e, #555555, #363636, #292929, #1b1b1b, #8b8b8b, #888888
  */
 
 #pdx-root,
@@ -11,14 +12,28 @@
 .pdx-admin-wrap {
   --pdx-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   --pdx-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --pdx-radius: 6px;
-  --pdx-radius-lg: 10px;
-  --pdx-ease: 0.16s ease;
-  --pdx-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  --pdx-accent: #c2ff00;
-  --pdx-accent-dim: rgba(194, 255, 0, 0.14);
-  --pdx-accent-border: rgba(194, 255, 0, 0.35);
-  --pdx-on-accent: #0d1117;
+  --pdx-radius-sm: 10px;
+  --pdx-radius: 10px;
+  --pdx-radius-lg: 16px;
+  --pdx-ease: 0.3s ease;
+  --pdx-ease-fast: 0.15s ease;
+  --pdx-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --pdx-accent: #ffffff;
+  --pdx-accent-dim: rgba(255, 255, 255, 0.1);
+  --pdx-accent-border: rgba(255, 255, 255, 0.3);
+  --pdx-on-accent: #1b1b1b;
+  --pdx-gradient-border: linear-gradient(to bottom right, #7e7e7e, #363636, #363636, #363636, #363636);
+  --pdx-gradient-btn: linear-gradient(to top, #292929, #555555, #292929);
+  --pdx-glow-radial: radial-gradient(
+    ellipse at center,
+    #ffffff,
+    rgba(255, 255, 255, 0.3),
+    rgba(255, 255, 255, 0.1),
+    rgba(0, 0, 0, 0),
+    rgba(0, 0, 0, 0),
+    rgba(0, 0, 0, 0),
+    rgba(0, 0, 0, 0)
+  );
 }
 
 /* Dark (default) */
@@ -28,33 +43,43 @@
 #pdx-backdrop,
 #pdx-notif,
 .pdx-cmd-overlay {
-  --pdx-bg: #0d1117;
-  --pdx-bg-elev: #161b22;
-  --pdx-bg-muted: #21262d;
-  --pdx-bg-hover: #30363d;
-  --pdx-border: #30363d;
-  --pdx-border-muted: #21262d;
-  --pdx-text: #e6edf3;
-  --pdx-text-muted: #8b949e;
-  --pdx-text-subtle: #6e7681;
-  --pdx-danger: #f85149;
-  --pdx-warn: #d29922;
-  --pdx-success: #c2ff00;
-  --pdx-info: #58a6ff;
+  --pdx-bg: #1b1b1b;
+  --pdx-bg-elev: rgba(0, 0, 0, 0.5);
+  --pdx-bg-muted: #292929;
+  --pdx-bg-hover: #363636;
+  --pdx-border: #363636;
+  --pdx-border-muted: #292929;
+  --pdx-text: #ffffff;
+  --pdx-text-muted: #8b8b8b;
+  --pdx-text-subtle: #555555;
+  --pdx-text-placeholder: #f3f6fd;
+  --pdx-icon-idle: rgba(255, 255, 255, 0.1);
+  --pdx-scrollbar: #888888;
+  --pdx-scrollbar-hover: #555555;
+  --pdx-danger: #888888;
+  --pdx-warn: #7e7e7e;
+  --pdx-success: #ffffff;
+  --pdx-info: #8b8b8b;
 }
 
-/* Light */
+/* Light — same palette, inverted hierarchy */
 #pdx-root[data-theme="light"] {
-  --pdx-bg: #ffffff;
-  --pdx-bg-elev: #f6f8fa;
-  --pdx-bg-muted: #eaeef2;
-  --pdx-bg-hover: #d0d7de;
-  --pdx-border: #d0d7de;
-  --pdx-border-muted: #eaeef2;
-  --pdx-text: #1f2328;
-  --pdx-text-muted: #656d76;
-  --pdx-text-subtle: #8c959f;
-  --pdx-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+  --pdx-bg: #f3f6fd;
+  --pdx-bg-elev: #ffffff;
+  --pdx-bg-muted: rgba(0, 0, 0, 0.04);
+  --pdx-bg-hover: rgba(0, 0, 0, 0.08);
+  --pdx-border: #363636;
+  --pdx-border-muted: #7e7e7e;
+  --pdx-text: #1b1b1b;
+  --pdx-text-muted: #555555;
+  --pdx-text-subtle: #7e7e7e;
+  --pdx-text-placeholder: #8b8b8b;
+  --pdx-icon-idle: rgba(27, 27, 27, 0.15);
+  --pdx-accent: #1b1b1b;
+  --pdx-accent-dim: rgba(27, 27, 27, 0.08);
+  --pdx-accent-border: rgba(54, 54, 54, 0.35);
+  --pdx-on-accent: #ffffff;
+  --pdx-shadow: 0 8px 24px rgba(27, 27, 27, 0.12);
 }
 
 #pdx-root[data-theme="auto"] {
@@ -63,30 +88,36 @@
 
 @media (prefers-color-scheme: light) {
   #pdx-root[data-theme="auto"] {
-    --pdx-bg: #ffffff;
-    --pdx-bg-elev: #f6f8fa;
-    --pdx-bg-muted: #eaeef2;
-    --pdx-bg-hover: #d0d7de;
-    --pdx-border: #d0d7de;
-    --pdx-border-muted: #eaeef2;
-    --pdx-text: #1f2328;
-    --pdx-text-muted: #656d76;
-    --pdx-text-subtle: #8c959f;
-    --pdx-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+    --pdx-bg: #f3f6fd;
+    --pdx-bg-elev: #ffffff;
+    --pdx-bg-muted: rgba(0, 0, 0, 0.04);
+    --pdx-bg-hover: rgba(0, 0, 0, 0.08);
+    --pdx-border: #363636;
+    --pdx-border-muted: #7e7e7e;
+    --pdx-text: #1b1b1b;
+    --pdx-text-muted: #555555;
+    --pdx-text-subtle: #7e7e7e;
+    --pdx-text-placeholder: #8b8b8b;
+    --pdx-icon-idle: rgba(27, 27, 27, 0.15);
+    --pdx-accent: #1b1b1b;
+    --pdx-accent-dim: rgba(27, 27, 27, 0.08);
+    --pdx-accent-border: rgba(54, 54, 54, 0.35);
+    --pdx-on-accent: #ffffff;
+    --pdx-shadow: 0 8px 24px rgba(27, 27, 27, 0.12);
   }
 }
 
-/* Admin shell — compact enterprise density + readable contrast */
+/* Admin shell */
 .pdx-admin-wrap {
-  --pdx-bg: #0d1117;
-  --pdx-bg-elev: #161b22;
-  --pdx-bg-muted: #21262d;
-  --pdx-bg-hover: #30363d;
-  --pdx-border: #3d444d;
-  --pdx-text: #f0f3f6;
-  --pdx-text-muted: #b1bac4;
-  --pdx-text-subtle: #8b949e;
-  --pdx-text-hint: #9ea7b3;
+  --pdx-bg: #1b1b1b;
+  --pdx-bg-elev: rgba(0, 0, 0, 0.5);
+  --pdx-bg-muted: #292929;
+  --pdx-bg-hover: #363636;
+  --pdx-border: #363636;
+  --pdx-text: #ffffff;
+  --pdx-text-muted: #8b8b8b;
+  --pdx-text-subtle: #555555;
+  --pdx-text-hint: #7e7e7e;
   --pdx-sidebar-w: 188px;
   --pdx-control-col: 52px;
   --pdx-space-1: 4px;
@@ -98,22 +129,26 @@
   --pdx-content-max: none;
 }
 
+.pdx-admin-wrap[data-pdx-theme="light"] {
+  --pdx-bg: #f3f6fd;
+  --pdx-bg-elev: #ffffff;
+  --pdx-bg-muted: rgba(0, 0, 0, 0.04);
+  --pdx-bg-hover: rgba(0, 0, 0, 0.08);
+  --pdx-border: #363636;
+  --pdx-text: #1b1b1b;
+  --pdx-text-muted: #555555;
+  --pdx-text-subtle: #7e7e7e;
+  --pdx-text-hint: #8b8b8b;
+  --pdx-accent: #1b1b1b;
+  --pdx-accent-dim: rgba(27, 27, 27, 0.08);
+  --pdx-accent-border: rgba(54, 54, 54, 0.35);
+  --pdx-on-accent: #ffffff;
+}
+
 /* Frontend panel sizing */
 #pdx-root {
   --pdx-panel-w-sm: clamp(320px, 92vw, 380px);
   --pdx-panel-w-md: clamp(360px, 38vw, 440px);
   --pdx-panel-w-lg: clamp(400px, 32vw, 480px);
   --pdx-panel-scroll-pad: 16px 20px;
-}
-
-.pdx-admin-wrap[data-pdx-theme="light"] {
-  --pdx-bg: #ffffff;
-  --pdx-bg-elev: #f6f8fa;
-  --pdx-bg-muted: #eaeef2;
-  --pdx-bg-hover: #d0d7de;
-  --pdx-border: #d0d7de;
-  --pdx-text: #1f2328;
-  --pdx-text-muted: #424a53;
-  --pdx-text-subtle: #656d76;
-  --pdx-text-hint: #57606a;
 }

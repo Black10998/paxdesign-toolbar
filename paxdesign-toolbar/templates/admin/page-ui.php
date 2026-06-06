@@ -69,7 +69,7 @@ include __DIR__ . '/partials/header.php';
                  value="<?php echo esc_attr( $s['accent_color'] ); ?>">
           <input type="text" id="accent_color_hex" class="pdx-color-hex"
                  value="<?php echo esc_attr( $s['accent_color'] ); ?>"
-                 placeholder="#c2ff00" maxlength="7">
+                 placeholder="#ffffff" maxlength="7">
         </div>
         <p class="pdx-field-hint">Used for active states, CTA buttons, and positive indicators.</p>
       </div>

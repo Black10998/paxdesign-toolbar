@@ -86,6 +86,13 @@ class PDX_Admin {
 			PDX_VERSION
 		);
 
+		wp_enqueue_style(
+			'pdx-unified-ui',
+			PDX_URL . 'assets/css/pdx-unified-ui.css',
+			[ 'pdx-admin', 'pdx-tokens' ],
+			PDX_VERSION
+		);
+
 		wp_enqueue_script(
 			'pdx-admin',
 			PDX_URL . 'assets/js/admin.js',
@@ -224,7 +231,7 @@ class PDX_Admin {
 					'dock_position'  => in_array( $post['dock_position'] ?? '', [ 'left', 'right' ] ) ? $post['dock_position'] : 'left',
 					'dock_theme'     => in_array( $post['dock_theme']    ?? '', [ 'dark', 'light', 'auto' ] ) ? $post['dock_theme'] : 'dark',
 					'dock_size'      => in_array( $post['dock_size']     ?? '', [ 'compact', 'default', 'large' ] ) ? $post['dock_size'] : 'default',
-					'accent_color'   => sanitize_hex_color( $post['accent_color'] ?? '#c2ff00' ) ?: '#c2ff00',
+					'accent_color'   => sanitize_hex_color( $post['accent_color'] ?? '#ffffff' ) ?: '#ffffff',
 					'custom_css'     => wp_strip_all_tags( $post['custom_css'] ?? '' ),
 					// Mobile
 					'mobile_enabled'       => isset( $post['mobile_enabled'] ),

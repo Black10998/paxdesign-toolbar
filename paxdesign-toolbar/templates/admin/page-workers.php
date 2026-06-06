@@ -42,7 +42,7 @@ $stats   = PDX_Queue::queue_stats();
   <?php foreach ( $workers as $w ) :
     $last_hb = $w['last_heartbeat'] ?? 0;
     $hb_ago  = $last_hb ? human_time_diff( $last_hb ) . ' ago' : 'Never';
-    $status_color = $w['status'] === 'online' ? '#10b981' : ( $w['status'] === 'busy' ? '#f59e0b' : '#6e7681' );
+    $status_color = $w['status'] === 'online' ? '#ffffff' : ( $w['status'] === 'busy' ? '#7e7e7e' : '#8b8b8b' );
   ?>
     <tr>
       <td><code><?php echo esc_html( $w['worker_id'] ); ?></code></td>

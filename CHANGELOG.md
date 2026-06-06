@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## 8.7.0 — 2026-06-06
+
+**Unified monochrome design system across customer-facing UI**
+
+### Design
+- New global design tokens (`pdx-tokens.css` v7) — gradient chrome, glass surfaces, white accent, monochrome palette only.
+- New unified component layer (`pdx-unified-ui.css`) — buttons, tags, forms, cards, status indicators, and interaction patterns from the reference design applied across dock panels, admin, and all module screens.
+- Removed legacy lime/GitHub color accents; all modules, loaders, icons, and status states use the same visual hierarchy (#ffffff, #f3f6fd, #7e7e7e, #555555, #363636, #292929, #1b1b1b, #8b8b8b, #888888).
+- Default accent color updated to `#ffffff`; fully responsive on desktop, tablet, and mobile.
+
+**Install:** `releases/paxdesign-toolbar-8.7.0.zip` — tag `v8.7.0`
+
 ## 8.6.2 — 2026-05-17
 
 **Cinematic AI analysis loader (TrustCheck, OSINT, Investigation, Graph, Threat Intel)**

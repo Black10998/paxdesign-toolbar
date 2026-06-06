@@ -92,6 +92,13 @@ class PDX_Frontend {
 			$this->asset_version( 'assets/css/pdx-module-chrome.css' )
 		);
 
+		wp_enqueue_style(
+			'pdx-unified-ui',
+			PDX_URL . 'assets/css/pdx-unified-ui.css',
+			[ 'pdx-module-chrome', 'pdx-tokens' ],
+			$this->asset_version( 'assets/css/pdx-unified-ui.css' )
+		);
+
 		// Use defer strategy (WP 6.3+) so the script always runs after the DOM is ready.
 		// Falls back to in_footer=true on older WordPress, which is safe because
 		// dock.js wraps its init in a DOMContentLoaded guard.
@@ -132,7 +139,7 @@ class PDX_Frontend {
 
 		// Sync mobile breakpoint with admin (CSS defaults to 680/681).
 		$bp     = min( 1280, max( 320, (int) $this->settings->get( 'mobile_breakpoint', 680 ) ) );
-		$accent = sanitize_hex_color( $this->settings->get( 'accent_color', '#c2ff00' ) ) ?: '#c2ff00';
+		$accent = sanitize_hex_color( $this->settings->get( 'accent_color', '#ffffff' ) ) ?: '#ffffff';
 		wp_add_inline_style(
 			'pdx-dock',
 			sprintf(
@@ -177,7 +184,7 @@ class PDX_Frontend {
 			'position'         => esc_attr( $this->settings->get( 'dock_position', 'left' ) ),
 			'theme'            => esc_attr( $this->settings->get( 'dock_theme', 'dark' ) ),
 			'size'             => esc_attr( $this->settings->get( 'dock_size', 'default' ) ),
-			'accentColor'      => esc_attr( $this->settings->get( 'accent_color', '#c2ff00' ) ),
+			'accentColor'      => esc_attr( $this->settings->get( 'accent_color', '#ffffff' ) ),
 			'mobileEnabled'      => (bool)   $this->settings->get( 'mobile_enabled',       true ),
 			'mobileBreakpoint'   => (int)    $this->settings->get( 'mobile_breakpoint',    680 ),
 			'mobileDockPosition' => (string) $this->settings->get( 'mobile_dock_position', 'under-header' ),

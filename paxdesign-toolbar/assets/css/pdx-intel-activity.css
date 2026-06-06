@@ -1,4 +1,4 @@
-/* Intelligence activity — live scan atmosphere (v8.2) */
+/* Intelligence activity — unified monochrome atmosphere (v8.7) */
 
 .pdx-mod-icon {
   width: 1.15em;
@@ -7,37 +7,39 @@
   vertical-align: -0.15em;
 }
 
-/* Panel / activity only — dock toolbar uses unified palette in pdx-module-chrome.css */
 #pdx-panel .pdx-mod-icon--trust,
-.pdx-intel-activity .pdx-mod-icon--trust { color: var(--pdx-accent, #c2ff00); filter: drop-shadow(0 0 6px rgba(194, 255, 0, 0.35)); }
 #pdx-panel .pdx-mod-icon--osint,
-.pdx-intel-activity .pdx-mod-icon--osint { color: #5ecbff; }
 #pdx-panel .pdx-mod-icon--threat,
-.pdx-intel-activity .pdx-mod-icon--threat { color: #ff6b6b; }
 #pdx-panel .pdx-mod-icon--personas,
-.pdx-intel-activity .pdx-mod-icon--personas { color: #c084fc; }
 #pdx-panel .pdx-mod-icon--builder,
-.pdx-intel-activity .pdx-mod-icon--builder { color: #fbbf24; }
 #pdx-panel .pdx-mod-icon--pipeline,
-.pdx-intel-activity .pdx-mod-icon--pipeline { color: #34d399; }
 #pdx-panel .pdx-mod-icon--automation,
-.pdx-intel-activity .pdx-mod-icon--automation { color: #fb923c; }
 #pdx-panel .pdx-mod-icon--timeline,
-.pdx-intel-activity .pdx-mod-icon--timeline { color: #93c5fd; }
 #pdx-panel .pdx-mod-icon--investigation,
-.pdx-intel-activity .pdx-mod-icon--investigation { color: #67e8f9; }
 #pdx-panel .pdx-mod-icon--graph,
-.pdx-intel-activity .pdx-mod-icon--graph { color: #a78bfa; }
 #pdx-panel .pdx-mod-icon--memory,
-.pdx-intel-activity .pdx-mod-icon--memory { color: #86efac; }
 #pdx-panel .pdx-mod-icon--team,
-.pdx-intel-activity .pdx-mod-icon--team { color: #fcd34d; }
 #pdx-panel .pdx-mod-icon--connectors,
-.pdx-intel-activity .pdx-mod-icon--connectors { color: #38bdf8; }
 #pdx-panel .pdx-mod-icon--create,
-.pdx-intel-activity .pdx-mod-icon--create { color: #a3e635; }
 #pdx-panel .pdx-mod-icon--workspace,
-.pdx-intel-activity .pdx-mod-icon--workspace { color: #93c5fd; }
+.pdx-intel-activity .pdx-mod-icon--trust,
+.pdx-intel-activity .pdx-mod-icon--osint,
+.pdx-intel-activity .pdx-mod-icon--threat,
+.pdx-intel-activity .pdx-mod-icon--personas,
+.pdx-intel-activity .pdx-mod-icon--builder,
+.pdx-intel-activity .pdx-mod-icon--pipeline,
+.pdx-intel-activity .pdx-mod-icon--automation,
+.pdx-intel-activity .pdx-mod-icon--timeline,
+.pdx-intel-activity .pdx-mod-icon--investigation,
+.pdx-intel-activity .pdx-mod-icon--graph,
+.pdx-intel-activity .pdx-mod-icon--memory,
+.pdx-intel-activity .pdx-mod-icon--team,
+.pdx-intel-activity .pdx-mod-icon--connectors,
+.pdx-intel-activity .pdx-mod-icon--create,
+.pdx-intel-activity .pdx-mod-icon--workspace {
+  color: var(--pdx-accent, #ffffff);
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.35));
+}
 
 .pdx-intel-activity {
   display: flex;
@@ -46,27 +48,25 @@
   gap: 0.85rem;
   padding: 1.5rem 1.25rem;
   margin-bottom: 0.85rem;
-  border-radius: 14px;
-  background:
-    linear-gradient(145deg, rgba(12, 18, 28, 0.98), rgba(6, 10, 18, 0.92)),
-    repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.015) 3px, rgba(255, 255, 255, 0.015) 4px);
-  border: 1px solid rgba(194, 255, 0, 0.22);
-  box-shadow: 0 0 40px rgba(194, 255, 0, 0.08), inset 0 0 60px rgba(194, 255, 0, 0.03);
+  border-radius: var(--pdx-radius-lg);
+  background: var(--pdx-bg-elev);
+  border: 1.5px solid var(--pdx-border);
+  box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.02);
   position: relative;
   overflow: hidden;
   animation: pdx-intel-breathe 2.4s ease-in-out infinite;
 }
 
 @keyframes pdx-intel-breathe {
-  0%, 100% { box-shadow: 0 0 32px rgba(194, 255, 0, 0.06), inset 0 0 40px rgba(194, 255, 0, 0.02); }
-  50% { box-shadow: 0 0 48px rgba(194, 255, 0, 0.14), inset 0 0 70px rgba(194, 255, 0, 0.05); }
+  0%, 100% { box-shadow: inset 0 0 32px rgba(255, 255, 255, 0.02); }
+  50% { box-shadow: inset 0 0 48px rgba(255, 255, 255, 0.06); }
 }
 
 .pdx-intel-activity::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 40%, rgba(194, 255, 0, 0.06), transparent 65%);
+  background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.04), transparent 65%);
   pointer-events: none;
 }
 
@@ -84,8 +84,8 @@
   height: 14px;
   margin: -7px 0 0 -7px;
   border-radius: 50%;
-  background: var(--pdx-accent, #c2ff00);
-  box-shadow: 0 0 18px rgba(194, 255, 0, 0.65);
+  background: var(--pdx-accent, #ffffff);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.45);
   animation: pdx-intel-pulse 1.4s ease-in-out infinite;
 }
 
@@ -94,8 +94,8 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid rgba(194, 255, 0, 0.5);
-  background: rgba(8, 14, 24, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: var(--pdx-bg);
   animation: pdx-intel-orbit 2.8s linear infinite;
 }
 
@@ -111,7 +111,7 @@
   height: 42px;
   margin-left: -1px;
   transform-origin: center bottom;
-  background: linear-gradient(to top, transparent, rgba(194, 255, 0, 0.55));
+  background: linear-gradient(to top, transparent, rgba(255, 255, 255, 0.45));
   opacity: 0.5;
   animation: pdx-intel-sweep 2.2s ease-in-out infinite;
 }
@@ -136,31 +136,38 @@
 .pdx-intel-activity__title {
   font-size: 0.88rem;
   font-weight: 700;
-  color: var(--pdx-text, #e6edf3);
+  color: var(--pdx-text, #ffffff);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .pdx-intel-activity__status {
   font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--pdx-text-muted);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .pdx-intel-activity--osint .pdx-intel-core,
-.pdx-intel-activity--osint .pdx-intel-signal { background-color: transparent; }
-.pdx-intel-activity--osint .pdx-intel-core { background: #5ecbff; box-shadow: 0 0 16px rgba(94, 203, 255, 0.55); }
-.pdx-intel-activity--osint .pdx-intel-signal { background: linear-gradient(to top, transparent, rgba(94, 203, 255, 0.5)); }
+.pdx-intel-activity--threat .pdx-intel-core,
+.pdx-intel-activity--builder .pdx-intel-core,
+.pdx-intel-activity--pipeline .pdx-intel-core,
+.pdx-intel-activity--automation .pdx-intel-core,
+.pdx-intel-activity--graph .pdx-intel-core,
+.pdx-intel-activity--timeline .pdx-intel-core {
+  background: var(--pdx-accent, #ffffff);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+}
 
-.pdx-intel-activity--threat .pdx-intel-core { background: #ff6b6b; box-shadow: 0 0 16px rgba(255, 107, 107, 0.5); }
-.pdx-intel-activity--threat .pdx-intel-signal { background: linear-gradient(to top, transparent, rgba(255, 107, 107, 0.45)); }
-
-.pdx-intel-activity--builder .pdx-intel-core { background: #fbbf24; box-shadow: 0 0 16px rgba(251, 191, 36, 0.45); }
-.pdx-intel-activity--pipeline .pdx-intel-core { background: #34d399; box-shadow: 0 0 16px rgba(52, 211, 153, 0.45); }
-.pdx-intel-activity--automation .pdx-intel-core { background: #fb923c; box-shadow: 0 0 16px rgba(251, 146, 60, 0.45); }
-.pdx-intel-activity--graph .pdx-intel-core { background: #a78bfa; box-shadow: 0 0 16px rgba(167, 139, 250, 0.45); }
-.pdx-intel-activity--timeline .pdx-intel-core { background: #93c5fd; box-shadow: 0 0 16px rgba(147, 197, 253, 0.45); }
+.pdx-intel-activity--osint .pdx-intel-signal,
+.pdx-intel-activity--threat .pdx-intel-signal,
+.pdx-intel-activity--builder .pdx-intel-signal,
+.pdx-intel-activity--pipeline .pdx-intel-signal,
+.pdx-intel-activity--automation .pdx-intel-signal,
+.pdx-intel-activity--graph .pdx-intel-signal,
+.pdx-intel-activity--timeline .pdx-intel-signal {
+  background: linear-gradient(to top, transparent, rgba(255, 255, 255, 0.4));
+}
 
 .pdx-deep-pipeline.pdx-dp--running .pdx-dp-header-left .pdx-dp-pulse-ring {
   display: none;

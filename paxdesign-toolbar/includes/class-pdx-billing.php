@@ -30,7 +30,7 @@ class PDX_Billing {
 				'price_month' => 0,
 				'price_year'  => 0,
 				'currency'    => 'USD',
-				'color'       => '#6e7681',
+				'color'       => '#8b8b8b',
 				'quotas'      => [
 					'scans_per_day'     => 5,
 					'ai_messages_per_day' => 10,
@@ -51,7 +51,7 @@ class PDX_Billing {
 				'price_month' => 29,
 				'price_year'  => 290,
 				'currency'    => 'USD',
-				'color'       => '#388bfd',
+				'color'       => '#7e7e7e',
 				'quotas'      => [
 					'scans_per_day'     => 100,
 					'ai_messages_per_day' => 500,
@@ -72,7 +72,7 @@ class PDX_Billing {
 				'price_month' => 99,
 				'price_year'  => 990,
 				'currency'    => 'USD',
-				'color'       => '#3fb950',
+				'color'       => '#ffffff',
 				'quotas'      => [
 					'scans_per_day'     => 1000,
 					'ai_messages_per_day' => 5000,
@@ -93,7 +93,7 @@ class PDX_Billing {
 				'price_month' => 0,
 				'price_year'  => 0,
 				'currency'    => 'USD',
-				'color'       => '#d29922',
+				'color'       => '#555555',
 				'quotas'      => [
 					'scans_per_day'     => -1,
 					'ai_messages_per_day' => -1,

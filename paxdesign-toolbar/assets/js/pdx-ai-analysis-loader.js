@@ -16,11 +16,11 @@
   };
 
   var MODULE_ACCENTS = {
-    trust: '#c2ff00',
-    osint: '#5ecbff',
-    threat: '#ff6b6b',
-    investigation: '#67e8f9',
-    graph: '#a78bfa',
+    trust: '#ffffff',
+    osint: '#f3f6fd',
+    threat: '#888888',
+    investigation: '#7e7e7e',
+    graph: '#555555',
   };
 
   /** Canonical rotating labels — shown on every intel-module analysis loader. */

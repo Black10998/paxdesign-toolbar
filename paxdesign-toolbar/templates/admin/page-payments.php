@@ -104,7 +104,7 @@ include __DIR__ . '/partials/header.php';
   <div class="pdx-card pdx-card--info">
     <div class="pdx-card__body">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-      <p>Get credentials from <a href="https://developer.paypal.com/dashboard/" target="_blank" rel="noopener" style="color:#388bfd">developer.paypal.com</a> → My Apps &amp; Credentials. Create a REST API app and copy the Client ID and Secret.</p>
+      <p>Get credentials from <a href="https://developer.paypal.com/dashboard/" target="_blank" rel="noopener" style="color:#8b8b8b">developer.paypal.com</a> → My Apps &amp; Credentials. Create a REST API app and copy the Client ID and Secret.</p>
     </div>
   </div>
 
