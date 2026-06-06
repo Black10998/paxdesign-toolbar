@@ -509,12 +509,14 @@ class PDX_Updater {
 	}
 
 	/**
-	 * Ensure PaxDesign never appears in response when already on the latest release.
+	 * Sync PaxDesign update bucket placement from live GitHub release metadata.
+	 *
+	 * Never trusts stale new_version values stored in the transient — a cached
+	 * no_update row from an older check can block wp-admin upgrades with "already up to date".
 	 *
 	 * @return bool Whether the transient was modified.
 	 */
 	private function enforce_pdx_update_bucket_placement( object $transient ): bool {
-		$modified  = false;
 		$installed = $this->get_installed_version();
 		$canonical = $this->canonical_plugin_basename();
 
@@ -522,37 +524,49 @@ class PDX_Updater {
 			return false;
 		}
 
-		$row = null;
-		if ( isset( $transient->response[ $canonical ] ) ) {
-			$row = $this->sanitize_update_object( $transient->response[ $canonical ] );
-		} elseif ( isset( $transient->no_update[ $canonical ] ) ) {
-			$row = $this->sanitize_update_object( $transient->no_update[ $canonical ] );
-		}
-
-		if ( ! is_object( $row ) ) {
+		$release = $this->fetch_release( false );
+		if ( '' !== $release['error'] || '' === $release['version'] || '' === $release['package'] ) {
 			return false;
 		}
 
-		$new_ver = $this->string_field( $row->new_version ?? null, '' );
-		if ( '' === $new_ver ) {
+		$offer = $this->build_update_offer( $release, $canonical );
+		if ( ! $this->update_object_is_valid( $offer ) ) {
 			return false;
 		}
 
-		$up_to_date = version_compare( $installed, $new_ver, '>=' );
+		$up_to_date = version_compare( $installed, $release['version'], '>=' );
+		$modified   = false;
 
 		if ( $up_to_date ) {
 			if ( isset( $transient->response[ $canonical ] ) ) {
 				unset( $transient->response[ $canonical ] );
 				$modified = true;
 			}
-			if ( ! isset( $transient->no_update[ $canonical ] ) ) {
-				$transient->no_update[ $canonical ] = $row;
+
+			$existing = isset( $transient->no_update[ $canonical ] )
+				? $this->sanitize_update_object( $transient->no_update[ $canonical ] )
+				: null;
+
+			if ( ! is_object( $existing )
+				|| $this->encode_for_compare( $existing ) !== $this->encode_for_compare( $offer ) ) {
+				$transient->no_update[ $canonical ] = $offer;
+				$modified                           = true;
+			}
+		} else {
+			if ( isset( $transient->no_update[ $canonical ] ) ) {
+				unset( $transient->no_update[ $canonical ] );
 				$modified = true;
 			}
-		} elseif ( ! isset( $transient->response[ $canonical ] ) ) {
-			unset( $transient->no_update[ $canonical ] );
-			$transient->response[ $canonical ] = $row;
-			$modified = true;
+
+			$existing = isset( $transient->response[ $canonical ] )
+				? $this->sanitize_update_object( $transient->response[ $canonical ] )
+				: null;
+
+			if ( ! is_object( $existing )
+				|| $this->encode_for_compare( $existing ) !== $this->encode_for_compare( $offer ) ) {
+				$transient->response[ $canonical ] = $offer;
+				$modified                          = true;
+			}
 		}
 
 		return $modified;
@@ -832,12 +846,6 @@ class PDX_Updater {
 
 		$payload = $this->build_update_uri_payload();
 		if ( false === $payload ) {
-			return false;
-		}
-
-		$installed = $this->get_installed_version();
-		$new_ver   = $this->string_field( $payload['new_version'] ?? null, '' );
-		if ( '' !== $new_ver && '' !== $installed && version_compare( $installed, $new_ver, '>=' ) ) {
 			return false;
 		}
 

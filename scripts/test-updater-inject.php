@@ -174,3 +174,48 @@ if ( $is_our->invoke( $updater, null ) ) {
 }
 
 echo "OK: updater inject + is_our_plugin guards\n";
+
+// Stale no_update row (old new_version) must not block wp-admin upgrade.
+file_put_contents(
+	$main,
+	"<?php\n/**\n * Plugin Name: PaxDesign Utility Dock\n * Version: 8.6.8\n * Text Domain: paxdesign-toolbar\n */\ndefine('PDX_VERSION','8.6.8');\n"
+);
+
+$stale_release = [
+	'version' => '8.7.1',
+	'package' => 'https://example.com/paxdesign-toolbar-8.7.1.zip',
+	'url'     => 'https://github.com/Black10998/paxdesign-toolbar/releases/tag/v8.7.1',
+	'name'    => 'PaxDesign Utility Dock',
+	'notes'   => '',
+	'error'   => '',
+];
+set_transient( 'pdx_github_release', $stale_release, 3600 );
+
+$stale_transient = (object) [
+	'response'  => [],
+	'no_update' => [
+		$basename => (object) [
+			'id'          => 'https://github.com/Black10998/paxdesign-toolbar',
+			'slug'        => PDX_SLUG,
+			'plugin'      => $basename,
+			'new_version' => '8.6.8',
+			'url'         => $stale_release['url'],
+			'package'     => 'https://example.com/paxdesign-toolbar-8.6.8.zip',
+		],
+	],
+];
+
+$finalize = $ref->getMethod( 'finalize_update_transient' );
+$finalize->setAccessible( true );
+$out3     = $finalize->invoke( $updater, $stale_transient );
+
+$ok3 = isset( $out3->response[ $basename ] )
+	&& '8.7.1' === $out3->response[ $basename ]->new_version
+	&& ! isset( $out3->no_update[ $basename ] );
+
+if ( ! $ok3 ) {
+	fwrite( STDERR, "FAIL: stale no_update row must move to response with latest GitHub version\n" );
+	exit( 1 );
+}
+
+echo "OK: stale no_update transient repaired from GitHub release\n";

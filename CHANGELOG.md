@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 8.7.2 — 2026-06-06
+
+**WordPress Plugins screen update fix (8.6.8 → latest)**
+
+### Updater
+- Fix false “already up to date” failure on wp-admin plugin upgrades when a stale `no_update` row cached an older `new_version`.
+- Rebuild update bucket placement from live GitHub release metadata on every transient read/write instead of trusting stored `new_version` values.
+- Always return Update URI payloads when GitHub metadata is valid so WordPress can populate both `response` and `no_update` correctly.
+
+**Install:** `releases/paxdesign-toolbar-8.7.2.zip` — tag `v8.7.2`
+
 ## 8.7.1 — 2026-06-06
 
 **External API resilience + WordPress update reliability**
