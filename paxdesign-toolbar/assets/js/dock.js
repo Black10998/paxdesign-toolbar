@@ -592,7 +592,8 @@
       if (score == null && !urlFx.redirect_count && !(phish.reasons && phish.reasons.length)) return '';
 
       var verdict = (forensics.phishing_verdict || phish.verdict || 'unknown').toLowerCase();
-      var heroCls = verdict === 'clean' || verdict === 'low' ? 'pdx-intel-hero--clean' : (verdict === 'medium' ? 'pdx-intel-hero--warn' : '');
+      if (verdict === 'skipped') return '';
+      var heroCls = verdict === 'clean' ? 'pdx-intel-hero--clean' : (verdict === 'low' || verdict === 'unknown' ? 'pdx-intel-hero--warn' : (verdict === 'medium' ? 'pdx-intel-hero--warn' : ''));
       var html = '<div class="pdx-intel-hero ' + heroCls + '">' +
         '<div class="pdx-intel-hero__head">' + modIcon('threat') +
           '<span class="pdx-intel-hero__title">Phishing & URL intelligence</span>';
@@ -815,7 +816,7 @@
         });
       }
 
-      var scoreColor = (verdict === 'clean' || verdict === 'low') ? 'var(--pdx-green)' : verdict === 'medium' ? 'var(--pdx-yellow)' : verdict === 'insufficient_data' ? 'var(--pdx-lo)' : 'var(--pdx-red)';
+      var scoreColor = verdict === 'clean' ? 'var(--pdx-green)' : verdict === 'low' ? '#7e7e7e' : verdict === 'medium' ? 'var(--pdx-yellow)' : verdict === 'insufficient_data' ? 'var(--pdx-lo)' : 'var(--pdx-red)';
       var verdictLabel = risk.label || (
         verdict === 'clean' ? 'Clean' :
         verdict === 'low' ? 'Low Risk' :
@@ -828,9 +829,11 @@
       var html = '<div class="pdx-result">';
 
       /* ── Scan complete banner ── */
-      html += '<div class="pdx-scan-complete">' +
+      html += '<div class="pdx-scan-complete' + (verdict === 'insufficient_data' ? ' pdx-scan-complete--warn' : '') + '">' +
         '<div class="pdx-scan-complete-dot"></div>' +
-        '<span>Analysis complete — ' + escHtml(displayTarget) + '</span>' +
+        '<span>' + (verdict === 'insufficient_data'
+          ? 'Insufficient data — could not verify safety for ' + escHtml(displayTarget)
+          : 'Analysis complete — ' + escHtml(displayTarget)) + '</span>' +
         '<span class="pdx-scan-complete-time">' + (data.duration ? data.duration + 's' : '') + '</span>' +
       '</div>';
 
@@ -842,7 +845,7 @@
       /* ── Risk header with score ring ── */
       var circumference = 2 * Math.PI * 26; // r=26
       var dashOffset = circumference - (score / 100) * circumference;
-      var ringStroke = (verdict === 'clean' || verdict === 'low') ? '#ffffff' : verdict === 'medium' ? '#7e7e7e' : '#888888';
+      var ringStroke = verdict === 'clean' ? '#ffffff' : verdict === 'low' ? '#7e7e7e' : verdict === 'medium' ? '#7e7e7e' : verdict === 'insufficient_data' ? '#888888' : '#888888';
       html += '<div class="pdx-risk-header">' +
         '<div class="pdx-risk-ring">' +
           '<svg viewBox="0 0 64 64"><circle class="pdx-risk-ring-track" cx="32" cy="32" r="26"/>' +
@@ -1198,12 +1201,15 @@
       var anomalies = data.anomalies || [];
       var confidence = data.confidence || 0;
 
-      var scoreColor = (risk.verdict === 'clean' || risk.verdict === 'low') ? 'var(--pdx-green)' : risk.verdict === 'medium' ? 'var(--pdx-yellow)' : 'var(--pdx-red)';
+      var scoreColor = risk.verdict === 'clean' ? 'var(--pdx-green)' : risk.verdict === 'low' ? '#7e7e7e' : risk.verdict === 'medium' ? 'var(--pdx-yellow)' : risk.verdict === 'insufficient_data' ? 'var(--pdx-lo)' : 'var(--pdx-red)';
       var html = '<div class="pdx-result">';
 
       /* ── Scan complete banner ── */
-      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div>' +
-        '<span>OSINT investigation complete — ' + escHtml(target) + '</span>' +
+      html += '<div class="pdx-scan-complete' + (risk.verdict === 'insufficient_data' ? ' pdx-scan-complete--warn' : '') + '">' +
+        '<div class="pdx-scan-complete-dot"></div>' +
+        '<span>' + (risk.verdict === 'insufficient_data'
+          ? 'Insufficient data — OSINT could not verify ' + escHtml(target)
+          : 'OSINT investigation complete — ' + escHtml(target)) + '</span>' +
         (data.scan_id ? '<span class="pdx-scan-complete-time">' + escHtml(data.scan_id) + '</span>' : '') +
       '</div>';
 
@@ -1211,7 +1217,7 @@
       if (risk.score !== undefined) {
         var circumference = 2 * Math.PI * 26;
         var dashOffset = circumference - (risk.score / 100) * circumference;
-        var ringStroke = (risk.verdict === 'clean' || risk.verdict === 'low') ? '#ffffff' : risk.verdict === 'medium' ? '#7e7e7e' : '#888888';
+        var ringStroke = risk.verdict === 'clean' ? '#ffffff' : risk.verdict === 'low' ? '#7e7e7e' : risk.verdict === 'medium' ? '#7e7e7e' : risk.verdict === 'insufficient_data' ? '#888888' : '#888888';
         html += '<div class="pdx-risk-header">' +
           '<div class="pdx-risk-ring">' +
             '<svg viewBox="0 0 64 64"><circle class="pdx-risk-ring-track" cx="32" cy="32" r="26"/>' +
@@ -3352,6 +3358,7 @@
 
       if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) return 'email';
       if (/^(\d{1,3}\.){3}\d{1,3}$/.test(t)) return 'ip';
+      if (/^[0-9a-f:.]+$/i.test(t) && t.indexOf(':') !== -1 && t.split(':').length >= 2) return 'ip';
       if (/^([0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/i.test(t)) return 'hash';
       if (meta.hadProtocol || meta.hadPath || meta.hadQuery) return 'url';
       if (/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9-]{2,})+$/i.test(t)) return 'domain';

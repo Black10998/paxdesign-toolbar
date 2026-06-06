@@ -1,5 +1,28 @@
 ﻿# Changelog
 
+## 8.7.4 — 2026-06-06
+
+**Intelligence engine — type-aware routing and scoring**
+
+### Target detection
+- IPv6 addresses classified and parsed correctly (no colon truncation bugs).
+- Email targets use the domain part for DNS/RDAP/threat lookups; full address preserved for display.
+- URL forensics preserve path and query (not just `https://host/`).
+
+### Intelligence routing (by target type)
+- **IP:** RDAP IP, reverse DNS (PTR), GeoIP, OTX IPv4/IPv6, URLhaus host, Shodan, VT IP endpoint.
+- **Domain/subdomain:** RDAP domain, DNS, SSL Labs, GeoIP, OTX domain, URLhaus host, VT domain.
+- **URL:** Domain sources plus URLhaus URL lookup and full redirect/path forensics.
+- **Email:** MX/SPF/DMARC via DNS on domain, domain RDAP/SSL, domain reputation feeds.
+- **Hash:** OTX file + VT files endpoint only (no invalid domain/WHOIS lookups).
+
+### Scoring / UX
+- Verdict `insufficient_data` when required sources fail — no false “Clean” on failed scans.
+- Type-aware confidence weights; skipped irrelevant sources do not penalize score.
+- UI distinguishes Clean vs Low Risk vs Insufficient Data (no green “safe” styling on failures).
+
+**Install:** `releases/paxdesign-toolbar-8.7.4.zip` — tag `v8.7.4`
+
 ## 8.7.3 — 2026-06-06
 
 **UI responsiveness + mobile layout fixes**

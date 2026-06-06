@@ -30,11 +30,12 @@ class PDX_Intelligence {
 			return $this->error_report( $raw_target, $resolved );
 		}
 
-		$target = PDX_Target::api_host( $resolved );
+		$target      = PDX_Target::scan_host( $resolved );
+		$target_type = (string) $resolved['type'];
 		$report = [
-			'target'         => $target,
+			'target'         => 'email' === $target_type ? $resolved['normalized'] : $target,
 			'target_raw'     => $resolved['raw'],
-			'target_type'    => $resolved['type'],
+			'target_type'    => $target_type,
 			'target_meta'    => $resolved,
 			'scan_id'        => 'scan-' . substr( bin2hex( random_bytes( 6 ) ), 0, 10 ),
 			'timestamp'      => gmdate( 'c' ),
@@ -47,54 +48,121 @@ class PDX_Intelligence {
 			'debug'          => [],
 		];
 
-		// RDAP / WHOIS
-		$rdap = $this->fetch_rdap_resolved( $target );
-		$report['source_status']['rdap'] = $rdap['status'];
-		if ( ! empty( $rdap['data'] ) ) {
-			$report['sources']['rdap'] = $this->parse_rdap( $rdap['data'] );
-			if ( ! empty( $rdap['queried'] ) && $rdap['queried'] !== $target ) {
-				$report['sources']['rdap']['note'] = sprintf(
-					'Registration data for parent zone %s (subdomain RDAP unavailable).',
-					$rdap['queried']
-				);
+		$resolved_ip = null;
+
+		switch ( $target_type ) {
+			case 'ip':
+				$resolved_ip = $target;
+				$rdap        = $this->fetch_rdap_ip( $target );
+				$report['source_status']['rdap'] = $rdap['status'];
+				if ( ! empty( $rdap['data'] ) ) {
+					$report['sources']['rdap'] = $this->parse_rdap_ip( $rdap['data'] );
+				}
+				$report['source_status']['ssl'] = $this->skipped_status( 'SSL/TLS analysis applies to domains and URLs, not raw IP addresses.' );
+
+				$reverse = $this->fetch_reverse_dns( $target );
+				$report['source_status']['dns'] = $reverse['status'];
+				if ( ! empty( $reverse['data'] ) ) {
+					$report['sources']['dns'] = $reverse['data'];
+				}
+				break;
+
+			case 'hash':
+				$report['target'] = $resolved['normalized'];
+				$report['source_status']['rdap'] = $this->skipped_status( 'RDAP/WHOIS does not apply to file hashes.' );
+				$report['source_status']['dns']  = $this->skipped_status( 'DNS lookups do not apply to file hashes.' );
+				$report['source_status']['ssl']  = $this->skipped_status( 'SSL/TLS analysis does not apply to file hashes.' );
+				$report['source_status']['geo']  = $this->skipped_status( 'Geolocation does not apply to file hashes.' );
+				break;
+
+			case 'email':
+				$report['target'] = $resolved['normalized'];
+				$domain           = $target;
+				$rdap             = $this->fetch_rdap_resolved( $domain );
+				$report['source_status']['rdap'] = $rdap['status'];
+				if ( ! empty( $rdap['data'] ) ) {
+					$report['sources']['rdap'] = $this->parse_rdap( $rdap['data'] );
+				}
+
+				$dns = $this->fetch_dns( $domain );
+				$report['source_status']['dns'] = $dns['status'];
+				if ( ! empty( $dns['data'] ) ) {
+					$report['sources']['dns'] = $dns['data'];
+					$report['sources']['email_auth'] = [
+						'label'         => 'Email Authentication',
+						'address'       => $resolved['normalized'],
+						'domain'        => $domain,
+						'mx_configured' => ! empty( $dns['data']['mx'] ),
+						'spf_configured'=> ! empty( $dns['data']['spf'] ),
+						'dmarc_configured' => ! empty( $dns['data']['dmarc'] ),
+					];
+				}
+
+				$ssl = $this->fetch_ssl_polled( $domain );
+				$report['source_status']['ssl'] = $ssl['status'];
+				if ( ! empty( $ssl['data'] ) ) {
+					$report['sources']['ssl'] = $this->parse_ssl( $ssl['data'] );
+				}
+
+				$resolved_ip = $this->resolve_host_ip( $domain );
+				break;
+
+			default:
+				// domain, url, and hostname-like targets.
+				$domain_host = $target;
+				$rdap        = $this->fetch_rdap_resolved( $domain_host );
+				$report['source_status']['rdap'] = $rdap['status'];
+				if ( ! empty( $rdap['data'] ) ) {
+					$report['sources']['rdap'] = $this->parse_rdap( $rdap['data'] );
+					if ( ! empty( $rdap['queried'] ) && $rdap['queried'] !== $domain_host ) {
+						$report['sources']['rdap']['note'] = sprintf(
+							'Registration data for parent zone %s (subdomain RDAP unavailable).',
+							$rdap['queried']
+						);
+					}
+					$report['timeline'] = array_merge( $report['timeline'], $this->extract_timeline( $rdap['data'] ) );
+				}
+
+				$dns = $this->fetch_dns( $domain_host );
+				$report['source_status']['dns'] = $dns['status'];
+				if ( ! empty( $dns['data'] ) ) {
+					$report['sources']['dns'] = $dns['data'];
+				}
+
+				$ssl = $this->fetch_ssl_polled( $domain_host );
+				$report['source_status']['ssl'] = $ssl['status'];
+				if ( ! empty( $ssl['data'] ) ) {
+					$report['sources']['ssl'] = $this->parse_ssl( $ssl['data'] );
+					if ( ! empty( $ssl['message'] ) ) {
+						$report['sources']['ssl']['note'] = $ssl['message'];
+					}
+				}
+
+				$resolved_ip = $this->resolve_host_ip( $domain_host );
+				break;
+		}
+
+		if ( null === $resolved_ip && 'ip' !== $target_type && 'hash' !== $target_type ) {
+			$resolved_ip = $this->resolve_host_ip( $target );
+		}
+
+		if ( 'hash' !== $target_type ) {
+			if ( $resolved_ip ) {
+				$geo = $this->fetch_geo( $resolved_ip );
+				if ( $geo ) {
+					$report['sources']['geolocation'] = $geo;
+					$report['sources']['geo']         = $geo;
+					$report['source_status']['geo']   = [ 'state' => 'ok', 'message' => 'Resolved via ' . $resolved_ip ];
+				} else {
+					$report['source_status']['geo'] = [ 'state' => 'error', 'message' => 'Geolocation lookup failed for ' . $resolved_ip ];
+				}
+			} elseif ( 'ip' !== $target_type ) {
+				$report['source_status']['geo'] = [ 'state' => 'error', 'message' => 'Could not resolve host to an IP address.' ];
 			}
-			$report['timeline'] = array_merge( $report['timeline'], $this->extract_timeline( $rdap['data'] ) );
 		}
 
-		// DNS (Google DoH)
-		$dns = $this->fetch_dns( $target );
-		$report['source_status']['dns'] = $dns['status'];
-		if ( ! empty( $dns['data'] ) ) {
-			$report['sources']['dns'] = $dns['data'];
-		}
-
-		// SSL Labs (with polling)
-		$ssl = $this->fetch_ssl_polled( $target );
-		$report['source_status']['ssl'] = $ssl['status'];
-		if ( ! empty( $ssl['data'] ) ) {
-			$report['sources']['ssl'] = $this->parse_ssl( $ssl['data'] );
-			if ( ! empty( $ssl['message'] ) ) {
-				$report['sources']['ssl']['note'] = $ssl['message'];
-			}
-		}
-
-		// Geolocation from resolved A/AAAA record (free)
-		$resolved_ip = $this->resolve_host_ip( $target );
-		if ( $resolved_ip ) {
-			$geo = $this->fetch_geo( $resolved_ip );
-			if ( $geo ) {
-				$report['sources']['geolocation'] = $geo;
-				$report['sources']['geo']         = $geo;
-				$report['source_status']['geo']   = [ 'state' => 'ok', 'message' => 'Resolved via ' . $resolved_ip ];
-			} else {
-				$report['source_status']['geo'] = [ 'state' => 'error', 'message' => 'Geolocation lookup failed for ' . $resolved_ip ];
-			}
-		} else {
-			$report['source_status']['geo'] = [ 'state' => 'error', 'message' => 'Could not resolve host to an IP address.' ];
-		}
-
-		// Free + paid threat intelligence (OTX, URLhaus; VT when paid + key)
-		$threat = $this->fetch_threat_intel( $target, $paid );
+		// Threat intelligence — type-appropriate OTX / URLhaus / VT endpoints.
+		$threat = $this->fetch_threat_intel( $target, $paid, $target_type, $resolved );
 		$report['source_status']['threat'] = $threat['status'];
 		if ( ! empty( $threat['data'] ) ) {
 			$report['sources']['threat']     = $threat['data'];
@@ -106,7 +174,7 @@ class PDX_Intelligence {
 
 		if ( $paid ) {
 			$vt_key = (string) $this->settings->get( 'api_keys.virustotal', '' );
-			$vt     = $this->fetch_virustotal( $target );
+			$vt     = $this->fetch_virustotal( $target, $target_type, $resolved );
 			if ( $vt ) {
 				$vt_threat = $this->map_vt_to_threat( $vt );
 				$report['sources']['virustotal'] = $vt;
@@ -126,9 +194,9 @@ class PDX_Intelligence {
 						)
 					);
 				}
-				$report['source_status']['threat'] = [ 'state' => 'ok', 'message' => 'VirusTotal + open feeds' ];
+				$report['source_status']['threat']     = [ 'state' => 'ok', 'message' => 'VirusTotal + open feeds' ];
 				$report['source_status']['virustotal'] = [ 'state' => 'ok', 'message' => 'VirusTotal data retrieved' ];
-				$report['indicators']              = array_merge( $report['indicators'], $this->extract_iocs( $vt ) );
+				$report['indicators']                  = array_merge( $report['indicators'], $this->extract_iocs( $vt ) );
 			} else {
 				$report['source_status']['virustotal'] = $this->paid_api_status(
 					'VirusTotal',
@@ -137,35 +205,45 @@ class PDX_Intelligence {
 				);
 			}
 
-			$shodan_key = (string) $this->settings->get( 'api_keys.shodan', '' );
-			$shodan     = $this->fetch_shodan( $resolved_ip ?: $target );
-			if ( $shodan ) {
-				$report['sources']['shodan']       = $shodan;
-				$report['source_status']['shodan'] = [ 'state' => 'ok', 'message' => 'Host data retrieved' ];
+			if ( in_array( $target_type, [ 'ip', 'domain', 'url', 'email' ], true ) ) {
+				$shodan_key = (string) $this->settings->get( 'api_keys.shodan', '' );
+				$shodan_ip  = $resolved_ip ?: ( 'ip' === $target_type ? $target : null );
+				$shodan     = $shodan_ip ? $this->fetch_shodan( $shodan_ip ) : null;
+				if ( $shodan ) {
+					$report['sources']['shodan']       = $shodan;
+					$report['source_status']['shodan'] = [ 'state' => 'ok', 'message' => 'Host data retrieved' ];
+				} else {
+					$report['source_status']['shodan'] = $this->paid_api_status(
+						'Shodan',
+						$this->last_paid_api_response,
+						'' !== $shodan_key
+					);
+				}
 			} else {
-				$report['source_status']['shodan'] = $this->paid_api_status(
-					'Shodan',
-					$this->last_paid_api_response,
-					'' !== $shodan_key
-				);
+				$report['source_status']['shodan'] = $this->skipped_status( 'Shodan enrichment does not apply to this target type.' );
 			}
 
-			$hunter_key = (string) $this->settings->get( 'api_keys.hunter', '' );
-			$hunter     = $this->fetch_hunter( $target );
-			if ( $hunter ) {
-				$report['sources']['hunter']       = $hunter;
-				$report['source_status']['hunter'] = [ 'state' => 'ok', 'message' => 'Email discovery complete' ];
+			if ( in_array( $target_type, [ 'domain', 'url', 'email' ], true ) ) {
+				$hunter_key = (string) $this->settings->get( 'api_keys.hunter', '' );
+				$hunter_dom = 'email' === $target_type ? $target : $target;
+				$hunter     = $this->fetch_hunter( $hunter_dom );
+				if ( $hunter ) {
+					$report['sources']['hunter']       = $hunter;
+					$report['source_status']['hunter'] = [ 'state' => 'ok', 'message' => 'Email discovery complete' ];
+				} else {
+					$report['source_status']['hunter'] = $this->paid_api_status(
+						'Hunter.io',
+						$this->last_paid_api_response,
+						'' !== $hunter_key
+					);
+				}
 			} else {
-				$report['source_status']['hunter'] = $this->paid_api_status(
-					'Hunter.io',
-					$this->last_paid_api_response,
-					'' !== $hunter_key
-				);
+				$report['source_status']['hunter'] = $this->skipped_status( 'Hunter.io domain search does not apply to this target type.' );
 			}
 		}
 
-		$report['risk']           = $this->compute_risk( $report['sources'], $report['source_status'] );
-		$report['confidence']     = $this->compute_confidence( $report['source_status'] );
+		$report['risk']           = $this->compute_risk( $report['sources'], $report['source_status'], [], $target_type );
+		$report['confidence']     = $this->compute_confidence( $report['source_status'], $target_type );
 		$narrative                = $this->build_narrative( $target, $report );
 		$report['ai_summary']      = $narrative['summary'];
 		$report['recommendations'] = $narrative['recommendations'];
@@ -322,6 +400,188 @@ class PDX_Intelligence {
 	/**
 	 * @return list<string>
 	 */
+	/**
+	 * @return array{state:string,message:string}
+	 */
+	private function skipped_status( string $message ): array {
+		return [ 'state' => 'skipped', 'message' => $message ];
+	}
+
+	/**
+	 * RDAP IP lookup (IPv4 / IPv6).
+	 *
+	 * @return array{data:?array,status:array,queried:string}
+	 */
+	public function fetch_rdap_ip( string $ip ): array {
+		$url  = 'https://rdap.org/ip/' . rawurlencode( $ip );
+		$http = PDX_Http::get(
+			$url,
+			[
+				'timeout' => 15,
+				'headers' => [ 'Accept' => 'application/rdap+json, application/json' ],
+			],
+			'rdap_ip'
+		);
+		$resp = $http['response'];
+
+		if ( is_wp_error( $resp ) ) {
+			return [
+				'data'    => null,
+				'queried' => $ip,
+				'status'  => $this->with_http_log(
+					[ 'state' => 'error', 'message' => $resp->get_error_message() ],
+					$http['log']
+				),
+			];
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $resp );
+		if ( 200 !== $code ) {
+			return [
+				'data'    => null,
+				'queried' => $ip,
+				'status'  => $this->with_http_log(
+					[ 'state' => 'error', 'message' => "RDAP IP HTTP {$code}." ],
+					$http['log']
+				),
+			];
+		}
+
+		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+		if ( ! is_array( $body ) ) {
+			return [
+				'data'    => null,
+				'queried' => $ip,
+				'status'  => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'Invalid RDAP IP response.' ],
+					$http['log']
+				),
+			];
+		}
+
+		$http['log']['parse_status'] = 'ok';
+
+		return [
+			'data'    => $body,
+			'queried' => $ip,
+			'status'  => $this->with_http_log(
+				[ 'state' => 'ok', 'message' => 'IP registration data retrieved.' ],
+				$http['log']
+			),
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $rdap
+	 * @return array<string, mixed>
+	 */
+	private function parse_rdap_ip( array $rdap ): array {
+		$org  = null;
+		$cidr = $rdap['cidr0_cidrs'][0]['v4prefix'] ?? $rdap['cidr0_cidrs'][0]['v6prefix'] ?? null;
+		foreach ( $rdap['entities'] ?? [] as $ent ) {
+			$roles = $ent['roles'] ?? [];
+			if ( ! in_array( 'registrant', $roles, true ) && ! in_array( 'administrative', $roles, true ) ) {
+				continue;
+			}
+			$vc = $ent['vcardArray'][1] ?? [];
+			foreach ( $vc as $v ) {
+				if ( 'fn' === ( $v[0] ?? '' ) ) {
+					$org = $v[3];
+					break 2;
+				}
+			}
+		}
+
+		return [
+			'label'      => 'IP Registration',
+			'registrar'  => $org ?? 'Unknown',
+			'network'    => $cidr ?? ( $rdap['name'] ?? null ),
+			'country'    => $rdap['country'] ?? null,
+			'status'     => array_slice( $rdap['status'] ?? [], 0, 5 ),
+		];
+	}
+
+	/**
+	 * Reverse DNS (PTR) for an IP address.
+	 *
+	 * @return array{data:?array,status:array}
+	 */
+	public function fetch_reverse_dns( string $ip ): array {
+		$ptr = $this->reverse_dns_query_name( $ip );
+		if ( ! $ptr ) {
+			return [
+				'data'   => null,
+				'status' => [ 'state' => 'error', 'message' => 'Could not build reverse DNS query for this IP.' ],
+			];
+		}
+
+		$http = PDX_Http::get(
+			'https://dns.google/resolve?name=' . rawurlencode( $ptr ) . '&type=PTR',
+			[ 'timeout' => 10, 'headers' => [ 'Accept' => 'application/dns-json' ] ],
+			'dns_ptr'
+		);
+		$resp = $http['response'];
+
+		if ( is_wp_error( $resp ) || 200 !== (int) wp_remote_retrieve_response_code( $resp ) ) {
+			return [
+				'data'   => null,
+				'status' => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'Reverse DNS lookup failed.' ],
+					$http['log']
+				),
+			];
+		}
+
+		$data  = json_decode( wp_remote_retrieve_body( $resp ), true );
+		$names = [];
+		foreach ( $data['Answer'] ?? [] as $rec ) {
+			$value = rtrim( (string) ( $rec['data'] ?? '' ), '.' );
+			if ( '' !== $value ) {
+				$names[] = $value;
+			}
+		}
+
+		if ( empty( $names ) ) {
+			return [
+				'data'   => null,
+				'status' => $this->with_http_log(
+					[ 'state' => 'partial', 'message' => 'No PTR records found for this IP.' ],
+					$http['log']
+				),
+			];
+		}
+
+		return [
+			'data'   => [
+				'label'   => 'Reverse DNS',
+				'ptr'     => $names,
+				'hostnames' => $names,
+			],
+			'status' => $this->with_http_log(
+				[ 'state' => 'ok', 'message' => 'Reverse DNS records retrieved.' ],
+				$http['log']
+			),
+		];
+	}
+
+	private function reverse_dns_query_name( string $ip ): ?string {
+		if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+			$octets = array_reverse( explode( '.', $ip ) );
+			return implode( '.', $octets ) . '.in-addr.arpa';
+		}
+
+		if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ) {
+			$packed = inet_pton( $ip );
+			if ( false === $packed ) {
+				return null;
+			}
+			$nibbles = str_split( bin2hex( $packed ) );
+			return implode( '.', array_reverse( $nibbles ) ) . '.ip6.arpa';
+		}
+
+		return null;
+	}
+
 	private function rdap_lookup_candidates( string $domain ): array {
 		$candidates = [ $domain ];
 		$parts      = explode( '.', $domain );
@@ -654,19 +914,50 @@ class PDX_Intelligence {
 	}
 
 	/**
-	 * Open-source threat feeds (OTX, URLhaus) + optional VirusTotal when paid.
+	 * Open-source threat feeds (OTX, URLhaus) with type-appropriate endpoints.
 	 *
+	 * @param array<string, mixed> $resolved
 	 * @return array{data:?array,status:array}
 	 */
-	public function fetch_threat_intel( string $target, bool $paid ): array {
+	public function fetch_threat_intel( string $target, bool $paid, string $type = 'domain', array $resolved = [] ): array {
 		$feeds      = [];
 		$malicious  = 0;
 		$suspicious = 0;
 		$errors     = 0;
+		$attempts   = 0;
 		$last_log   = [];
 
-		// AlienVault OTX (no API key required for indicator summary)
-		$otx_url = 'https://otx.alienvault.com/api/v1/indicators/domain/' . rawurlencode( $target ) . '/general';
+		if ( 'hash' === $type ) {
+			++$attempts;
+			$otx_url  = 'https://otx.alienvault.com/api/v1/indicators/file/' . rawurlencode( $target ) . '/general';
+			$otx_http = PDX_Http::get( $otx_url, [ 'timeout' => 12 ], 'otx_file' );
+			$otx      = $otx_http['response'];
+			$last_log = $otx_http['log'];
+
+			if ( ! is_wp_error( $otx ) && 200 === (int) wp_remote_retrieve_response_code( $otx ) ) {
+				$odata = json_decode( wp_remote_retrieve_body( $otx ), true );
+				$pulse = (int) ( $odata['pulse_info']['count'] ?? 0 );
+				if ( $pulse > 0 ) {
+					$suspicious += min( 5, $pulse );
+					$feeds[] = "OTX file ({$pulse} pulses)";
+				} else {
+					$feeds[] = 'OTX file (0 pulses)';
+				}
+			} else {
+				++$errors;
+			}
+
+			return $this->finalize_threat_intel( $feeds, $malicious, $suspicious, $errors, $attempts, $last_log );
+		}
+
+		$otx_indicator = $target;
+		$otx_path      = 'domain';
+		if ( 'ip' === $type ) {
+			$otx_path = filter_var( $target, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ? 'IPv6' : 'IPv4';
+		}
+
+		++$attempts;
+		$otx_url  = 'https://otx.alienvault.com/api/v1/indicators/' . $otx_path . '/' . rawurlencode( $otx_indicator ) . '/general';
 		$otx_http = PDX_Http::get( $otx_url, [ 'timeout' => 12 ], 'otx' );
 		$otx      = $otx_http['response'];
 		$last_log = $otx_http['log'];
@@ -685,31 +976,63 @@ class PDX_Intelligence {
 			++$errors;
 		}
 
-		// URLhaus host lookup
-		$urlhaus_http = PDX_Http::post(
-			'https://urlhaus-api.abuse.ch/v1/host/',
-			[
-				'timeout' => 12,
-				'body'    => [ 'host' => $target ],
-			],
-			'urlhaus'
-		);
+		// URLhaus — URL lookup for URLs, host lookup otherwise.
+		++$attempts;
+		if ( 'url' === $type ) {
+			$fetch_url = $resolved['url'] ?? $resolved['raw'] ?? '';
+			if ( ! preg_match( '#^https?://#i', (string) $fetch_url ) ) {
+				$fetch_url = 'https://' . $target . ( $resolved['path'] ?? '' );
+			}
+			$urlhaus_http = PDX_Http::post(
+				'https://urlhaus-api.abuse.ch/v1/url/',
+				[
+					'timeout' => 12,
+					'body'    => [ 'url' => $fetch_url ],
+				],
+				'urlhaus_url'
+			);
+		} else {
+			$urlhaus_http = PDX_Http::post(
+				'https://urlhaus-api.abuse.ch/v1/host/',
+				[
+					'timeout' => 12,
+					'body'    => [ 'host' => $target ],
+				],
+				'urlhaus'
+			);
+		}
+
 		$urlhaus  = $urlhaus_http['response'];
 		$last_log = $urlhaus_http['log'];
 
 		if ( ! is_wp_error( $urlhaus ) && 200 === (int) wp_remote_retrieve_response_code( $urlhaus ) ) {
 			$udata = json_decode( wp_remote_retrieve_body( $urlhaus ), true );
 			$last_log['parse_status'] = is_array( $udata ) ? 'ok' : 'parse_error';
-			if ( 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_count'] ) ) {
+			if ( 'url' === $type && 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_status'] ) ) {
+				if ( in_array( $udata['url_status'], [ 'online', 'offline' ], true ) ) {
+					++$malicious;
+					$feeds[] = 'URLhaus (malicious URL)';
+				} else {
+					$feeds[] = 'URLhaus (not listed)';
+				}
+			} elseif ( 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_count'] ) ) {
 				$malicious += (int) $udata['url_count'];
 				$feeds[]     = 'URLhaus (' . (int) $udata['url_count'] . ' URLs)';
 			} else {
-				$feeds[] = 'URLhaus (clean)';
+				$feeds[] = 'URLhaus (not listed)';
 			}
 		} else {
 			++$errors;
 		}
 
+		return $this->finalize_threat_intel( $feeds, $malicious, $suspicious, $errors, $attempts, $last_log );
+	}
+
+	/**
+	 * @param list<string> $feeds
+	 * @return array{data:?array,status:array}
+	 */
+	private function finalize_threat_intel( array $feeds, int $malicious, int $suspicious, int $errors, int $attempts, array $last_log ): array {
 		$data = [
 			'label'      => 'Threat Intelligence',
 			'malicious'  => $malicious,
@@ -720,7 +1043,7 @@ class PDX_Intelligence {
 			'sources'    => array_filter( [ 'OTX', 'URLhaus' ] ),
 		];
 
-		if ( $errors >= 2 ) {
+		if ( $attempts > 0 && $errors >= $attempts ) {
 			$status = [ 'state' => 'error', 'message' => 'Threat feed queries failed. Check outbound HTTPS from the server.' ];
 			if ( ! empty( $last_log ) ) {
 				$status = $this->with_http_log( $status, $last_log );
@@ -801,15 +1124,21 @@ class PDX_Intelligence {
 
 	/* ── VirusTotal ─────────────────────────────────────── */
 
-	public function fetch_virustotal( string $target ): ?array {
+	public function fetch_virustotal( string $target, string $type = 'domain', array $resolved = [] ): ?array {
 		$key = $this->settings->get( 'api_keys.virustotal', '' );
 		if ( ! $key ) {
 			$this->last_paid_api_response = null;
 			return null;
 		}
 
+		$endpoint = $this->virustotal_endpoint( $target, $type, $resolved );
+		if ( ! $endpoint ) {
+			$this->last_paid_api_response = null;
+			return null;
+		}
+
 		$resp = wp_remote_get(
-			'https://www.virustotal.com/api/v3/domains/' . rawurlencode( $target ),
+			$endpoint,
 			[ 'timeout' => 12, 'headers' => [ 'x-apikey' => $key ] ]
 		);
 		$this->last_paid_api_response = $resp;
@@ -832,6 +1161,31 @@ class PDX_Intelligence {
 			'last_scan'   => $attrs['last_analysis_date'] ?? null,
 			'tags'        => $attrs['tags'] ?? [],
 		];
+	}
+
+	/**
+	 * @param array<string, mixed> $resolved
+	 */
+	private function virustotal_endpoint( string $target, string $type, array $resolved ): ?string {
+		switch ( $type ) {
+			case 'ip':
+				return 'https://www.virustotal.com/api/v3/ip_addresses/' . rawurlencode( $target );
+			case 'hash':
+				return 'https://www.virustotal.com/api/v3/files/' . rawurlencode( $target );
+			case 'url':
+				$url = (string) ( $resolved['url'] ?? $resolved['raw'] ?? '' );
+				if ( ! preg_match( '#^https?://#i', $url ) ) {
+					$path  = $resolved['path'] ?? '/';
+					$query = ! empty( $resolved['query'] ) ? '?' . $resolved['query'] : '';
+					$url   = 'https://' . $target . $path . $query;
+				}
+				$id = rtrim( strtr( base64_encode( $url ), '+/', '-_' ), '=' );
+				return 'https://www.virustotal.com/api/v3/urls/' . $id;
+			case 'email':
+			case 'domain':
+			default:
+				return 'https://www.virustotal.com/api/v3/domains/' . rawurlencode( $target );
+		}
 	}
 
 	private function extract_iocs( array $vt ): array {
@@ -927,7 +1281,7 @@ class PDX_Intelligence {
 	 * @param array<string, mixed>                   $sources
 	 * @param array<string, array{state?:string}>    $source_status
 	 */
-	public function compute_risk( array $sources, array $source_status = [], array $forensics = [] ): array {
+	public function compute_risk( array $sources, array $source_status = [], array $forensics = [], string $target_type = 'domain' ): array {
 		$score   = 0;
 		$factors = [];
 
@@ -1074,26 +1428,7 @@ class PDX_Intelligence {
 
 		$score = min( 100, max( 0, $score ) );
 
-		$ok_sources = 0;
-		foreach ( [ 'rdap', 'dns', 'ssl', 'threat' ] as $key ) {
-			if ( ( $source_status[ $key ]['state'] ?? '' ) === 'ok' ) {
-				++$ok_sources;
-			}
-		}
-
-		if ( 0 === $ok_sources && empty( $factors ) ) {
-			$verdict = 'insufficient_data';
-		} elseif ( $score >= 75 ) {
-			$verdict = 'critical';
-		} elseif ( $score >= 50 ) {
-			$verdict = 'high';
-		} elseif ( $score >= 25 ) {
-			$verdict = 'medium';
-		} elseif ( $score >= 10 ) {
-			$verdict = 'low';
-		} else {
-			$verdict = 'clean';
-		}
+		$verdict = $this->resolve_verdict( $score, $source_status, $factors, $target_type );
 
 		$labels = [
 			'clean'             => 'Clean',
@@ -1109,23 +1444,94 @@ class PDX_Intelligence {
 			'verdict'    => $verdict,
 			'factors'    => $factors,
 			'label'      => $labels[ $verdict ] ?? ucfirst( $verdict ),
-			'confidence' => $this->compute_confidence( $source_status ),
+			'confidence' => $this->compute_confidence( $source_status, $target_type ),
 		];
+	}
+
+	/**
+	 * @param list<array<string, mixed>> $factors
+	 */
+	private function resolve_verdict( int $score, array $source_status, array $factors, string $target_type ): string {
+		if ( ! $this->scan_has_sufficient_coverage( $source_status, $target_type, $factors ) ) {
+			return 'insufficient_data';
+		}
+
+		if ( $score >= 75 ) {
+			return 'critical';
+		}
+		if ( $score >= 50 ) {
+			return 'high';
+		}
+		if ( $score >= 25 ) {
+			return 'medium';
+		}
+		if ( $score >= 10 ) {
+			return 'low';
+		}
+
+		return 'clean';
+	}
+
+	/**
+	 * @param list<array<string, mixed>> $factors
+	 */
+	private function scan_has_sufficient_coverage( array $source_status, string $target_type, array $factors ): bool {
+		$threat_state = $source_status['threat']['state'] ?? 'error';
+
+		if ( 'error' === $threat_state && empty( $factors ) ) {
+			return false;
+		}
+
+		$required = match ( $target_type ) {
+			'ip'    => [ 'geo', 'threat' ],
+			'hash'  => [ 'threat' ],
+			'email' => [ 'dns', 'threat' ],
+			'url'   => [ 'threat' ],
+			default => [ 'dns', 'threat' ],
+		};
+
+		$ok = 0;
+		foreach ( $required as $key ) {
+			$state = $source_status[ $key ]['state'] ?? 'error';
+			if ( in_array( $state, [ 'ok', 'partial' ], true ) ) {
+				++$ok;
+			}
+		}
+
+		if ( $ok > 0 || ! empty( $factors ) ) {
+			return true;
+		}
+
+		foreach ( [ 'rdap', 'ssl', 'geo', 'virustotal' ] as $fallback ) {
+			if ( 'ok' === ( $source_status[ $fallback ]['state'] ?? 'skipped' ) ) {
+				return 'error' !== $threat_state;
+			}
+		}
+
+		return false;
 	}
 
 	/**
 	 * @param array<string, array{state?:string}> $source_status
 	 */
-	public function compute_confidence( array $source_status ): int {
-		$weights = [ 'rdap' => 25, 'dns' => 25, 'ssl' => 25, 'threat' => 25 ];
-		$total   = 0;
+	public function compute_confidence( array $source_status, string $target_type = 'domain' ): int {
+		$weights = match ( $target_type ) {
+			'ip'    => [ 'rdap' => 20, 'dns' => 20, 'geo' => 30, 'threat' => 30 ],
+			'hash'  => [ 'threat' => 70, 'virustotal' => 30 ],
+			'email' => [ 'rdap' => 20, 'dns' => 35, 'ssl' => 15, 'threat' => 30 ],
+			'url'   => [ 'rdap' => 15, 'dns' => 15, 'ssl' => 15, 'threat' => 35, 'url_forensics' => 20 ],
+			default => [ 'rdap' => 25, 'dns' => 25, 'ssl' => 25, 'threat' => 25 ],
+		};
 
+		$total = 0;
 		foreach ( $weights as $key => $weight ) {
 			$state = $source_status[ $key ]['state'] ?? 'error';
 			if ( 'ok' === $state ) {
 				$total += $weight;
 			} elseif ( 'partial' === $state ) {
 				$total += (int) round( $weight * 0.5 );
+			} elseif ( 'skipped' === $state ) {
+				$total += (int) round( $weight * 0.25 );
 			}
 		}
 

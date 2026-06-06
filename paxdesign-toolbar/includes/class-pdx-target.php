@@ -29,10 +29,14 @@ class PDX_Target {
 			return new WP_Error( 'pdx_empty_target', 'Target is required.' );
 		}
 
-		// Email
+		// Email — host is the domain part for DNS/RDAP/threat lookups.
 		if ( filter_var( $raw, FILTER_VALIDATE_EMAIL ) ) {
-			$email = strtolower( $raw );
-			return self::pack( $raw, $email, $email, 'email', null, null, null );
+			$email  = strtolower( $raw );
+			$domain = self::email_domain_from_address( $email );
+			if ( '' === $domain || ! self::is_valid_hostname( $domain ) ) {
+				return new WP_Error( 'pdx_invalid_email', 'Could not extract a valid domain from the email address.' );
+			}
+			return self::pack( $raw, $email, $domain, 'email', null, null, null );
 		}
 
 		// Hash (md5 / sha1 / sha256)
@@ -46,7 +50,7 @@ class PDX_Target {
 			return self::pack( $raw, strtolower( $raw ), null, 'hash', null, null, null );
 		}
 
-		// IP
+		// IP (IPv4 and IPv6)
 		if ( filter_var( $raw, FILTER_VALIDATE_IP ) ) {
 			return self::pack( $raw, $raw, $raw, 'ip', null, null, null );
 		}
@@ -106,6 +110,40 @@ class PDX_Target {
 	}
 
 	/**
+	 * Primary lookup key for intelligence routing (domain for email, hash for hash, etc.).
+	 */
+	public static function scan_host( array $resolved ): string {
+		$type = (string) ( $resolved['type'] ?? 'domain' );
+
+		if ( 'hash' === $type ) {
+			return (string) ( $resolved['normalized'] ?? '' );
+		}
+
+		if ( 'email' === $type ) {
+			return self::email_domain_from_address( (string) ( $resolved['normalized'] ?? '' ) )
+				?: self::api_host( $resolved );
+		}
+
+		return self::api_host( $resolved );
+	}
+
+	/**
+	 * @return string Domain part of an email address.
+	 */
+	public static function email_domain_from_address( string $email ): string {
+		$parts = explode( '@', strtolower( trim( $email ) ), 2 );
+		return $parts[1] ?? '';
+	}
+
+	public static function is_ip_type( string $type ): bool {
+		return 'ip' === $type;
+	}
+
+	public static function is_domain_like( string $type ): bool {
+		return in_array( $type, [ 'domain', 'url', 'email' ], true );
+	}
+
+	/**
 	 * REST validate_callback — accepts domains, URLs, IPs, emails, hashes (after normalization).
 	 */
 	public static function rest_validate_indicator( $value ): bool {
@@ -134,10 +172,25 @@ class PDX_Target {
 
 	private static function strip_to_hostname( string $input ): string {
 		$s = trim( $input );
+
+		// Bracketed IPv6 literal from URLs.
+		if ( preg_match( '/^\[([^\]]+)\](?::\d+)?(?:\/|$)/', $s, $m ) ) {
+			return $m[1];
+		}
+
+		if ( filter_var( $s, FILTER_VALIDATE_IP ) ) {
+			return $s;
+		}
+
 		$s = preg_replace( '#^[a-z][a-z0-9+.-]*://#i', '', $s ) ?? $s;
 		$s = preg_replace( '/[#?].*$/s', '', $s ) ?? $s;
 		$s = explode( '/', $s )[0] ?? $s;
-		$s = explode( ':', $s )[0] ?? $s;
+
+		// Strip port only for non-IPv6 host:port (single colon).
+		if ( ! str_contains( $s, '::' ) && substr_count( $s, ':' ) === 1 ) {
+			$s = explode( ':', $s )[0] ?? $s;
+		}
+
 		return self::clean_hostname( $s );
 	}
 
@@ -149,6 +202,9 @@ class PDX_Target {
 	private static function is_valid_hostname( string $host ): bool {
 		if ( strlen( $host ) > 253 || '' === $host ) {
 			return false;
+		}
+		if ( filter_var( $host, FILTER_VALIDATE_IP ) ) {
+			return true;
 		}
 		// Allow punycode / standard FQDNs.
 		return (bool) preg_match(

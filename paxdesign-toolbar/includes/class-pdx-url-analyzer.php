@@ -74,12 +74,22 @@ class PDX_Url_Analyzer {
 		if ( preg_match( '#^https?://#i', $raw ) ) {
 			return esc_url_raw( $raw ) ?: null;
 		}
+
 		$type = $resolved['type'] ?? 'domain';
 		$host = $resolved['host'] ?? $resolved['normalized'] ?? '';
-		if ( in_array( $type, [ 'domain', 'url' ], true ) && $host ) {
-			return 'https://' . $host . '/';
+		if ( ! in_array( $type, [ 'domain', 'url' ], true ) || ! $host ) {
+			return null;
 		}
-		return null;
+
+		if ( ! empty( $resolved['url'] ) && preg_match( '#^https?://#i', (string) $resolved['url'] ) ) {
+			return esc_url_raw( (string) $resolved['url'] ) ?: null;
+		}
+
+		$path  = $resolved['path'] ?? '/';
+		$path  = ( '' === $path || '/' === $path[0] ) ? $path : '/' . ltrim( (string) $path, '/' );
+		$query = ! empty( $resolved['query'] ) ? '?' . $resolved['query'] : '';
+
+		return 'https://' . $host . $path . $query;
 	}
 
 	/**

@@ -51,11 +51,14 @@ class PDX_Scan_Orchestrator {
 		$report['forensics']['infrastructure_relationships'] = (array) ( $report['infrastructure']['relationships'] ?? [] );
 
 		// Re-score with forensic factors.
+		$target_type = (string) ( $report['target_type'] ?? 'domain' );
 		$report['risk'] = $this->intel->compute_risk(
 			$report['sources'],
 			$report['source_status'],
-			$report['forensics']
+			$report['forensics'],
+			$target_type
 		);
+		$report['confidence'] = $this->intel->compute_confidence( $report['source_status'], $target_type );
 
 		$narrative = $this->intel->build_narrative( $report['target'], $report );
 		$report['ai_summary']      = $narrative['summary'];
@@ -101,12 +104,18 @@ class PDX_Scan_Orchestrator {
 		$rdap    = $sources['rdap'] ?? [];
 
 		$phish = $url_forensics['phishing'] ?? [];
+		$phish_verdict = $phish['verdict'] ?? null;
+		if ( ( $url_forensics['status']['state'] ?? '' ) === 'skipped' ) {
+			$phish_verdict = 'skipped';
+		} elseif ( null === $phish_verdict || '' === $phish_verdict ) {
+			$phish_verdict = 'unknown';
+		}
 
 		return [
 			'redirect_hops'       => (int) ( $url_forensics['redirect_count'] ?? 0 ),
 			'redirect_intent'     => (string) ( $phish['redirect_intent'] ?? $url_forensics['redirect_intent']['intent'] ?? 'direct' ),
 			'phishing_score'      => (int) ( $phish['score'] ?? 0 ),
-			'phishing_verdict'    => $phish['verdict'] ?? 'low',
+			'phishing_verdict'    => $phish_verdict,
 			'phishing_reasons'    => $phish['reasons'] ?? [],
 			'path_risk_score'     => (int) ( $url_forensics['target_heuristics']['score'] ?? 0 ),
 			'landing_risk_score'  => (int) ( $url_forensics['landing_heuristics']['score'] ?? 0 ),

@@ -66,19 +66,29 @@ class PDX_Threat_Feeds {
 	 */
 	private static function probe_otx( string $target ): array {
 		if ( '' === $target ) {
-			return [ 'state' => 'ok', 'message' => 'Ready — enter a domain to query pulses.' ];
+			return [ 'state' => 'ok', 'message' => 'Ready — enter a target to query pulses.' ];
 		}
-		$host = self::normalize_host( $target );
-		if ( ! $host ) {
-			return [ 'state' => 'error', 'message' => 'Invalid domain for OTX lookup.' ];
+
+		$resolved = PDX_Target::resolve( $target );
+		if ( is_wp_error( $resolved ) ) {
+			return [ 'state' => 'error', 'message' => 'Invalid target for OTX lookup.' ];
+		}
+
+		$lookup = PDX_Target::scan_host( $resolved );
+		$type   = (string) ( $resolved['type'] ?? 'domain' );
+		$path   = 'domain';
+		if ( 'ip' === $type ) {
+			$path = filter_var( $lookup, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 ) ? 'IPv6' : 'IPv4';
+		} elseif ( 'hash' === $type ) {
+			$path = 'file';
 		}
 
 		return PDX_Cache::remember(
-			'feed_probe_otx_' . md5( $host ),
+			'feed_probe_otx_' . md5( $type . '|' . $lookup ),
 			300,
-			static function () use ( $host ) {
+			static function () use ( $lookup, $path, $type ) {
 				$http = PDX_Http::get(
-					'https://otx.alienvault.com/api/v1/indicators/domain/' . rawurlencode( $host ) . '/general',
+					'https://otx.alienvault.com/api/v1/indicators/' . $path . '/' . rawurlencode( $lookup ) . '/general',
 					[ 'timeout' => 10 ],
 					'otx_probe'
 				);
@@ -96,7 +106,7 @@ class PDX_Threat_Feeds {
 				$pulse = (int) ( $data['pulse_info']['count'] ?? 0 );
 				return [
 					'state'      => 'ok',
-					'message'    => $pulse > 0 ? "{$pulse} pulse(s) for {$host}" : "No pulses for {$host}",
+					'message'    => $pulse > 0 ? "{$pulse} pulse(s) for {$lookup}" : "No pulses for {$lookup}",
 					'indicators' => $pulse,
 				];
 			}
@@ -153,6 +163,6 @@ class PDX_Threat_Feeds {
 		if ( is_wp_error( $r ) ) {
 			return '';
 		}
-		return PDX_Target::api_host( $r );
+		return PDX_Target::scan_host( $r );
 	}
 }

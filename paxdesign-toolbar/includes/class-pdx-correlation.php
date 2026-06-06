@@ -95,10 +95,12 @@ class PDX_Correlation {
 	 * Ingest all IOCs from a full intelligence report.
 	 */
 	public static function ingest_report( array $report ): void {
-		$target  = $report['target'] ?? '';
-		$sources = $report['sources'] ?? [];
+		$target      = $report['target'] ?? '';
+		$target_type = (string) ( $report['target_type'] ?? 'domain' );
+		$sources     = $report['sources'] ?? [];
+		$ioc_type    = in_array( $target_type, [ 'ip', 'email', 'hash', 'url', 'domain' ], true ) ? $target_type : 'domain';
 
-		// Domain IOC
+		// Primary IOC
 		if ( $target ) {
 			$severity = 'info';
 			$conf     = 80;
@@ -107,7 +109,7 @@ class PDX_Correlation {
 				$severity = $score >= 75 ? 'critical' : ( $score >= 50 ? 'high' : ( $score >= 25 ? 'medium' : 'low' ) );
 				$conf     = min( 100, 50 + $score );
 			}
-			self::ingest( 'domain', $target, 'platform', $conf, $severity, $report['risk'] ?? [] );
+			self::ingest( $ioc_type, $target, 'platform', $conf, $severity, $report['risk'] ?? [] );
 		}
 
 		// IP from geolocation
