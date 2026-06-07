@@ -3,7 +3,7 @@
  * Plugin Name:  PaxDesign Utility Dock
  * Plugin URI:   https://paxdesign.io
  * Description:  Enterprise AI/Cyber SaaS dock — SSE real-time, command palette, IOC correlation graph, investigation board, team collaboration, billing enforcement, AI memory, and 84-endpoint REST API.
- * Version:      8.8.0
+ * Version:      8.9.0
  * Update URI:   https://github.com/Black10998/paxdesign-toolbar
  * Author:       PaxDesign
  * Author URI:   https://paxdesign.io
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'PDX_VERSION',   '8.8.0' );
+define( 'PDX_VERSION',   '8.9.0' );
 define( 'PDX_DIR',       plugin_dir_path( __FILE__ ) );
 define( 'PDX_URL',       plugin_dir_url( __FILE__ ) );
 define( 'PDX_SLUG',      'paxdesign-toolbar' );
@@ -51,6 +51,7 @@ require_once PDX_DIR . 'includes/commerce/class-pdx-access.php';
 // v3 enterprise systems
 require_once PDX_DIR . 'includes/class-pdx-audit.php';
 require_once PDX_DIR . 'includes/class-pdx-security.php';
+require_once PDX_DIR . 'includes/class-pdx-integration-audit.php';
 require_once PDX_DIR . 'includes/class-pdx-queue.php';
 require_once PDX_DIR . 'includes/class-pdx-workspace.php';
 require_once PDX_DIR . 'includes/class-pdx-webhook.php';
@@ -187,6 +188,7 @@ add_action( 'plugins_loaded', static function () {
 	if ( ! PDX_Recovery::install_is_healthy() ) {
 		return;
 	}
+	PDX_Security::register_hooks();
 	try {
 		PaxDesign_Toolbar::instance();
 	} catch ( Throwable $e ) {
@@ -227,20 +229,3 @@ add_action( 'admin_post_pdx_deregister_worker', static function () {
 	exit;
 } );
 
-add_action( 'admin_post_pdx_save_settings', static function () {
-	if ( ! current_user_can( PDX_CAP ) ) wp_die( 'Unauthorized', 403 );
-	check_admin_referer( 'pdx_save_settings', 'pdx_nonce' );
-	$tab = sanitize_key( $_POST['pdx_tab'] ?? 'general' );
-	// Billing tab — Stripe keys
-	if ( $tab === 'billing' && isset( $_POST['stripe'] ) ) {
-		$stripe = [
-			'secret_key'     => sanitize_text_field( $_POST['stripe']['secret_key']     ?? '' ),
-			'pub_key'        => sanitize_text_field( $_POST['stripe']['pub_key']         ?? '' ),
-			'webhook_secret' => sanitize_text_field( $_POST['stripe']['webhook_secret']  ?? '' ),
-			'mode'           => in_array( $_POST['stripe']['mode'] ?? '', [ 'test', 'live' ], true ) ? $_POST['stripe']['mode'] : 'test',
-		];
-		pdx_settings()->save( [ 'stripe' => $stripe ] );
-	}
-	wp_safe_redirect( add_query_arg( [ 'page' => PDX_SLUG . '-billing', 'updated' => '1' ], admin_url( 'admin.php' ) ) );
-	exit;
-} );

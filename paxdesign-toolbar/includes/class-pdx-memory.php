@@ -28,6 +28,22 @@ class PDX_Memory {
 	/** No-arg constructor — all methods are static. */
 	public function __construct() {}
 
+	/**
+	 * Stable actor key for memory isolation (logged-in user or guest session).
+	 */
+	private static function actor_user_id(): int {
+		if ( is_user_logged_in() ) {
+			return (int) get_current_user_id();
+		}
+		$session = class_exists( 'PDX_Security', false )
+			? PDX_Security::ensure_guest_session()
+			: sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
+		if ( ! $session ) {
+			return 0;
+		}
+		return (int) sprintf( '%u', crc32( 'pdx_mem_' . $session ) );
+	}
+
 	/* ── Schema ─────────────────────────────────────────── */
 
 	public static function install(): void {
@@ -68,7 +84,10 @@ class PDX_Memory {
 		int    $ttl        = 0
 	): string {
 		global $wpdb;
-		$user_id   = is_user_logged_in() ? get_current_user_id() : 0;
+		$user_id   = self::actor_user_id();
+		if ( ! $user_id ) {
+			return '';
+		}
 		$mem_id    = 'mem-' . substr( bin2hex( random_bytes( 10 ) ), 0, 16 );
 		$now       = current_time( 'mysql' );
 		$expires   = $ttl > 0 ? gmdate( 'Y-m-d H:i:s', time() + $ttl ) : null;
@@ -97,7 +116,10 @@ class PDX_Memory {
 
 	public static function get_recent( string $agent = 'global', int $limit = 20 ): array {
 		global $wpdb;
-		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		$user_id = self::actor_user_id();
+		if ( ! $user_id ) {
+			return [];
+		}
 		$rows = $wpdb->get_results( $wpdb->prepare(
 			"SELECT mem_id, agent, mem_type, content, summary, importance, access_count, created_at
 			 FROM {$wpdb->prefix}" . self::TABLE . "
@@ -128,7 +150,10 @@ class PDX_Memory {
 	 */
 	public static function search( string $query, string $agent = '', int $limit = 10 ): array {
 		global $wpdb;
-		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		$user_id = self::actor_user_id();
+		if ( ! $user_id ) {
+			return [];
+		}
 		$like    = '%' . $wpdb->esc_like( $query ) . '%';
 		$where   = $agent ? $wpdb->prepare( 'AND agent = %s', $agent ) : '';
 

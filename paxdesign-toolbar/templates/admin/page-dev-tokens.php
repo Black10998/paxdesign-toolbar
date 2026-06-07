@@ -66,6 +66,7 @@ $users_with_tokens = $wpdb->get_results(
     <tr><td>POST</td><td>/teams/{id}/cases</td><td>Create investigation case</td></tr>
     <tr><td>GET</td><td>/command/search</td><td>Command palette search</td></tr>
     <tr><td>GET</td><td>/platform/stats</td><td>Platform-wide statistics</td></tr>
+    <tr><td>GET</td><td>/platform/integration-audit</td><td>Live provider integration audit (admin)</td></tr>
     <tr><td>GET</td><td>/dev/tokens</td><td>List developer tokens</td></tr>
     <tr><td>POST</td><td>/dev/tokens</td><td>Create developer token</td></tr>
     <tr><td>DELETE</td><td>/dev/tokens/{id}</td><td>Revoke developer token</td></tr>

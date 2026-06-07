@@ -5,7 +5,7 @@ include __DIR__ . '/partials/header.php';
 ?>
 <div class="pdx-page-header">
   <h1>API Keys</h1>
-  <p>Configure third-party API credentials. Keys are stored encrypted in the WordPress options table.</p>
+  <p>Configure third-party API credentials. Keys are stored in the WordPress options table (not encrypted at rest — use wp-config constants or a secrets manager in production).</p>
 </div>
 
 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="pdx-form">

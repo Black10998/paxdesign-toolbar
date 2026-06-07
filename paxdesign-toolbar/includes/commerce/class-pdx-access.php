@@ -144,11 +144,10 @@ class PDX_Access {
 			$where_parts[] = 'user_id = %d';
 			$values[]      = get_current_user_id();
 		} else {
-			/* Guest: check session token stored in cookie */
 			$token = self::guest_token();
-			if ( ! $token ) return false;
-			$where_parts[] = 'paypal_order IN (SELECT paypal_order FROM ' . $table . ' WHERE JSON_CONTAINS(COALESCE(paypal_order,""), %s))';
-			/* Simpler: store token in a separate meta — use transient keyed by token */
+			if ( ! $token ) {
+				return false;
+			}
 			return (bool) get_transient( 'pdx_access_' . $token . '_' . $module_id );
 		}
 

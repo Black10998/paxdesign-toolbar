@@ -71,7 +71,9 @@ class PDX_Workspace {
 
 		$ws_id     = self::generate_id();
 		$user_id   = is_user_logged_in() ? get_current_user_id() : 0;
-		$session   = sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
+		$session   = class_exists( 'PDX_Security', false )
+			? PDX_Security::ensure_guest_session()
+			: sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
 		$now       = current_time( 'mysql' );
 
 		$wpdb->insert(
@@ -180,7 +182,9 @@ class PDX_Workspace {
 		global $wpdb;
 		$table   = $wpdb->prefix . self::TABLE;
 		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
-		$session = sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
+		$session = class_exists( 'PDX_Security', false )
+			? PDX_Security::ensure_guest_session()
+			: sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
 
 		$where  = [];
 		$values = [];

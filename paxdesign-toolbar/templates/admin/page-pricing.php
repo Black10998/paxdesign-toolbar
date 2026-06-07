@@ -53,6 +53,7 @@ include __DIR__ . '/partials/header.php';
                 <option value="free"    <?php selected( $tier, 'free' ); ?>>Free</option>
                 <option value="preview" <?php selected( $tier, 'preview' ); ?>>Preview</option>
                 <option value="paid"    <?php selected( $tier, 'paid' ); ?>>Paid</option>
+                <option value="subscription" <?php selected( $tier, 'subscription' ); ?>>Subscription</option>
               </select>
             </td>
             <td>
@@ -75,7 +76,7 @@ include __DIR__ . '/partials/header.php';
   <div class="pdx-card pdx-card--info">
     <div class="pdx-card__body">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-      <p><strong>Free</strong> — always accessible without payment. <strong>Preview</strong> — limited free interactions, then paywall. <strong>Paid</strong> — paywall shown immediately. Set price to 0.00 to make any tier effectively free.</p>
+      <p><strong>Free</strong> — always accessible without payment. <strong>Preview</strong> — limited free interactions, then paywall. <strong>Paid</strong> — paywall shown immediately. <strong>Subscription</strong> — requires an active SaaS plan via Stripe billing. Set price to 0.00 to make any tier effectively free.</p>
     </div>
   </div>
 

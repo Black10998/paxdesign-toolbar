@@ -68,6 +68,21 @@ class PDX_REST_API {
 			return null;
 		}
 
+		if ( 'subscription' === $tier ) {
+			$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+			if ( $user_id && PDX_Billing::subscription_covers_module( $user_id, $module_id ) ) {
+				return null;
+			}
+			return new WP_REST_Response(
+				[
+					'error'     => 'subscription_required',
+					'module_id' => $module_id,
+					'plans'     => rest_url( 'pdx/v1/billing/plans' ),
+				],
+				402
+			);
+		}
+
 		$preview_limit = (int) ( $mod['preview_lines'] ?? 0 );
 		$session_key   = 'pdx_preview_' . $module_id . '_' . ( $_COOKIE['pdx_guest'] ?? md5( $_SERVER['REMOTE_ADDR'] ?? '' ) );
 		$used          = (int) get_transient( $session_key );
@@ -150,10 +165,9 @@ class PDX_REST_API {
 		if ( is_user_logged_in() ) {
 			return;
 		}
-		$guest = sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
+		$guest = PDX_Security::ensure_guest_session();
 		if ( ! $guest ) {
-			$guest = wp_generate_password( 32, false );
-			setcookie( 'pdx_guest', $guest, time() + YEAR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+			return;
 		}
 		set_transient( 'pdx_order_owner_' . $order_id, $guest, DAY_IN_SECONDS );
 	}
@@ -289,6 +303,7 @@ class PDX_REST_API {
 
 		// Platform stats (admin dashboard)
 		register_rest_route( $ns, '/platform/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_stats' ], 'permission_callback' => $adm ] );
+		register_rest_route( $ns, '/platform/integration-audit', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_integration_audit' ], 'permission_callback' => $adm ] );
 
 		// Threat Intel — CVE lookup + attack surface mapping
 		register_rest_route( $ns, '/threat/cve',     [ 'methods' => 'GET', 'callback' => [ $this, 'threat_cve'     ], 'permission_callback' => $pub, 'args' => [ 'q' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
@@ -625,10 +640,13 @@ class PDX_REST_API {
 				];
 			} else {
 				$has = PDX_Access::has_access( $id );
+				if ( ! $has && 'subscription' === ( $mod['tier'] ?? '' ) && is_user_logged_in() ) {
+					$has = PDX_Billing::subscription_covers_module( get_current_user_id(), $id );
+				}
 				$result[ $id ] = [
 					'status'      => $has ? 'active' : 'locked',
 					'tier'        => $mod['tier'],
-					'label'       => $has ? 'Unlocked' : ( $mod['tier'] === 'preview' ? 'Preview Available' : 'Locked' ),
+					'label'       => $has ? 'Unlocked' : ( 'preview' === $mod['tier'] ? 'Preview Available' : ( 'subscription' === $mod['tier'] ? 'Subscription Required' : 'Locked' ) ),
 					'price'       => (float) $mod['price'],
 					'currency'    => $mod['currency'] ?? 'USD',
 					'description' => $mod['description'] ?? '',
@@ -662,7 +680,11 @@ class PDX_REST_API {
 	public function update_settings( WP_REST_Request $req ): WP_REST_Response {
 		$body = $req->get_json_params();
 		if ( ! is_array( $body ) ) return new WP_REST_Response( [ 'error' => 'Invalid payload' ], 400 );
-		$this->settings->save( $body );
+		$clean = PDX_Security::sanitize_rest_settings( $body );
+		if ( empty( $clean ) ) {
+			return new WP_REST_Response( [ 'error' => 'No allowed settings keys in payload.' ], 400 );
+		}
+		$this->settings->save( $clean );
 		return new WP_REST_Response( [ 'ok' => true, 'settings' => $this->settings->all() ], 200 );
 	}
 
@@ -1315,6 +1337,10 @@ class PDX_REST_API {
 	/* ── AI Memory ───────────────────────────────────────── */
 
 	public function memory_store( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_actor();
+		if ( $auth ) {
+			return $auth;
+		}
 		$content    = sanitize_textarea_field( $req->get_param( 'content' ) ?? '' );
 		$agent      = sanitize_key( $req->get_param( 'agent' ) ?? 'global' );
 		$mem_type   = sanitize_key( $req->get_param( 'type' ) ?? 'fact' );
@@ -1325,6 +1351,10 @@ class PDX_REST_API {
 	}
 
 	public function memory_search( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_actor();
+		if ( $auth ) {
+			return $auth;
+		}
 		$q     = sanitize_text_field( $req->get_param( 'q' ) ?? '' );
 		$agent = sanitize_key( $req->get_param( 'agent' ) ?? '' );
 		if ( strlen( $q ) < 2 ) return new WP_REST_Response( [ 'results' => [] ], 200 );
@@ -1332,11 +1362,19 @@ class PDX_REST_API {
 	}
 
 	public function memory_context( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_actor();
+		if ( $auth ) {
+			return $auth;
+		}
 		$agent = sanitize_key( $req->get_param( 'agent' ) ?? 'global' );
 		return new WP_REST_Response( [ 'context' => PDX_Memory::build_context( $agent ) ], 200 );
 	}
 
 	public function memory_recent( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_actor();
+		if ( $auth ) {
+			return $auth;
+		}
 		$agent = sanitize_key( $req->get_param( 'agent' ) ?? 'global' );
 		$limit = min( 50, (int) ( $req->get_param( 'limit' ) ?? 20 ) );
 		return new WP_REST_Response( [ 'memories' => PDX_Memory::get_recent( $agent, $limit ) ], 200 );
@@ -1541,6 +1579,13 @@ class PDX_REST_API {
 			'cache'       => PDX_Cache::stats(),
 			'rate_limits' => PDX_RateLimit::stats(),
 		], 200 );
+	}
+
+	public function platform_integration_audit(): WP_REST_Response {
+		$audit  = new PDX_Integration_Audit( $this->intel, $this->settings );
+		$result = $audit->run_full();
+		$status = ( $result['summary']['error'] ?? 0 ) > 0 ? 503 : 200;
+		return new WP_REST_Response( $result, $status );
 	}
 
 	/* ── Threat Intel: Live feed status ──────────────────── */

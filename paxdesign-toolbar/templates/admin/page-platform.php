@@ -106,7 +106,19 @@ $mrr          = PDX_Billing::mrr();
     </table>
     <p class="pdx-spacer">
       <a href="<?php echo esc_url( rest_url( 'pdx/v1/platform/stats' ) ); ?>" target="_blank" rel="noopener" class="pdx-btn-ghost">View Raw JSON</a>
+      <a href="<?php echo esc_url( rest_url( 'pdx/v1/platform/integration-audit' ) ); ?>" target="_blank" rel="noopener" class="pdx-btn-ghost">Run Integration Audit</a>
     </p>
+  </div>
+</div>
+
+<div class="pdx-card pdx-spacer">
+  <div class="pdx-card__header"><h2>Live Integration Audit</h2></div>
+  <div class="pdx-card__body">
+    <p>Probes all configured intelligence providers against real-world targets (RDAP, DNS, GeoIP, OTX, URLhaus, SSL Labs, VirusTotal, Shodan, Hunter, NVD, URL forensics). Requires administrator REST authentication.</p>
+    <p class="pdx-spacer">
+      <a href="<?php echo esc_url( rest_url( 'pdx/v1/platform/integration-audit' ) ); ?>" target="_blank" rel="noopener" class="pdx-btn-primary">Run Live Audit (JSON)</a>
+    </p>
+    <p class="pdx-field-hint">CLI: <code>wp eval-file scripts/run-platform-audit.php</code> from the plugin repository root on a WordPress install with API keys configured.</p>
   </div>
 </div>
 
