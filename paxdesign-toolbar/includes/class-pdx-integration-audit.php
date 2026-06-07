@@ -291,13 +291,17 @@ class PDX_Integration_Audit {
 
 	private function probe_geo(): void {
 		$started = microtime( true );
-		$geo     = $this->intel->fetch_geo( '8.8.8.8' );
+		$out     = $this->intel->fetch_geo_with_status( '8.8.8.8' );
+		$state   = $out['status']['state'] ?? 'error';
 		$this->record(
 			'GeoIP (ip-api.com)',
-			$geo ? 'ok' : 'error',
-			$geo ? ( 'Resolved ' . ( $geo['country'] ?? 'unknown' ) ) : 'Geolocation lookup failed.',
+			in_array( $state, [ 'ok', 'partial' ], true ) ? $state : 'error',
+			(string) ( $out['status']['message'] ?? 'Geolocation lookup failed.' ),
 			$started,
-			[ 'country' => $geo['country'] ?? null, 'asn' => $geo['asn'] ?? null ]
+			[
+				'country' => $out['data']['country'] ?? null,
+				'asn'     => $out['data']['asn'] ?? null,
+			]
 		);
 	}
 
@@ -357,14 +361,37 @@ class PDX_Integration_Audit {
 		$ref     = new ReflectionClass( $this->intel );
 		$method  = $ref->getMethod( 'fetch_ssl_polled' );
 		$method->setAccessible( true );
-		$out     = $method->invoke( $this->intel, 'example.com' );
-		$state   = $out['status']['state'] ?? 'error';
+
+		// example.com is blacklisted by SSL Labs for automated API scans — use a stable public host.
+		$hosts   = [ 'mozilla.org', 'github.com', 'wikipedia.org' ];
+		$out     = null;
+		$used    = '';
+		foreach ( $hosts as $host ) {
+			$candidate = $method->invoke( $this->intel, $host );
+			$msg       = (string) ( $candidate['status']['message'] ?? '' );
+			if ( false !== stripos( $msg, 'blacklist' ) ) {
+				continue;
+			}
+			$out  = $candidate;
+			$used = $host;
+			break;
+		}
+		if ( ! $out ) {
+			$out  = $method->invoke( $this->intel, 'mozilla.org' );
+			$used = 'mozilla.org';
+		}
+
+		$state = $out['status']['state'] ?? 'error';
+		$message = (string) ( $out['status']['message'] ?? 'No message' );
+		if ( $used ) {
+			$message .= ' (audit sample host: ' . $used . ')';
+		}
 		$this->record(
 			'SSL Labs',
 			in_array( $state, [ 'ok', 'partial', 'skipped' ], true ) ? $state : 'error',
-			(string) ( $out['status']['message'] ?? 'No message' ),
+			$message,
 			$started,
-			[ 'grade' => $out['data']['endpoints'][0]['grade'] ?? null ]
+			[ 'grade' => $out['data']['endpoints'][0]['grade'] ?? null, 'sample_host' => $used ]
 		);
 	}
 

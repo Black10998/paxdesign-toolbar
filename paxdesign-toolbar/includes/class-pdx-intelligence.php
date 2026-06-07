@@ -151,13 +151,16 @@ class PDX_Intelligence {
 
 		if ( 'hash' !== $target_type ) {
 			if ( $resolved_ip ) {
-				$geo = $this->fetch_geo( $resolved_ip );
-				if ( $geo ) {
-					$report['sources']['geolocation'] = $geo;
-					$report['sources']['geo']         = $geo;
-					$report['source_status']['geo']   = [ 'state' => 'ok', 'message' => 'Resolved via ' . $resolved_ip ];
+				$geo_result = $this->fetch_geo_with_status( $resolved_ip );
+				if ( ! empty( $geo_result['data'] ) ) {
+					$report['sources']['geolocation'] = $geo_result['data'];
+					$report['sources']['geo']         = $geo_result['data'];
+					$report['source_status']['geo']   = $geo_result['status'];
 				} else {
-					$report['source_status']['geo'] = [ 'state' => 'error', 'message' => 'Geolocation lookup failed for ' . $resolved_ip ];
+					$report['source_status']['geo'] = $geo_result['status'] ?? [
+						'state'   => 'error',
+						'message' => 'Geolocation lookup failed for ' . $resolved_ip,
+					];
 				}
 			} elseif ( 'ip' !== $target_type ) {
 				$report['source_status']['geo'] = [ 'state' => 'error', 'message' => 'Could not resolve host to an IP address.' ];
@@ -755,13 +758,19 @@ class PDX_Intelligence {
 			if ( in_array( $status, [ 'READY', 'ERROR' ], true ) ) {
 				$last_log['parse_status'] = 'ok';
 				if ( 'ERROR' === $status ) {
+					$status_message = (string) ( $body['statusMessage'] ?? 'SSL Labs returned an error.' );
+					$is_blacklisted = false !== stripos( $status_message, 'blacklist' );
+					$state          = $is_blacklisted ? 'partial' : 'error';
+					$message        = $is_blacklisted
+						? $status_message . ' — SSL Labs blocks automated scans for this hostname. Real domain scans are unaffected; use a non-blacklisted target.'
+						: $status_message;
 					return [
 						'data'    => $body,
 						'status'  => $this->with_http_log(
-							[ 'state' => 'error', 'message' => $body['statusMessage'] ?? 'SSL Labs returned an error.' ],
+							[ 'state' => $state, 'message' => $message ],
 							$last_log
 						),
-						'message' => $body['statusMessage'] ?? null,
+						'message' => $status_message,
 					];
 				}
 				return [
@@ -1160,39 +1169,87 @@ class PDX_Intelligence {
 
 	/* ── Geolocation ────────────────────────────────────── */
 
-	public function fetch_geo( string $target ): ?array {
-		$http = PDX_Http::get(
-			'https://ip-api.com/json/' . rawurlencode( $target ) . '?fields=status,country,countryCode,regionName,city,zip,lat,lon,isp,org,as,query,hosting',
-			[ 'timeout' => 8 ],
-			'geo'
-		);
-		$resp = $http['response'];
-		if ( is_wp_error( $resp ) ) {
-			return null;
-		}
-		$code = (int) wp_remote_retrieve_response_code( $resp );
-		if ( 200 !== $code ) {
-			return null;
-		}
-		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
-		if ( ! is_array( $data ) || ( $data['status'] ?? '' ) !== 'success' ) {
-			return null;
+	/**
+	 * @return array{data:?array,status:array<string,mixed>}
+	 */
+	public function fetch_geo_with_status( string $target ): array {
+		$fields = 'status,message,country,countryCode,regionName,city,zip,lat,lon,isp,org,as,query,hosting';
+		$pro_key = (string) $this->settings->get( 'api_keys.ipapi', '' );
+
+		if ( '' !== $pro_key ) {
+			$url = 'https://pro.ip-api.com/json/' . rawurlencode( $target ) . '?key=' . rawurlencode( $pro_key ) . '&fields=' . $fields;
+		} else {
+			// Free tier: HTTP only — HTTPS returns 403 ("SSL unavailable for this endpoint").
+			$url = 'http://ip-api.com/json/' . rawurlencode( $target ) . '?fields=' . $fields;
 		}
 
-		return [
+		$http = PDX_Http::get( $url, [ 'timeout' => 8 ], 'geo' );
+		$resp = $http['response'];
+
+		if ( is_wp_error( $resp ) ) {
+			return [
+				'data'   => null,
+				'status' => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'GeoIP request failed: ' . $resp->get_error_message() ],
+					$http['log']
+				),
+			];
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $resp );
+		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+		if ( 200 !== $code || ! is_array( $body ) ) {
+			return [
+				'data'   => null,
+				'status' => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'GeoIP HTTP ' . $code . ' — unexpected response.' ],
+					$http['log']
+				),
+			];
+		}
+
+		if ( ( $body['status'] ?? '' ) !== 'success' ) {
+			$api_msg = (string) ( $body['message'] ?? 'Lookup failed.' );
+			$hint    = str_contains( strtolower( $api_msg ), 'ssl' )
+				? ' Free tier requires HTTP; configure an ip-api Pro key in Admin → API Keys for HTTPS.'
+				: '';
+			return [
+				'data'   => null,
+				'status' => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'GeoIP: ' . $api_msg . $hint ],
+					$http['log']
+				),
+			];
+		}
+
+		$data = [
 			'label'    => 'IP Geolocation',
-			'ip'       => $data['query']      ?? null,
-			'country'  => $data['country']    ?? null,
-			'code'     => $data['countryCode'] ?? null,
-			'region'   => $data['regionName'] ?? null,
-			'city'     => $data['city']       ?? null,
-			'lat'      => $data['lat']        ?? null,
-			'lon'      => $data['lon']        ?? null,
-			'isp'      => $data['isp']        ?? null,
-			'org'      => $data['org']        ?? null,
-			'asn'      => $data['as']         ?? null,
-			'hosting'  => (bool) ( $data['hosting'] ?? false ),
+			'ip'       => $body['query']      ?? null,
+			'country'  => $body['country']    ?? null,
+			'code'     => $body['countryCode'] ?? null,
+			'region'   => $body['regionName'] ?? null,
+			'city'     => $body['city']       ?? null,
+			'lat'      => $body['lat']        ?? null,
+			'lon'      => $body['lon']        ?? null,
+			'isp'      => $body['isp']        ?? null,
+			'org'      => $body['org']        ?? null,
+			'asn'      => $body['as']         ?? null,
+			'hosting'  => (bool) ( $body['hosting'] ?? false ),
 		];
+
+		return [
+			'data'   => $data,
+			'status' => $this->with_http_log(
+				[ 'state' => 'ok', 'message' => 'Resolved ' . ( $data['country'] ?? 'unknown' ) . ' via ip-api.com.' ],
+				$http['log']
+			),
+		];
+	}
+
+	public function fetch_geo( string $target ): ?array {
+		$result = $this->fetch_geo_with_status( $target );
+		return $result['data'] ?? null;
 	}
 
 	/* ── VirusTotal ─────────────────────────────────────── */

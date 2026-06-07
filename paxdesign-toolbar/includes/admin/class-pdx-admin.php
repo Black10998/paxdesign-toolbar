@@ -243,6 +243,7 @@ class PDX_Admin {
 						'nvd'        => sanitize_text_field( $post['api_keys']['nvd']        ?? '' ),
 						'abuseipdb'  => sanitize_text_field( $post['api_keys']['abuseipdb']  ?? '' ),
 						'abusech'    => sanitize_text_field( $post['api_keys']['abusech']    ?? '' ),
+						'ipapi'      => sanitize_text_field( $post['api_keys']['ipapi']      ?? '' ),
 					],
 				];
 

@@ -87,6 +87,18 @@ include __DIR__ . '/partials/header.php';
         <p class="pdx-field-hint">Required for URLhaus lookups since June 2025. Free key from <a href="https://auth.abuse.ch/" target="_blank" rel="noopener">auth.abuse.ch</a>.</p>
       </div>
       <div class="pdx-field">
+        <label for="api_ipapi">ip-api.com Pro Key (optional)</label>
+        <div class="pdx-input-group">
+          <input type="password" id="api_ipapi" name="api_keys[ipapi]"
+                 value="<?php echo esc_attr( $keys['ipapi'] ?? '' ); ?>"
+                 placeholder="Pro key from ip-api.com" autocomplete="off">
+          <button type="button" class="pdx-input-reveal" data-target="api_ipapi" aria-label="Toggle visibility">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <p class="pdx-field-hint">GeoIP uses the free tier over HTTP when empty. Pro enables HTTPS and higher rate limits. Register at <a href="https://members.ip-api.com/" target="_blank" rel="noopener">ip-api.com</a>.</p>
+      </div>
+      <div class="pdx-field">
         <label for="api_abuseipdb">AbuseIPDB API Key</label>
         <div class="pdx-input-group">
           <input type="password" id="api_abuseipdb" name="api_keys[abuseipdb]"

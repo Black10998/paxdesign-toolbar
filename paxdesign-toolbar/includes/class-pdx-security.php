@@ -216,7 +216,7 @@ class PDX_Security {
 			$value = $body[ $key ];
 			if ( 'api_keys' === $key && is_array( $value ) ) {
 				$keys = [];
-				foreach ( [ 'openai', 'virustotal', 'shodan', 'hunter', 'nvd', 'abuseipdb', 'abusech' ] as $k ) {
+				foreach ( [ 'openai', 'virustotal', 'shodan', 'hunter', 'nvd', 'abuseipdb', 'abusech', 'ipapi' ] as $k ) {
 					if ( isset( $value[ $k ] ) ) {
 						$keys[ $k ] = sanitize_text_field( (string) $value[ $k ] );
 					}

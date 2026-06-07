@@ -160,12 +160,43 @@ async function probeUrlhaus() {
 
 async function probeSslLabs() {
   return timed('SSL Labs', async () => {
-    const start = await fetchJson(`https://api.ssllabs.com/api/v3/analyze?host=${TARGETS.domain}&fromCache=on&all=done`);
-    const status = start.json?.status || '';
-    if (!['READY', 'IN_PROGRESS', 'DNS'].includes(status)) {
-      return { status: 'partial', message: `SSL Labs status: ${status || start.res.status}`, extra: { grade: start.json?.endpoints?.[0]?.grade || null } };
+    // example.com is blacklisted by SSL Labs for automated API scans.
+    const hosts = ['mozilla.org', 'github.com', 'wikipedia.org'];
+    let used = '';
+    let last = null;
+    for (const host of hosts) {
+      const start = await fetchJson(`https://api.ssllabs.com/api/v3/analyze?host=${host}&fromCache=on&maxAge=24&all=done`);
+      last = start;
+      const statusMessage = start.json?.statusMessage || '';
+      if (String(statusMessage).toLowerCase().includes('blacklist')) continue;
+      used = host;
+      const status = start.json?.status || '';
+      if (status === 'ERROR') {
+        return {
+          status: 'partial',
+          message: `${statusMessage || 'SSL Labs error'} (audit sample host: ${host})`,
+          extra: { grade: start.json?.endpoints?.[0]?.grade || null, sample_host: host },
+        };
+      }
+      if (!['READY', 'IN_PROGRESS', 'DNS'].includes(status)) {
+        return {
+          status: 'partial',
+          message: `SSL Labs status: ${status || start.res.status} (audit sample host: ${host})`,
+          extra: { grade: start.json?.endpoints?.[0]?.grade || null, sample_host: host },
+        };
+      }
+      return {
+        status: 'ok',
+        message: `Grade ${start.json?.endpoints?.[0]?.grade || 'pending'} (audit sample host: ${host})`,
+        extra: { grade: start.json?.endpoints?.[0]?.grade || null, sample_host: host },
+      };
     }
-    return { status: 'ok', message: `Grade ${start.json?.endpoints?.[0]?.grade || 'pending'}`, extra: { grade: start.json?.endpoints?.[0]?.grade || null } };
+    const msg = last?.json?.statusMessage || 'Hostname blacklisted';
+    return {
+      status: 'partial',
+      message: `${msg} — SSL Labs blocks automated scans for audit sample hosts.`,
+      extra: { grade: null, sample_host: used || hosts[0] },
+    };
   });
 }
 

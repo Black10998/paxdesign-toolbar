@@ -49,6 +49,7 @@ class PDX_Settings {
 				'nvd'         => '',
 				'abuseipdb'   => '',
 				'abusech'     => '',
+				'ipapi'       => '',
 			],
 
 			// Enterprise

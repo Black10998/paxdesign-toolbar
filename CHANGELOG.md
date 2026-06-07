@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## 8.9.4 — 2026-06-07
+
+**Integration Audit — GeoIP and SSL Labs provider fixes**
+
+- **GeoIP (ip-api.com):** Free tier now uses HTTP (HTTPS returns 403 “SSL unavailable”); optional Pro key in Admin → API Keys enables HTTPS via `pro.ip-api.com`.
+- **SSL Labs:** Audit probe uses `mozilla.org` (with fallbacks) instead of blacklisted `example.com`; blacklist responses are reported as **partial** with an explanatory message, not a hard error.
+- `fetch_geo_with_status()` returns detailed error messages for TrustCheck and the integration audit.
+
+**Install:** `releases/paxdesign-toolbar-8.9.4.zip` — tag `v8.9.4`
+
 ## 8.9.3 — 2026-06-07
 
 **Integration Audit — partial results and resilient provider probes**
