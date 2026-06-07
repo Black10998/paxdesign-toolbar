@@ -82,7 +82,9 @@ class PDX_Queue {
 
 		$job_id    = self::generate_id();
 		$user_id   = is_user_logged_in() ? get_current_user_id() : 0;
-		$session   = sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
+		$session   = class_exists( 'PDX_Security', false )
+			? PDX_Security::ensure_guest_session()
+			: sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
 		$now       = current_time( 'mysql' );
 		$expires   = gmdate( 'Y-m-d H:i:s', time() + $ttl );
 
@@ -204,7 +206,9 @@ class PDX_Queue {
 		global $wpdb;
 		$table   = $wpdb->prefix . self::TABLE;
 		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
-		$session = sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
+		$session = class_exists( 'PDX_Security', false )
+			? PDX_Security::ensure_guest_session()
+			: sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
 
 		$where  = [];
 		$values = [];

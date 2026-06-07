@@ -1321,12 +1321,13 @@
         shodan:     { label: 'Shodan Infrastructure',            icon: 'shodan-radar' },
         hibp:       { label: 'Data Breach Check (HIBP)',         icon: 'breach-check' },
         hunter:     { label: 'Email Discovery (Hunter.io)',      icon: 'email-hunter' },
+        abuseipdb:  { label: 'AbuseIPDB IP Reputation',          icon: 'abuse-ch' },
         abuse:      { label: 'Abuse.ch Intelligence',            icon: 'abuse-ch' },
         threat:     { label: 'Threat Intelligence Feeds',        icon: 'threat-feed' },
         url_forensics: { label: 'URL Forensics',                 icon: 'threat-feed' },
       };
       var srcOrder = targetType === 'ip'
-        ? ['ip_network', 'reverse_dns', 'geo', 'geolocation', 'threat', 'virustotal', 'shodan']
+        ? ['ip_network', 'reverse_dns', 'geo', 'geolocation', 'threat', 'abuseipdb', 'virustotal', 'shodan']
         : targetType === 'hash'
         ? ['threat', 'virustotal']
         : ['rdap', 'dns', 'ssl', 'geo', 'geolocation', 'threat', 'virustotal', 'shodan', 'hunter', 'hibp', 'url_forensics'];

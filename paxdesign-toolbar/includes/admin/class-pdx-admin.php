@@ -223,6 +223,8 @@ class PDX_Admin {
 						'shodan'     => sanitize_text_field( $post['api_keys']['shodan']     ?? '' ),
 						'hunter'     => sanitize_text_field( $post['api_keys']['hunter']     ?? '' ),
 						'nvd'        => sanitize_text_field( $post['api_keys']['nvd']        ?? '' ),
+						'abuseipdb'  => sanitize_text_field( $post['api_keys']['abuseipdb']  ?? '' ),
+						'abusech'    => sanitize_text_field( $post['api_keys']['abusech']    ?? '' ),
 					],
 				];
 

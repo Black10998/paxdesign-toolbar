@@ -47,6 +47,8 @@ class PDX_Settings {
 				'shodan'      => '',
 				'hunter'      => '',
 				'nvd'         => '',
+				'abuseipdb'   => '',
+				'abusech'     => '',
 			],
 
 			// Enterprise
@@ -169,5 +171,15 @@ class PDX_Settings {
 		}
 
 		return true;
+	}
+
+	/**
+	 * abuse.ch Auth-Key header (required for URLhaus API since June 2025).
+	 *
+	 * @return array<string, string>
+	 */
+	public function abusech_auth_headers(): array {
+		$key = (string) $this->get( 'api_keys.abusech', '' );
+		return '' !== $key ? [ 'Auth-Key' => $key ] : [];
 	}
 }

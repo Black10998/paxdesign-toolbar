@@ -216,6 +216,19 @@ class PDX_Billing {
 		return $plans[ $sub['plan_id'] ] ?? $plans['free'];
 	}
 
+	/**
+	 * Whether an active SaaS plan unlocks subscription-tier modules.
+	 */
+	public static function subscription_covers_module( int $user_id, string $module_id ): bool {
+		unset( $module_id );
+		$sub = self::get_subscription( $user_id );
+		if ( 'active' !== ( $sub['status'] ?? '' ) ) {
+			return false;
+		}
+		$plan_id = (string) ( $sub['plan_id'] ?? 'free' );
+		return in_array( $plan_id, [ 'pro', 'team', 'enterprise' ], true );
+	}
+
 	public static function check_quota( int $user_id, string $metric ): array {
 		$plan  = self::get_plan_for_user( $user_id );
 		$limit = $plan['quotas'][ $metric ] ?? 0;

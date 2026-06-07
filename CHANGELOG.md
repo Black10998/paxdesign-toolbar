@@ -1,5 +1,52 @@
 ﻿# Changelog
 
+## 8.9.1 — 2026-06-07
+
+**Final validation — AbuseIPDB, URLhaus auth, live audit tooling**
+
+### Intelligence
+- **AbuseIPDB** integrated for IP reputation (check API, scoring, UI source panel, integration audit probe).
+- **URLhaus** updated for mandatory abuse.ch Auth-Key (required since June 2025) — prevents silent 401 failures.
+- New Admin → API Keys fields: AbuseIPDB, abuse.ch Auth-Key (URLhaus).
+
+### Validation tooling
+- `node scripts/live-integration-audit.mjs` — executes real HTTP probes against all providers.
+- `node scripts/e2e-workflow-validation.mjs` — structural workflow/security validation (26 checks).
+- `docs/FINAL-AUDIT-REPORT.md` — production readiness assessment.
+- `docs/live-integration-audit-results.json` — machine-readable live probe output.
+
+**Install:** `releases/paxdesign-toolbar-8.9.1.zip` — tag `v8.9.1`
+
+## 8.9.0 — 2026-06-06
+
+**Phase 3 platform audit — live validation, guest isolation, and admin hardening**
+
+### Live integration validation
+- New `PDX_Integration_Audit` probes RDAP (domain + IP/WHOIS), reverse DNS, DNS, GeoIP, OTX/URLhaus, SSL Labs, VirusTotal, Shodan, Hunter, NVD/CVE, URL forensics, and OpenAI key presence against real targets.
+- Target-type matrix validates IPv4, IPv6, domain, subdomain, URL, email, hash, and hostname normalization.
+- Verdict integrity probe confirms failed required sources never produce Clean/Low Risk.
+- Admin REST: `GET /platform/integration-audit` (admin-only). CLI: `wp eval-file scripts/run-platform-audit.php`.
+- Static audit script: `php scripts/audit-static-security.php`.
+
+### Security hardening
+- `PDX_Security::register_hooks()` wired at bootstrap — Bearer dev token auth + guest session cookie on REST/frontend.
+- Guest PayPal access check fixed (`has_access()` transient path; removed broken SQL).
+- Guest memory isolated per session (pseudo user_id from session hash).
+- Workspace/queue records bind `session_id` via `ensure_guest_session()` on create.
+- REST `POST /settings` whitelists and sanitizes allowed keys only.
+- Memory REST endpoints require a valid actor session.
+
+### Admin audit
+- API Keys page no longer claims keys are encrypted at rest.
+- Pricing UI includes Subscription tier (matches backend).
+- Removed duplicate billing save handler (`admin_post_pdx_save_settings`).
+- Platform admin page links to live integration audit.
+- Subscription-tier modules now check active SaaS plan (Pro/Team/Enterprise) in REST access and `/pay/status`.
+
+**Note:** AbuseIPDB is not integrated in this release; audit documents the gap explicitly.
+
+**Install:** `releases/paxdesign-toolbar-8.9.0.zip` — tag `v8.9.0`
+
 ## 8.8.0 — 2026-06-06
 
 **Phase 2 platform audit — security, permissions, and API correctness**
