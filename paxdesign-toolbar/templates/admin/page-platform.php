@@ -105,21 +105,41 @@ $mrr          = PDX_Billing::mrr();
       </tbody>
     </table>
     <p class="pdx-spacer">
-      <a href="<?php echo esc_url( rest_url( 'pdx/v1/platform/stats' ) ); ?>" target="_blank" rel="noopener" class="pdx-btn-ghost">View Raw JSON</a>
-      <a href="<?php echo esc_url( rest_url( 'pdx/v1/platform/integration-audit' ) ); ?>" target="_blank" rel="noopener" class="pdx-btn-ghost">Run Integration Audit</a>
+      <?php if ( current_user_can( PDX_CAP ) ) : ?>
+        <button type="button" class="pdx-btn-ghost" id="pdx-platform-stats-json" data-endpoint="/platform/stats"><?php esc_html_e( 'View Raw JSON', 'paxdesign-toolbar' ); ?></button>
+      <?php endif; ?>
     </p>
   </div>
 </div>
 
-<div class="pdx-card pdx-spacer">
+<?php if ( current_user_can( PDX_CAP ) ) : ?>
+<div class="pdx-card pdx-spacer" id="pdx-integration-audit-panel">
   <div class="pdx-card__header"><h2>Live Integration Audit</h2></div>
   <div class="pdx-card__body">
-    <p>Probes all configured intelligence providers against real-world targets (RDAP, DNS, GeoIP, OTX, URLhaus, SSL Labs, VirusTotal, Shodan, Hunter, NVD, AbuseIPDB, URL forensics). Requires administrator REST authentication.</p>
+    <p>Probes all configured intelligence providers against real-world targets (RDAP, DNS, GeoIP, OTX, URLhaus, SSL Labs, VirusTotal, Shodan, Hunter, NVD, AbuseIPDB, URL forensics).</p>
     <p class="pdx-spacer">
-      <a href="<?php echo esc_url( rest_url( 'pdx/v1/platform/integration-audit' ) ); ?>" target="_blank" rel="noopener" class="pdx-btn-primary">Run Live Audit (JSON)</a>
+      <button type="button" class="pdx-btn-primary" id="pdx-run-integration-audit"><?php esc_html_e( 'Run Live Audit', 'paxdesign-toolbar' ); ?></button>
     </p>
+    <div id="pdx-integration-audit-error" class="notice notice-error pdx-notice-inline" hidden role="alert"></div>
+    <div id="pdx-integration-audit-summary" class="pdx-audit-summary" hidden></div>
+    <pre id="pdx-integration-audit-output" class="pdx-audit-json" hidden></pre>
     <p class="pdx-field-hint">CLI: <code>wp eval-file scripts/run-platform-audit.php</code> from the plugin repository root on a WordPress install with API keys configured.</p>
   </div>
 </div>
+<?php else : ?>
+<div class="pdx-card pdx-spacer">
+  <div class="pdx-card__header"><h2>Live Integration Audit</h2></div>
+  <div class="pdx-card__body">
+    <div class="notice notice-warning pdx-notice-inline">
+      <?php
+      printf(
+        esc_html__( 'Integration audits require the "%s" capability. Contact a site administrator.', 'paxdesign-toolbar' ),
+        esc_html( PDX_CAP )
+      );
+      ?>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 <?php include __DIR__ . '/partials/footer.php'; ?>

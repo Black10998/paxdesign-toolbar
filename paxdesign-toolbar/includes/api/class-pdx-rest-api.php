@@ -184,6 +184,32 @@ class PDX_REST_API {
 		return hash_equals( (string) $owner, $guest );
 	}
 
+	/**
+	 * Administrator-only REST routes (manage_options).
+	 *
+	 * @return true|WP_Error
+	 */
+	public function rest_admin_permission() {
+		if ( ! is_user_logged_in() ) {
+			return new WP_Error(
+				'pdx_rest_unauthorized',
+				'You must be logged in to access this administrator endpoint.',
+				[ 'status' => 401, 'required_capability' => PDX_CAP ]
+			);
+		}
+		if ( ! current_user_can( PDX_CAP ) ) {
+			return new WP_Error(
+				'pdx_rest_forbidden',
+				sprintf(
+					'Missing capability "%s". Only WordPress administrators can run platform audits.',
+					PDX_CAP
+				),
+				[ 'status' => 403, 'required_capability' => PDX_CAP ]
+			);
+		}
+		return true;
+	}
+
 	public function register_routes(): void {
 		$ns  = 'pdx/v1';
 		$pub = '__return_true';
@@ -302,8 +328,8 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/dev/tokens/(?P<token_id>[a-z0-9\-]+)',  [ 'methods' => 'DELETE', 'callback' => [ $this, 'dev_token_delete' ], 'permission_callback' => $pub ] );
 
 		// Platform stats (admin dashboard)
-		register_rest_route( $ns, '/platform/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_stats' ], 'permission_callback' => $adm ] );
-		register_rest_route( $ns, '/platform/integration-audit', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_integration_audit' ], 'permission_callback' => $adm ] );
+		register_rest_route( $ns, '/platform/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_stats' ], 'permission_callback' => [ $this, 'rest_admin_permission' ] ] );
+		register_rest_route( $ns, '/platform/integration-audit', [ 'methods' => 'GET', 'callback' => [ $this, 'platform_integration_audit' ], 'permission_callback' => [ $this, 'rest_admin_permission' ] ] );
 
 		// Threat Intel — CVE lookup + attack surface mapping
 		register_rest_route( $ns, '/threat/cve',     [ 'methods' => 'GET', 'callback' => [ $this, 'threat_cve'     ], 'permission_callback' => $pub, 'args' => [ 'q' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );

@@ -952,6 +952,50 @@ table.widefat td {
   border-left-width: 3px;
 }
 
+.pdx-audit-summary {
+  margin-top: 16px;
+}
+
+.pdx-audit-summary__totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.pdx-audit-table {
+  width: 100%;
+}
+
+.pdx-audit-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.pdx-audit-status--ok { background: rgba(46, 160, 67, 0.15); color: #3fb950; }
+.pdx-audit-status--partial { background: rgba(210, 153, 34, 0.15); color: #d29922; }
+.pdx-audit-status--skipped { background: rgba(139, 148, 158, 0.15); color: #8b949e; }
+.pdx-audit-status--error { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+
+.pdx-audit-json {
+  margin-top: 16px;
+  max-height: 420px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: var(--pdx-radius);
+  background: rgba(1, 4, 9, 0.45);
+  border: 1px solid rgba(240, 246, 252, 0.08);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ─── Mobile sidebar backdrop ───────────────────────────── */
 .pdx-sidebar-backdrop {
   display: none;

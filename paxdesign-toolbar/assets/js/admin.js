@@ -111,4 +111,135 @@
       if (!confirm('Clear all event logs? This cannot be undone.')) e.preventDefault();
     }
   });
+
+  /* ── Authenticated admin REST (wp_rest nonce) ─────────── */
+  var cfg = window.PDX_ADMIN || {};
+
+  function adminRestGet(path) {
+    var base = (cfg.restUrl || '').replace(/\/$/, '');
+    var url = base + (path.charAt(0) === '/' ? path : '/' + path);
+    return fetch(url, {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'X-WP-Nonce': cfg.restNonce || ''
+      }
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        return { res: res, data: data };
+      });
+    });
+  }
+
+  function restErrorMessage(payload) {
+    var data = payload.data || {};
+    var i18n = cfg.i18n || {};
+    if (data.code === 'rest_cookie_invalid_nonce' || data.code === 'rest_invalid_nonce') {
+      return i18n.auditNonce || 'REST session expired. Reload this page and try again.';
+    }
+    if (data.code === 'rest_forbidden' || data.code === 'pdx_rest_forbidden') {
+      if (data.data && data.data.required_capability) {
+        return (i18n.auditForbidden || 'Access denied.') + ' (' + data.data.required_capability + ')';
+      }
+      return i18n.auditForbidden || data.message || 'Access denied.';
+    }
+    if (data.code === 'pdx_rest_unauthorized' || payload.res.status === 401) {
+      return data.message || 'You must be logged in as an administrator.';
+    }
+    return data.message || (cfg.i18n && cfg.i18n.auditFailed) || 'Request failed.';
+  }
+
+  function statusClass(status) {
+    return 'pdx-audit-status pdx-audit-status--' + String(status || 'error');
+  }
+
+  function renderAuditSummary(data) {
+    var summary = data.summary || {};
+    var providers = data.providers || [];
+    var html = '';
+    html += '<div class="pdx-audit-summary__totals">';
+    html += '<span><strong>OK:</strong> ' + (summary.ok || 0) + '</span>';
+    html += '<span><strong>Partial:</strong> ' + (summary.partial || 0) + '</span>';
+    html += '<span><strong>Error:</strong> ' + (summary.error || 0) + '</span>';
+    html += '<span><strong>Skipped:</strong> ' + (summary.skipped || 0) + '</span>';
+    html += '</div>';
+    html += '<table class="pdx-table pdx-audit-table"><thead><tr><th>Provider</th><th>Status</th><th>Message</th><th>Latency</th></tr></thead><tbody>';
+    providers.forEach(function (row) {
+      html += '<tr>';
+      html += '<td>' + (row.provider || '') + '</td>';
+      html += '<td><span class="' + statusClass(row.status) + '">' + String(row.status || '').toUpperCase() + '</span></td>';
+      html += '<td>' + (row.message || '') + '</td>';
+      html += '<td>' + (row.latency_ms != null ? row.latency_ms + ' ms' : '—') + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function bindAdminRestButton(btn, opts) {
+    if (!btn || !cfg.canManage) return;
+    btn.addEventListener('click', function () {
+      var endpoint = btn.getAttribute('data-endpoint') || opts.endpoint;
+      var label = btn.textContent;
+      var errEl = opts.errorEl;
+      var outEl = opts.outputEl;
+      var summaryEl = opts.summaryEl;
+      btn.disabled = true;
+      btn.textContent = opts.runningLabel || 'Loading…';
+      if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
+      if (outEl) { outEl.hidden = true; outEl.textContent = ''; }
+      if (summaryEl) { summaryEl.hidden = true; summaryEl.innerHTML = ''; }
+
+      adminRestGet(endpoint)
+        .then(function (payload) {
+          if (!payload.res.ok) {
+            throw new Error(restErrorMessage(payload));
+          }
+          if (summaryEl && payload.data && payload.data.providers) {
+            summaryEl.innerHTML = renderAuditSummary(payload.data);
+            summaryEl.hidden = false;
+          }
+          if (outEl) {
+            outEl.textContent = JSON.stringify(payload.data, null, 2);
+            outEl.hidden = false;
+          }
+        })
+        .catch(function (err) {
+          if (errEl) {
+            errEl.textContent = err.message || ((cfg.i18n && cfg.i18n.auditFailed) || 'Request failed.');
+            errEl.hidden = false;
+          } else {
+            window.alert(err.message || ((cfg.i18n && cfg.i18n.auditFailed) || 'Request failed.'));
+          }
+        })
+        .finally(function () {
+          btn.disabled = false;
+          btn.textContent = label;
+        });
+    });
+  }
+
+  bindAdminRestButton(document.getElementById('pdx-run-integration-audit'), {
+    endpoint: '/platform/integration-audit',
+    runningLabel: (cfg.i18n && cfg.i18n.auditRunning) || 'Running live audit…',
+    errorEl: document.getElementById('pdx-integration-audit-error'),
+    outputEl: document.getElementById('pdx-integration-audit-output'),
+    summaryEl: document.getElementById('pdx-integration-audit-summary')
+  });
+
+  bindAdminRestButton(document.getElementById('pdx-platform-stats-json'), {
+    endpoint: '/platform/stats',
+    runningLabel: (cfg.i18n && cfg.i18n.statsRunning) || 'Loading…',
+    errorEl: null,
+    outputEl: (function () {
+      var pre = document.createElement('pre');
+      pre.className = 'pdx-audit-json';
+      pre.hidden = true;
+      var host = document.getElementById('pdx-platform-stats-json');
+      if (host && host.parentNode) host.parentNode.appendChild(pre);
+      return pre;
+    })(),
+    summaryEl: null
+  });
 })();

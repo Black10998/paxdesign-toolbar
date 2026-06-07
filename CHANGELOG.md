@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 8.9.2 — 2026-06-07
+
+**Admin — Live Integration Audit REST authentication**
+
+- Platform audit button now calls REST with `X-WP-Nonce` (`wp_rest`) instead of opening an unauthenticated URL.
+- In-page audit results: provider summary table + JSON output + admin error messages.
+- Audit UI hidden for users without `manage_options`; REST returns clear capability errors.
+- Platform stats raw JSON uses the same authenticated fetch pattern.
+
+**Install:** `releases/paxdesign-toolbar-8.9.2.zip` — tag `v8.9.2`
+
 ## 8.9.1 — 2026-06-07
 
 **Final validation — AbuseIPDB, URLhaus auth, live audit tooling**

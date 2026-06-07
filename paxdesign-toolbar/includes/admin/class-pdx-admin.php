@@ -102,11 +102,27 @@ class PDX_Admin {
 		);
 
 		wp_localize_script( 'pdx-admin', 'PDX_ADMIN', [
-			'nonce'    => wp_create_nonce( 'pdx_admin_nonce' ),
-			'restUrl'  => rest_url( 'pdx/v1' ),
-			'settings' => $this->settings->all(),
-			'modules'  => $this->modules->all(),
-			'version'  => PDX_VERSION,
+			'nonce'         => wp_create_nonce( 'pdx_admin_nonce' ),
+			'restNonce'     => wp_create_nonce( 'wp_rest' ),
+			'restUrl'       => rest_url( 'pdx/v1' ),
+			'canManage'     => current_user_can( PDX_CAP ),
+			'requiredCap'   => PDX_CAP,
+			'settings'      => $this->settings->all(),
+			'modules'       => $this->modules->all(),
+			'version'       => PDX_VERSION,
+			'i18n'          => [
+				'auditRun'       => __( 'Run Live Audit', 'paxdesign-toolbar' ),
+				'auditRunning'   => __( 'Running live audit…', 'paxdesign-toolbar' ),
+				'statsRun'       => __( 'View Raw JSON', 'paxdesign-toolbar' ),
+				'statsRunning'   => __( 'Loading…', 'paxdesign-toolbar' ),
+				'auditForbidden' => sprintf(
+					/* translators: %s: WordPress capability slug */
+					__( 'Access denied. The integration audit requires the "%s" capability (WordPress administrator).', 'paxdesign-toolbar' ),
+					PDX_CAP
+				),
+				'auditNonce'     => __( 'REST session expired. Reload this page and try again.', 'paxdesign-toolbar' ),
+				'auditFailed'    => __( 'Integration audit request failed.', 'paxdesign-toolbar' ),
+			],
 		] );
 	}
 
