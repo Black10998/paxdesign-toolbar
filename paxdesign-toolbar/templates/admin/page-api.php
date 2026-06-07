@@ -75,6 +75,30 @@ include __DIR__ . '/partials/header.php';
         <p class="pdx-field-hint">Email discovery for OSINT module.</p>
       </div>
       <div class="pdx-field">
+        <label for="api_abusech">abuse.ch Auth-Key (URLhaus)</label>
+        <div class="pdx-input-group">
+          <input type="password" id="api_abusech" name="api_keys[abusech]"
+                 value="<?php echo esc_attr( $keys['abusech'] ?? '' ); ?>"
+                 placeholder="Auth-Key from auth.abuse.ch" autocomplete="off">
+          <button type="button" class="pdx-input-reveal" data-target="api_abusech" aria-label="Toggle visibility">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <p class="pdx-field-hint">Required for URLhaus lookups since June 2025. Free key from <a href="https://auth.abuse.ch/" target="_blank" rel="noopener">auth.abuse.ch</a>.</p>
+      </div>
+      <div class="pdx-field">
+        <label for="api_abuseipdb">AbuseIPDB API Key</label>
+        <div class="pdx-input-group">
+          <input type="password" id="api_abuseipdb" name="api_keys[abuseipdb]"
+                 value="<?php echo esc_attr( $keys['abuseipdb'] ?? '' ); ?>"
+                 placeholder="AbuseIPDB API key" autocomplete="off">
+          <button type="button" class="pdx-input-reveal" data-target="api_abuseipdb" aria-label="Toggle visibility">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <p class="pdx-field-hint">IP reputation scoring for TrustCheck and OSINT IP scans. Free tier: 1,000 checks/day.</p>
+      </div>
+      <div class="pdx-field">
         <label for="api_nvd">NVD API Key</label>
         <div class="pdx-input-group">
           <input type="password" id="api_nvd" name="api_keys[nvd]"

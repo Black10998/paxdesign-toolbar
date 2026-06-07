@@ -1,0 +1,150 @@
+{
+  "timestamp": "2026-06-07T10:20:06.767Z",
+  "engine": "live-integration-audit",
+  "version": "8.9.1",
+  "environment": "cloud-agent",
+  "keys_configured": {
+    "virustotal": false,
+    "shodan": false,
+    "hunter": false,
+    "nvd": false,
+    "abuseipdb": false,
+    "abusech": false,
+    "openai": false
+  },
+  "targets": {
+    "ipv4": "8.8.8.8",
+    "ipv6": "2001:4860:4860::8888",
+    "domain": "example.com",
+    "subdomain": "www.example.com",
+    "url": "https://example.com/login",
+    "email": "test@example.com",
+    "hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "hostname": "mail.example.com"
+  },
+  "summary": {
+    "total": 17,
+    "ok": 10,
+    "partial": 1,
+    "error": 0,
+    "skipped": 6
+  },
+  "providers": [
+    {
+      "provider": "Target normalization",
+      "status": "ok",
+      "message": "All canonical target types normalize correctly",
+      "latency_ms": 0
+    },
+    {
+      "provider": "Verdict integrity",
+      "status": "ok",
+      "message": "Failed sources never produce Clean/Low Risk verdicts",
+      "latency_ms": 0,
+      "sample_verdict": "insufficient_data"
+    },
+    {
+      "provider": "RDAP domain",
+      "status": "ok",
+      "message": "Handle 2336799_DOMAIN_COM-VRSN",
+      "latency_ms": 165,
+      "handle": "2336799_DOMAIN_COM-VRSN"
+    },
+    {
+      "provider": "RDAP IP network",
+      "status": "ok",
+      "message": "GOGL",
+      "latency_ms": 228,
+      "name": "GOGL"
+    },
+    {
+      "provider": "Reverse DNS",
+      "status": "ok",
+      "message": "dns.google",
+      "latency_ms": 1,
+      "ptr": "dns.google"
+    },
+    {
+      "provider": "DNS (DoH)",
+      "status": "ok",
+      "message": "2 A record(s)",
+      "latency_ms": 27,
+      "a_records": 2
+    },
+    {
+      "provider": "GeoIP (ip-api.com)",
+      "status": "ok",
+      "message": "Resolved United States",
+      "latency_ms": 18,
+      "country": "United States",
+      "asn": "AS15169 Google LLC"
+    },
+    {
+      "provider": "OTX",
+      "status": "ok",
+      "message": "Pulse count 50",
+      "latency_ms": 1860,
+      "pulses": 50
+    },
+    {
+      "provider": "URLhaus",
+      "status": "skipped",
+      "message": "abuse.ch Auth-Key not configured (set PDX_API_ABUSECH) — required since June 2025.",
+      "latency_ms": 0
+    },
+    {
+      "provider": "SSL Labs",
+      "status": "partial",
+      "message": "SSL Labs status: ERROR",
+      "latency_ms": 120,
+      "grade": null
+    },
+    {
+      "provider": "VirusTotal",
+      "status": "skipped",
+      "message": "API key not configured (set PDX_API_VIRUSTOTAL).",
+      "latency_ms": 0
+    },
+    {
+      "provider": "Shodan",
+      "status": "skipped",
+      "message": "API key not configured (set PDX_API_SHODAN).",
+      "latency_ms": 0
+    },
+    {
+      "provider": "Hunter.io",
+      "status": "skipped",
+      "message": "API key not configured (set PDX_API_HUNTER).",
+      "latency_ms": 0
+    },
+    {
+      "provider": "NVD / CIRCL CVE",
+      "status": "ok",
+      "message": "CVE sample retrieved via NVD",
+      "latency_ms": 579,
+      "total": 1,
+      "source": "NVD"
+    },
+    {
+      "provider": "AbuseIPDB",
+      "status": "skipped",
+      "message": "API key not configured (set PDX_API_ABUSEIPDB).",
+      "latency_ms": 0
+    },
+    {
+      "provider": "URL forensics",
+      "status": "ok",
+      "message": "HTTP 404 after redirects",
+      "latency_ms": 30,
+      "final_url": "https://example.com/login",
+      "http": 404
+    },
+    {
+      "provider": "OpenAI",
+      "status": "skipped",
+      "message": "API key not configured (set PDX_API_OPENAI).",
+      "latency_ms": 0
+    }
+  ],
+  "production_readiness": "conditional"
+}

@@ -129,9 +129,16 @@ class PDX_Threat_Feeds {
 			'feed_probe_urlhaus_' . md5( $host ),
 			300,
 			static function () use ( $host ) {
+				$headers = function_exists( 'pdx_settings' ) ? pdx_settings()->abusech_auth_headers() : [];
+				if ( empty( $headers ) ) {
+					return [
+						'state'   => 'partial',
+						'message' => 'abuse.ch Auth-Key required since June 2025 — configure in Admin → API Keys.',
+					];
+				}
 				$http = PDX_Http::post(
 					'https://urlhaus-api.abuse.ch/v1/host/',
-					[ 'timeout' => 10, 'body' => [ 'host' => $host ] ],
+					[ 'timeout' => 10, 'headers' => $headers, 'body' => [ 'host' => $host ] ],
 					'urlhaus_probe'
 				);
 				if ( is_wp_error( $http['response'] ) ) {

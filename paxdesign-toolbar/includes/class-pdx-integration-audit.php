@@ -33,6 +33,7 @@ class PDX_Integration_Audit {
 		$this->probe_dns();
 		$this->probe_geo();
 		$this->probe_threat_feeds();
+		$this->probe_urlhaus_auth();
 		$this->probe_ssl_labs();
 		$this->probe_virustotal();
 		$this->probe_shodan();
@@ -40,7 +41,7 @@ class PDX_Integration_Audit {
 		$this->probe_nvd_cve();
 		$this->probe_url_analysis();
 		$this->probe_openai();
-		$this->probe_abuseipdb_note();
+		$this->probe_abuseipdb();
 
 		$failed  = array_filter( $this->results, static fn( $r ) => 'error' === ( $r['status'] ?? '' ) );
 		$skipped = array_filter( $this->results, static fn( $r ) => 'skipped' === ( $r['status'] ?? '' ) );
@@ -215,6 +216,40 @@ class PDX_Integration_Audit {
 		);
 	}
 
+	private function probe_urlhaus_auth(): void {
+		$started = microtime( true );
+		$key     = (string) $this->settings->get( 'api_keys.abusech', '' );
+		if ( '' === $key ) {
+			$this->record(
+				'URLhaus (abuse.ch Auth-Key)',
+				'skipped',
+				'abuse.ch Auth-Key not configured — URLhaus requires authentication since June 2025.',
+				$started
+			);
+			return;
+		}
+		$http = PDX_Http::post(
+			'https://urlhaus-api.abuse.ch/v1/host/',
+			[
+				'timeout' => 12,
+				'headers' => [ 'Auth-Key' => $key ],
+				'body'    => [ 'host' => 'example.com' ],
+			],
+			'urlhaus_audit'
+		);
+		$resp = $http['response'];
+		$code = is_wp_error( $resp ) ? 0 : (int) wp_remote_retrieve_response_code( $resp );
+		if ( 200 === $code ) {
+			$this->record( 'URLhaus (abuse.ch Auth-Key)', 'ok', 'Host lookup authenticated successfully.', $started );
+			return;
+		}
+		if ( in_array( $code, [ 401, 403 ], true ) ) {
+			$this->record( 'URLhaus (abuse.ch Auth-Key)', 'error', 'Authentication failed — verify abuse.ch Auth-Key.', $started, [ 'http' => $code ] );
+			return;
+		}
+		$this->record( 'URLhaus (abuse.ch Auth-Key)', 'partial', 'Unexpected HTTP ' . $code, $started, [ 'http' => $code ] );
+	}
+
 	private function probe_ssl_labs(): void {
 		$started = microtime( true );
 		$ref     = new ReflectionClass( $this->intel );
@@ -325,12 +360,24 @@ class PDX_Integration_Audit {
 		$this->record( 'OpenAI', 'ok', 'API key configured (live completion not invoked in audit).', $started );
 	}
 
-	private function probe_abuseipdb_note(): void {
+	private function probe_abuseipdb(): void {
+		$started = microtime( true );
+		$key     = (string) $this->settings->get( 'api_keys.abuseipdb', '' );
+		if ( '' === $key ) {
+			$this->record( 'AbuseIPDB', 'skipped', 'API key not configured.', $started );
+			return;
+		}
+		$out = $this->intel->fetch_abuseipdb( '8.8.8.8' );
+		$state = $out['status']['state'] ?? 'error';
 		$this->record(
 			'AbuseIPDB',
-			'skipped',
-			'Not integrated in this release — GeoIP uses ip-api.com; threat uses OTX/URLhaus/VirusTotal.',
-			microtime( true )
+			in_array( $state, [ 'ok', 'partial' ], true ) ? $state : 'error',
+			(string) ( $out['status']['message'] ?? 'No message' ),
+			$started,
+			[
+				'abuse_confidence' => $out['data']['abuse_confidence'] ?? null,
+				'total_reports'    => $out['data']['total_reports'] ?? null,
+			]
 		);
 	}
 

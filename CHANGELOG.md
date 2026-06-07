@@ -1,5 +1,22 @@
 ﻿# Changelog
 
+## 8.9.1 — 2026-06-07
+
+**Final validation — AbuseIPDB, URLhaus auth, live audit tooling**
+
+### Intelligence
+- **AbuseIPDB** integrated for IP reputation (check API, scoring, UI source panel, integration audit probe).
+- **URLhaus** updated for mandatory abuse.ch Auth-Key (required since June 2025) — prevents silent 401 failures.
+- New Admin → API Keys fields: AbuseIPDB, abuse.ch Auth-Key (URLhaus).
+
+### Validation tooling
+- `node scripts/live-integration-audit.mjs` — executes real HTTP probes against all providers.
+- `node scripts/e2e-workflow-validation.mjs` — structural workflow/security validation (26 checks).
+- `docs/FINAL-AUDIT-REPORT.md` — production readiness assessment.
+- `docs/live-integration-audit-results.json` — machine-readable live probe output.
+
+**Install:** `releases/paxdesign-toolbar-8.9.1.zip` — tag `v8.9.1`
+
 ## 8.9.0 — 2026-06-06
 
 **Phase 3 platform audit — live validation, guest isolation, and admin hardening**

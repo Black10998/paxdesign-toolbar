@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-06-07T10:20:10.233Z",
+  "engine": "e2e-workflow-validation",
+  "version": "8.9.1",
+  "summary": {
+    "pass": 26,
+    "fail": 0
+  },
+  "passes": [
+    "Dev token hooks registered",
+    "REST settings sanitized",
+    "Guest access transient path",
+    "Memory actor isolation",
+    "Memory REST requires actor",
+    "Workspace ownership gate",
+    "Queue job ownership gate",
+    "Worker list admin-only",
+    "Team RBAC on members",
+    "Subscription tier access",
+    "Insufficient data on failed coverage",
+    "Threat reputation gate for clean/low",
+    "AbuseIPDB integrated",
+    "AbuseIPDB in IP scoring",
+    "Dock handles source errors",
+    "REST route /trust",
+    "REST route /osint/scan",
+    "REST route /pay/create",
+    "REST route /pay/capture",
+    "REST route /pay/status",
+    "REST route /workspace",
+    "REST route /billing/plans",
+    "REST route /billing/status",
+    "REST route /threat/cve",
+    "REST route /memory/store",
+    "REST route /platform/integration-audit"
+  ],
+  "failures": [],
+  "production_readiness": "structural_pass"
+}

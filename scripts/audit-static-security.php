@@ -78,6 +78,18 @@ audit_file_contains(
 	'Verdict integrity live audit probe'
 );
 
+audit_file_contains(
+	$root . '/includes/class-pdx-intelligence.php',
+	'fetch_abuseipdb',
+	'AbuseIPDB integration'
+);
+
+audit_file_contains(
+	$root . '/includes/class-pdx-settings.php',
+	'abusech_auth_headers',
+	'URLhaus abuse.ch Auth-Key support'
+);
+
 echo "Static audit: {$checks} checks, " . count( $errors ) . " failures\n";
 foreach ( $errors as $e ) {
 	echo "  FAIL: {$e}\n";

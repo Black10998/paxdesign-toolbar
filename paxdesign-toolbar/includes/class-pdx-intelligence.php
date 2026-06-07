@@ -175,6 +175,38 @@ class PDX_Intelligence {
 			}
 		}
 
+		$abuse_ip = 'ip' === $target_type ? $target : $resolved_ip;
+		if ( $abuse_ip && filter_var( $abuse_ip, FILTER_VALIDATE_IP ) ) {
+			$abuse = $this->fetch_abuseipdb( $abuse_ip );
+			$report['source_status']['abuseipdb'] = $abuse['status'];
+			if ( ! empty( $abuse['data'] ) ) {
+				$report['sources']['abuseipdb'] = $abuse['data'];
+				if ( ! empty( $report['sources']['threat'] ) ) {
+					$conf = (int) ( $abuse['data']['abuse_confidence'] ?? 0 );
+					if ( $conf >= 25 ) {
+						$report['sources']['threat']['suspicious'] = max(
+							(int) ( $report['sources']['threat']['suspicious'] ?? 0 ),
+							min( 5, (int) ceil( $conf / 20 ) )
+						);
+						$report['sources']['threat']['feeds'] = array_values(
+							array_unique(
+								array_merge(
+									(array) ( $report['sources']['threat']['feeds'] ?? [] ),
+									[ 'AbuseIPDB (' . $conf . '% confidence)' ]
+								)
+							)
+						);
+					}
+				}
+			}
+		} elseif ( in_array( $target_type, [ 'hash' ], true ) ) {
+			$report['source_status']['abuseipdb'] = $this->skipped_status( 'AbuseIPDB does not apply to file hashes.' );
+		} elseif ( 'ip' !== $target_type && ! $resolved_ip ) {
+			$report['source_status']['abuseipdb'] = $this->skipped_status( 'AbuseIPDB requires a resolved IP address.' );
+		} else {
+			$report['source_status']['abuseipdb'] = $this->skipped_status( 'AbuseIPDB applies to IP addresses only.' );
+		}
+
 		if ( $paid ) {
 			$vt_key = (string) $this->settings->get( 'api_keys.virustotal', '' );
 			$vt     = $this->fetch_virustotal( $target, $target_type, $resolved );
@@ -1007,52 +1039,63 @@ class PDX_Intelligence {
 		}
 
 		// URLhaus — URL lookup for URLs, host lookup otherwise.
-		++$attempts;
-		if ( 'url' === $type ) {
-			$fetch_url = $resolved['url'] ?? $resolved['raw'] ?? '';
-			if ( ! preg_match( '#^https?://#i', (string) $fetch_url ) ) {
-				$fetch_url = 'https://' . $target . ( $resolved['path'] ?? '' );
-			}
-			$urlhaus_http = PDX_Http::post(
-				'https://urlhaus-api.abuse.ch/v1/url/',
-				[
-					'timeout' => 12,
-					'body'    => [ 'url' => $fetch_url ],
-				],
-				'urlhaus_url'
-			);
+		$abusech_headers = $this->settings->abusech_auth_headers();
+		if ( empty( $abusech_headers ) ) {
+			$feeds[] = 'URLhaus (abuse.ch Auth-Key not configured)';
 		} else {
-			$urlhaus_http = PDX_Http::post(
-				'https://urlhaus-api.abuse.ch/v1/host/',
-				[
-					'timeout' => 12,
-					'body'    => [ 'host' => $target ],
-				],
-				'urlhaus'
-			);
-		}
+			++$attempts;
+			if ( 'url' === $type ) {
+				$fetch_url = $resolved['url'] ?? $resolved['raw'] ?? '';
+				if ( ! preg_match( '#^https?://#i', (string) $fetch_url ) ) {
+					$fetch_url = 'https://' . $target . ( $resolved['path'] ?? '' );
+				}
+				$urlhaus_http = PDX_Http::post(
+					'https://urlhaus-api.abuse.ch/v1/url/',
+					[
+						'timeout' => 12,
+						'headers' => $abusech_headers,
+						'body'    => [ 'url' => $fetch_url ],
+					],
+					'urlhaus_url'
+				);
+			} else {
+				$urlhaus_http = PDX_Http::post(
+					'https://urlhaus-api.abuse.ch/v1/host/',
+					[
+						'timeout' => 12,
+						'headers' => $abusech_headers,
+						'body'    => [ 'host' => $target ],
+					],
+					'urlhaus'
+				);
+			}
 
-		$urlhaus  = $urlhaus_http['response'];
-		$last_log = $urlhaus_http['log'];
+			$urlhaus  = $urlhaus_http['response'];
+			$last_log = $urlhaus_http['log'];
 
-		if ( ! is_wp_error( $urlhaus ) && 200 === (int) wp_remote_retrieve_response_code( $urlhaus ) ) {
-			$udata = json_decode( wp_remote_retrieve_body( $urlhaus ), true );
-			$last_log['parse_status'] = is_array( $udata ) ? 'ok' : 'parse_error';
-			if ( 'url' === $type && 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_status'] ) ) {
-				if ( in_array( $udata['url_status'], [ 'online', 'offline' ], true ) ) {
-					++$malicious;
-					$feeds[] = 'URLhaus (malicious URL)';
+			if ( ! is_wp_error( $urlhaus ) && 200 === (int) wp_remote_retrieve_response_code( $urlhaus ) ) {
+				$udata = json_decode( wp_remote_retrieve_body( $urlhaus ), true );
+				$last_log['parse_status'] = is_array( $udata ) ? 'ok' : 'parse_error';
+				if ( 'url' === $type && 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_status'] ) ) {
+					if ( in_array( $udata['url_status'], [ 'online', 'offline' ], true ) ) {
+						++$malicious;
+						$feeds[] = 'URLhaus (malicious URL)';
+					} else {
+						$feeds[] = 'URLhaus (not listed)';
+					}
+				} elseif ( 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_count'] ) ) {
+					$malicious += (int) $udata['url_count'];
+					$feeds[]     = 'URLhaus (' . (int) $udata['url_count'] . ' URLs)';
 				} else {
 					$feeds[] = 'URLhaus (not listed)';
 				}
-			} elseif ( 'ok' === ( $udata['query_status'] ?? '' ) && ! empty( $udata['url_count'] ) ) {
-				$malicious += (int) $udata['url_count'];
-				$feeds[]     = 'URLhaus (' . (int) $udata['url_count'] . ' URLs)';
 			} else {
-				$feeds[] = 'URLhaus (not listed)';
+				++$errors;
+				$code = is_wp_error( $urlhaus ) ? 0 : (int) wp_remote_retrieve_response_code( $urlhaus );
+				if ( in_array( $code, [ 401, 403 ], true ) ) {
+					$feeds[] = 'URLhaus (authentication failed — verify abuse.ch Auth-Key)';
+				}
 			}
-		} else {
-			++$errors;
 		}
 
 		return $this->finalize_threat_intel( $feeds, $malicious, $suspicious, $errors, $attempts, $last_log );
@@ -1267,6 +1310,98 @@ class PDX_Intelligence {
 		];
 	}
 
+	/**
+	 * AbuseIPDB IP reputation check.
+	 *
+	 * @return array{data:?array,status:array}
+	 */
+	public function fetch_abuseipdb( string $ip ): array {
+		$key = (string) $this->settings->get( 'api_keys.abuseipdb', '' );
+		if ( '' === $key ) {
+			return [
+				'data'   => null,
+				'status' => $this->skipped_status( 'AbuseIPDB API key not configured.' ),
+			];
+		}
+
+		if ( ! filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+			return [
+				'data'   => null,
+				'status' => [ 'state' => 'error', 'message' => 'Invalid IP address for AbuseIPDB lookup.' ],
+			];
+		}
+
+		$url  = 'https://api.abuseipdb.com/api/v2/check?' . http_build_query(
+			[
+				'ipAddress'    => $ip,
+				'maxAgeInDays' => 90,
+			]
+		);
+		$http = PDX_Http::get(
+			$url,
+			[
+				'timeout' => 12,
+				'headers' => [
+					'Key'    => $key,
+					'Accept' => 'application/json',
+				],
+			],
+			'abuseipdb'
+		);
+		$resp = $http['response'];
+		$this->last_paid_api_response = $resp;
+
+		if ( is_wp_error( $resp ) ) {
+			$status = [ 'state' => 'error', 'message' => 'AbuseIPDB request failed: ' . $resp->get_error_message() ];
+			return [ 'data' => null, 'status' => $this->with_http_log( $status, $http['log'] ) ];
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $resp );
+		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+		if ( 429 === $code ) {
+			$status = [ 'state' => 'partial', 'message' => 'AbuseIPDB rate limit reached — retry later.' ];
+			return [ 'data' => null, 'status' => $this->with_http_log( $status, $http['log'] ) ];
+		}
+
+		if ( 401 === $code || 403 === $code ) {
+			$status = [ 'state' => 'error', 'message' => 'AbuseIPDB authentication failed — verify API key.' ];
+			return [ 'data' => null, 'status' => $this->with_http_log( $status, $http['log'] ) ];
+		}
+
+		if ( 200 !== $code || ! is_array( $body['data'] ?? null ) ) {
+			$detail = is_array( $body ) ? (string) ( $body['errors'][0]['detail'] ?? $body['errors'][0]['title'] ?? '' ) : '';
+			$status = [ 'state' => 'error', 'message' => $detail ? 'AbuseIPDB error: ' . $detail : 'AbuseIPDB returned an unexpected response.' ];
+			return [ 'data' => null, 'status' => $this->with_http_log( $status, $http['log'] ) ];
+		}
+
+		$row = $body['data'];
+		$data = [
+			'label'             => 'AbuseIPDB',
+			'ip'                => $row['ipAddress'] ?? $ip,
+			'abuse_confidence'  => (int) ( $row['abuseConfidenceScore'] ?? 0 ),
+			'total_reports'     => (int) ( $row['totalReports'] ?? 0 ),
+			'num_distinct_users'=> (int) ( $row['numDistinctUsers'] ?? 0 ),
+			'country'           => $row['countryCode'] ?? null,
+			'isp'               => $row['isp'] ?? null,
+			'domain'            => $row['domain'] ?? null,
+			'usage_type'        => $row['usageType'] ?? null,
+			'is_whitelisted'    => ! empty( $row['isWhitelisted'] ),
+			'is_tor'            => ! empty( $row['isTor'] ),
+			'last_reported_at'  => $row['lastReportedAt'] ?? null,
+		];
+
+		$conf = (int) $data['abuse_confidence'];
+		$message = $conf >= 50
+			? 'High abuse confidence reported by AbuseIPDB.'
+			: ( $conf >= 25 ? 'Moderate abuse confidence reported by AbuseIPDB.' : 'No significant abuse reports in AbuseIPDB.' );
+
+		return [
+			'data'   => $data,
+			'status' => $this->with_http_log( [ 'state' => 'ok', 'message' => $message ], $http['log'] ),
+		];
+	}
+
 	/* ── Hunter.io ──────────────────────────────────────── */
 
 	public function fetch_hunter( string $domain ): ?array {
@@ -1355,6 +1490,22 @@ class PDX_Intelligence {
 		} elseif ( $sus > 0 ) {
 			$score    += 12;
 			$factors[] = [ 'factor' => 'Threat Feed Suspicious', 'value' => "{$sus} suspicious", 'risk' => 12, 'weight' => 'medium' ];
+		}
+
+		$abuse = $sources['abuseipdb'] ?? [];
+		if ( ! empty( $abuse ) ) {
+			$conf    = (int) ( $abuse['abuse_confidence'] ?? 0 );
+			$reports = (int) ( $abuse['total_reports'] ?? 0 );
+			if ( $conf >= 75 || $reports >= 20 ) {
+				$score    += 35;
+				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence ({$reports} reports)", 'risk' => 35, 'weight' => 'critical' ];
+			} elseif ( $conf >= 50 || $reports >= 5 ) {
+				$score    += 22;
+				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence ({$reports} reports)", 'risk' => 22, 'weight' => 'high' ];
+			} elseif ( $conf >= 25 ) {
+				$score    += 10;
+				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence", 'risk' => 10, 'weight' => 'medium' ];
+			}
 		}
 
 		// Shodan
@@ -1586,7 +1737,7 @@ class PDX_Intelligence {
 	 */
 	public function compute_confidence( array $source_status, string $target_type = 'domain' ): int {
 		$weights = match ( $target_type ) {
-			'ip'    => [ 'ip_network' => 25, 'reverse_dns' => 15, 'geo' => 30, 'threat' => 30 ],
+			'ip'    => [ 'ip_network' => 20, 'reverse_dns' => 10, 'geo' => 25, 'threat' => 25, 'abuseipdb' => 20 ],
 			'hash'  => [ 'threat' => 70, 'virustotal' => 30 ],
 			'email' => [ 'rdap' => 20, 'dns' => 35, 'ssl' => 15, 'threat' => 30 ],
 			'url'   => [ 'rdap' => 15, 'dns' => 15, 'ssl' => 15, 'threat' => 35, 'url_forensics' => 20 ],
