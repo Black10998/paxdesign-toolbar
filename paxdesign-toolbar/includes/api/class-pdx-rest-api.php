@@ -1646,8 +1646,34 @@ class PDX_REST_API {
 		}
 
 		$domain = sanitize_text_field( $req->get_param( 'domain' ) ?? '' );
-		$data   = PDX_Threat_Feeds::aggregate( $domain );
-		$status = 200;
+
+		try {
+			$data = PDX_Threat_Feeds::aggregate( $domain );
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX] threat_feeds: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+
+			return new WP_REST_Response(
+				[
+					'ok'        => false,
+					'error'     => 'Feed sync failed.',
+					'message'   => 'Unable to synchronize threat feeds. Please try again.',
+					'detail'    => ( defined( 'WP_DEBUG' ) && WP_DEBUG ) ? $e->getMessage() : '',
+					'target'    => $domain,
+					'feeds'     => [],
+					'synced_at' => gmdate( 'c' ),
+					'status'    => [
+						'state'   => 'error',
+						'message' => 'Synchronization failed due to a server error.',
+					],
+				],
+				200
+			);
+		}
+
+		$data['ok'] = 'error' !== ( $data['status']['state'] ?? '' );
+		$status     = 200;
 		if ( 'error' === ( $data['status']['state'] ?? '' ) ) {
 			$status = 503;
 		}

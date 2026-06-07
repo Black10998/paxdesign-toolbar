@@ -485,6 +485,49 @@ body.wp-admin .pdx-shell {
   box-shadow: 0 0 0 3px var(--pdx-accent-dim);
 }
 
+.pdx-input-group {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  max-width: 100%;
+}
+
+.pdx-input-group input {
+  flex: 1;
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.pdx-input-reveal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 1px solid var(--pdx-border);
+  border-left: none;
+  border-radius: 0 var(--pdx-radius) var(--pdx-radius) 0;
+  background: var(--pdx-bg-muted);
+  color: var(--pdx-text-muted);
+  cursor: pointer;
+}
+
+.pdx-input-reveal:hover {
+  background: var(--pdx-bg-hover);
+  color: var(--pdx-text);
+}
+
+.pdx-input-reveal svg {
+  width: 18px;
+  height: 18px;
+  max-width: 18px;
+  max-height: 18px;
+  display: block;
+  flex-shrink: 0;
+}
+
 .pdx-field-hint,
 .pdx-admin-wrap .description,
 .pdx-admin-wrap .pdx-help {
@@ -1219,4 +1262,59 @@ body.pdx-admin-sidebar-open {
   flex-wrap: wrap;
   gap: var(--pdx-space-3);
   align-items: center;
+}
+
+/* ─── WordPress admin dark mode compatibility ───────────── */
+body.admin-color-modern .pdx-admin-wrap,
+body.admin-color-coffee .pdx-admin-wrap,
+body.admin-color-midnight .pdx-admin-wrap,
+body.admin-color-ocean .pdx-admin-wrap,
+body.admin-color-ectoplasm .pdx-admin-wrap {
+  color: var(--pdx-text);
+}
+
+body.admin-color-modern .pdx-admin-wrap .pdx-field-hint,
+body.admin-color-modern .pdx-admin-wrap .description,
+body.admin-color-coffee .pdx-admin-wrap .pdx-field-hint,
+body.admin-color-midnight .pdx-admin-wrap .pdx-field-hint {
+  color: var(--pdx-text-hint, var(--pdx-text-muted));
+}
+
+.pdx-admin-wrap .pdx-table,
+.pdx-admin-wrap table.widefat {
+  color: var(--pdx-text);
+}
+
+.pdx-admin-wrap .pdx-table th,
+.pdx-admin-wrap table.widefat th {
+  color: var(--pdx-text-muted);
+}
+
+.pdx-admin-wrap .pdx-table td,
+.pdx-admin-wrap table.widefat td {
+  color: var(--pdx-text);
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.pdx-admin-wrap code,
+.pdx-admin-wrap .pdx-code {
+  color: var(--pdx-text);
+  background: var(--pdx-bg-muted);
+  overflow-wrap: anywhere;
+}
+
+.pdx-admin-wrap .pdx-card--info .pdx-card__body,
+.pdx-admin-wrap .pdx-card--warn .pdx-card__body {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.pdx-admin-wrap .pdx-card--info svg,
+.pdx-admin-wrap .pdx-card--warn svg {
+  width: 18px;
+  height: 18px;
+  max-width: 18px;
+  max-height: 18px;
 }

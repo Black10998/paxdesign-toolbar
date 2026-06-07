@@ -3,7 +3,7 @@
  * Plugin Name:  PaxDesign Utility Dock
  * Plugin URI:   https://paxdesign.io
  * Description:  Enterprise AI/Cyber SaaS dock — SSE real-time, command palette, IOC correlation graph, investigation board, team collaboration, billing enforcement, AI memory, and 84-endpoint REST API.
- * Version:      8.10.1
+ * Version:      8.10.2
  * Update URI:   https://github.com/Black10998/paxdesign-toolbar
  * Author:       PaxDesign
  * Author URI:   https://paxdesign.io
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'PDX_VERSION',   '8.10.1' );
+define( 'PDX_VERSION',   '8.10.2' );
 define( 'PDX_DIR',       plugin_dir_path( __FILE__ ) );
 define( 'PDX_URL',       plugin_dir_url( __FILE__ ) );
 define( 'PDX_SLUG',      'paxdesign-toolbar' );
@@ -216,6 +216,13 @@ function pdx_settings(): PDX_Settings {
  */
 function pdx_container(): PDX_Container {
 	return PDX_Container::instance();
+}
+
+/**
+ * Returns the PDX_Intelligence instance.
+ */
+function pdx_intel(): PDX_Intelligence {
+	return PaxDesign_Toolbar::instance()->intel;
 }
 
 /* ── Admin-post handlers (v4) ────────────────────────────── */

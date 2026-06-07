@@ -51,7 +51,7 @@
   --pdx-border-muted: #292929;
   --pdx-text: #ffffff;
   --pdx-text-muted: #8b8b8b;
-  --pdx-text-subtle: #555555;
+  --pdx-text-subtle: #9a9a9a;
   --pdx-text-placeholder: #f3f6fd;
   --pdx-icon-idle: rgba(255, 255, 255, 0.1);
   --pdx-scrollbar: #888888;
@@ -116,8 +116,8 @@
   --pdx-border: #363636;
   --pdx-text: #ffffff;
   --pdx-text-muted: #8b8b8b;
-  --pdx-text-subtle: #555555;
-  --pdx-text-hint: #7e7e7e;
+  --pdx-text-subtle: #9a9a9a;
+  --pdx-text-hint: #a3a3a3;
   --pdx-sidebar-w: 188px;
   --pdx-control-col: 52px;
   --pdx-space-1: 4px;

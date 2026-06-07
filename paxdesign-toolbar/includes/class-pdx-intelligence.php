@@ -1583,11 +1583,26 @@ class PDX_Intelligence {
 		$code = (int) wp_remote_retrieve_response_code( $resp );
 		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
 
-		if ( 401 === $code || 403 === $code ) {
+		if ( 401 === $code ) {
 			return [
 				'subdomains' => [],
 				'status'     => $this->with_http_log(
-					[ 'state' => 'error', 'message' => 'Shodan DNS authentication failed (HTTP ' . $code . ').' ],
+					[ 'state' => 'error', 'message' => 'Shodan DNS rejected the API key (HTTP 401).' ],
+					$http['log']
+				),
+				'http_code'  => $code,
+			];
+		}
+
+		if ( 403 === $code ) {
+			return [
+				'subdomains' => [],
+				'status'     => $this->with_http_log(
+					[
+						'state'   => 'skipped',
+						'message' => 'Shodan DNS API requires a Membership plan (HTTP 403). Host API access is unchanged; subdomains are still discovered via CT and DNS.',
+						'tier'    => 'membership',
+					],
 					$http['log']
 				),
 				'http_code'  => $code,

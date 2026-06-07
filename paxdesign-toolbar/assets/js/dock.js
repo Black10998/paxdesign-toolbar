@@ -1571,6 +1571,49 @@
       '</div>';
     }
 
+    function feedStatusClass(status) {
+      if (status === 'online') return 'active';
+      if (status === 'degraded') return 'degraded';
+      return 'inactive';
+    }
+
+    function renderThreatFeedsList(data) {
+      if (!data || !data.feeds || !data.feeds.length) {
+        return (
+          '<div class="pdx-section-title">Threat Intelligence Feeds</div>' +
+          '<div class="pdx-info-box">Click <strong>Sync Live Feeds</strong> to probe AlienVault OTX, URLhaus, NVD/CIRCL, DNS, and RDAP from this server. Configure API keys in Admin → API for full coverage.</div>'
+        );
+      }
+
+      var feeds = data.feeds;
+      var summary = data.summary || {};
+      var syncState = (data.status && data.status.state) ? data.status.state : 'ok';
+      var syncedAt = data.synced_at ? new Date(data.synced_at).toLocaleString() : '';
+      var online = summary.online != null ? summary.online : feeds.filter(function (f) { return f.status === 'online'; }).length;
+      var total = summary.total != null ? summary.total : feeds.length;
+      var html = '<div class="pdx-section-title">Threat Intelligence Feeds</div><div class="pdx-feed-list">';
+
+      feeds.forEach(function (f) {
+        var st = feedStatusClass(f.status || 'offline');
+        var desc = f.message || f.url || '';
+        var meta = f.indicators ? String(f.indicators) + ' hit(s)' : (f.status === 'online' ? 'Online' : (f.status === 'degraded' ? 'Degraded' : 'Offline'));
+        html += feedItem(f.name || f.id || 'Feed', desc, st, meta);
+      });
+
+      html += '</div>';
+      html += '<div class="pdx-scan-complete' + (syncState === 'error' ? ' pdx-scan-complete--warn' : '') + '">' +
+        '<div class="pdx-scan-complete-dot"></div><span>' +
+        escHtml(online + '/' + total + ' feeds reachable' + (syncedAt ? ' · synced ' + syncedAt : '')) +
+        '</span></div>';
+
+      if (data.status && data.status.message) {
+        html += '<div class="pdx-field-hint">' + escHtml(data.status.message) + '</div>';
+      }
+
+      html += '<div class="pdx-info-box">Configure API keys in Admin → API Keys to enable authenticated feeds (URLhaus, Shodan) and higher rate limits.</div>';
+      return html;
+    }
+
     /* ══════════════════════════════════════════════════════
        AI PERSONAS
     ══════════════════════════════════════════════════════ */
@@ -3011,22 +3054,6 @@
       });
     }
 
-    function renderThreatFeedsList() {
-      return (
-        '<div class="pdx-section-title">Active Threat Intelligence Feeds</div>' +
-        '<div class="pdx-feed-list">' +
-        feedItem('AlienVault OTX', 'Indicators of compromise — IPs, domains, hashes', 'active', '14.2k pulses') +
-        feedItem('Abuse.ch URLhaus', 'Malicious URLs and malware distribution sites', 'active', 'Live') +
-        feedItem('Emerging Threats', 'Network intrusion signatures and rules', 'active', 'Updated hourly') +
-        feedItem('PhishTank', 'Verified phishing URLs and campaigns', 'active', 'Community verified') +
-        feedItem('CISA KEV', 'Known exploited vulnerabilities catalog', 'active', 'CISA official') +
-        feedItem('Shodan InternetDB', 'Exposed services and open port intelligence', 'active', 'Real-time') +
-        '</div>' +
-        '<div class="pdx-scan-complete pdx-mt-sm"><div class="pdx-scan-complete-dot"></div><span>All configured feeds synchronized</span></div>' +
-        '<div class="pdx-info-box">Configure API keys in Settings → API to enable live feed data and higher rate limits.</div>'
-      );
-    }
-
     /**
      * Build a deep pipeline UI.
      * @param {string} pipelineId  - unique id for the pipeline container
@@ -3518,6 +3545,7 @@
       if (!st) return '';
       var parts = [];
       if (st.message) parts.push(st.message);
+      if (st.http) parts.push('HTTP ' + st.http);
       if (st.http_code) parts.push('HTTP ' + st.http_code);
       if (st.duration_ms) parts.push(st.duration_ms + 'ms');
       if (st.parse_status && st.parse_status !== 'ok' && st.parse_status !== 'n/a') {
@@ -5297,10 +5325,12 @@
           ],
           api: function () {
             return apiFetch('GET', '/threat/feeds').then(function (d) {
-              return d || { ok: true };
+              if (!d) return { ok: false, error: 'Empty response from feed sync.' };
+              return d;
             });
           },
           onSuccess: function (el, data) { el.innerHTML = renderThreatFeedsList(data); },
+          errorMsg: 'Threat feed sync failed.',
         });
       });
     }
@@ -5512,7 +5542,15 @@
       }
 
       if (Object.keys(providers).length) {
+        var shodanHost = providers.shodan || {};
+        var shodanDns  = providers.shodan_dns || {};
+        var hostOk     = shodanHost.state === 'ok' || shodanHost.state === 'partial';
+        var dnsSkipped = shodanDns.state === 'skipped';
+
         html += '<div class="pdx-section"><div class="pdx-section-title">Provider Status</div>';
+        if (hostOk && dnsSkipped) {
+          html += '<div class="pdx-field-hint pdx-provider-partial-note">Shodan Host API is working; only the Shodan DNS subdomain API is unavailable on your plan. Port, service, and vulnerability data below are from Host API; subdomains use CT/DNS sources.</div>';
+        }
         Object.keys(providers).forEach(function(key) {
           var meta = providers[key] || {};
           var st = mapSourceState(meta) || 'err';

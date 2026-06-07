@@ -669,3 +669,64 @@ html:has(#pdx-root) {
     transform: none;
   }
 }
+
+/* ─── SVG responsive scaling ─────────────────────────────── */
+#pdx-panel svg,
+.pdx-admin-wrap svg,
+.pdx-cmd-overlay svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.pdx-risk-ring svg,
+.pdx-icon,
+.pdx-mod-icon,
+.pdx-evidence-icon svg,
+.pdx-cmd-icon svg,
+.pdx-dp-finding-icon svg,
+.pdx-input-reveal svg,
+.pdx-card--info svg,
+.pdx-card--warn svg {
+  max-width: none;
+}
+
+.pdx-ai-chip-loader {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+/* ─── Typography & text layout ─────────────────────────── */
+#pdx-panel,
+.pdx-admin-wrap,
+.pdx-cmd-overlay {
+  line-height: 1.5;
+}
+
+.pdx-source-row,
+.pdx-feed-item,
+.pdx-settings-row,
+.pdx-kv-row {
+  min-width: 0;
+}
+
+.pdx-source-status,
+.pdx-feed-desc,
+.pdx-field-hint,
+.pdx-info-box,
+.pdx-admin-wrap .description,
+.pdx-admin-wrap table td {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.pdx-provider-partial-note {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: var(--pdx-radius-sm);
+  background: var(--pdx-accent-dim);
+  border: 1px solid var(--pdx-accent-border);
+  color: var(--pdx-text-muted);
+  line-height: 1.5;
+}

@@ -1,5 +1,30 @@
 ﻿# Changelog
 
+## 8.10.2 — 2026-06-07
+
+**Reliability, UI scaling, and dark-mode readability**
+
+### Sync Live Feeds — critical error fix
+- Fixed PHP fatal when syncing feeds: `pdx_container()->intel` property access replaced with new `pdx_intel()` helper.
+- REST `/threat/feeds` wrapped in try/catch — returns structured JSON error instead of crashing WordPress.
+- Feed list UI now renders live probe results from the API instead of hardcoded mock feeds.
+
+### Shodan DNS API — tier-aware status
+- HTTP 403 on Shodan DNS API reported as `skipped` (Membership tier required), not authentication failure.
+- HTTP 401 still indicates invalid API key.
+- Attack Surface Provider Status shows partial-success note when Host API works but DNS API is tier-blocked.
+
+### SVG & layout
+- Global responsive SVG scaling with preserved aspect ratio; AI chip loader capped to container.
+- Admin API key reveal buttons sized correctly (18px icons).
+- Improved text wrapping on provider rows, feed items, info boxes, and admin tables.
+
+### Dark mode
+- Raised contrast for subtle/hint text tokens (`--pdx-text-subtle`, `--pdx-text-hint`).
+- WordPress admin dark color schemes inherit readable plugin label and table colors.
+
+**Install:** `releases/paxdesign-toolbar-8.10.2.zip` — tag `v8.10.2`
+
 ## 8.10.1 — 2026-06-07
 
 **Attack Surface — Shodan authentication, subdomain discovery, and provider diagnostics**

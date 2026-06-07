@@ -177,10 +177,10 @@ class PDX_Threat_Feeds {
 	 * @return array{state:string,message?:string}
 	 */
 	private static function probe_cve(): array {
-		if ( ! function_exists( 'pdx_container' ) ) {
+		if ( ! function_exists( 'pdx_intel' ) ) {
 			return [ 'state' => 'partial', 'message' => 'CVE engine not loaded.' ];
 		}
-		$result = pdx_container()->intel->fetch_cve( 'CVE-2021-44228' );
+		$result = pdx_intel()->fetch_cve( 'CVE-2021-44228' );
 		if ( ! empty( $result['cves'] ) ) {
 			return [ 'state' => 'ok', 'message' => 'NVD/CIRCL responded (' . ( $result['source'] ?? 'unknown' ) . ').' ];
 		}
@@ -213,7 +213,7 @@ class PDX_Threat_Feeds {
 	 * @return array{state:string,message?:string}
 	 */
 	private static function probe_rdap( string $target ): array {
-		if ( ! function_exists( 'pdx_container' ) ) {
+		if ( ! function_exists( 'pdx_intel' ) ) {
 			return [ 'state' => 'partial', 'message' => 'RDAP engine not loaded.' ];
 		}
 		$sample = 'example.com';
@@ -226,7 +226,7 @@ class PDX_Threat_Feeds {
 				}
 			}
 		}
-		$out   = pdx_container()->intel->fetch_rdap_resolved( $sample );
+		$out   = pdx_intel()->fetch_rdap_resolved( $sample );
 		$state = $out['status']['state'] ?? 'error';
 		if ( 'ok' === $state ) {
 			return [ 'state' => 'ok', 'message' => 'Registration data retrieved for ' . $sample . '.' ];
