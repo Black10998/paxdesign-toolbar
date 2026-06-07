@@ -489,7 +489,14 @@ body.pdx-no-scroll { overflow: hidden !important; }
   border-bottom: 1px solid rgba(255,255,255,.04);
 }
 .pdx-kv-key { font: 12px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: #6e7681; flex-shrink: 0; text-transform: capitalize; }
-.pdx-kv-val { font: 12px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: #e6edf3; text-align: right; word-break: break-all; }
+.pdx-kv-val {
+  font: 12px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color: #e6edf3;
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 /* ─── Risk display ───────────────────────────────────────── */
 .pdx-risk-header {
@@ -510,6 +517,13 @@ body.pdx-no-scroll { overflow: hidden !important; }
 .pdx-risk-domain { font: 600 13px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: #e6edf3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pdx-risk-scan-id { font: 11px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: #484f58; margin-top: 4px; }
 .pdx-risk-time { font: 11px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: #484f58; margin-top: 2px; }
+.pdx-trust-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-left: auto;
+  justify-content: flex-end;
+}
 
 /* ─── Risk factors ───────────────────────────────────────── */
 .pdx-factors { display: flex; flex-direction: column; gap: 4px; }
@@ -544,6 +558,17 @@ body.pdx-no-scroll { overflow: hidden !important; }
   font: 12px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: var(--pdx-warn);
 }
 .pdx-anomaly svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
+.pdx-anomaly > svg,
+.pdx-anomaly > .pdx-icon {
+  width: 14px !important;
+  height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  min-width: 14px;
+  min-height: 14px;
+  flex: 0 0 14px;
+  margin-top: 1px;
+}
 .pdx-signal {
   padding: 5px 10px; border-radius: 6px;
   font: 12px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
@@ -638,6 +663,19 @@ body.pdx-no-scroll { overflow: hidden !important; }
 
 /* ─── Result container ───────────────────────────────────── */
 .pdx-result { display: flex; flex-direction: column; gap: 12px; }
+.pdx-result .pdx-section-title,
+.pdx-result .pdx-kv-key,
+.pdx-result .pdx-kv-val,
+.pdx-result .pdx-anomaly span,
+.pdx-result .pdx-report-summary-text,
+.pdx-result .pdx-report-recs-list li {
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+}
+.pdx-result .pdx-anomaly span,
+.pdx-result .pdx-kv-val {
+  line-height: 1.45;
+}
 .pdx-result-header {
   display: flex; align-items: center; gap: 8px;
   font: 600 13px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color: #e6edf3;
@@ -1451,6 +1489,10 @@ body.pdx-no-scroll { overflow: hidden !important; }
   .pdx-kv-val  {
     font-size: var(--pdx-t-base);
     line-height: var(--pdx-lh-base);
+  }
+  .pdx-trust-actions {
+    margin-left: 0;
+    justify-content: flex-start;
   }
 
   /* ── Labels & meta text ─────────────────────────────────── */

@@ -153,8 +153,17 @@
     /* ── Module registry + panel theme (must exist before openPanel) ── */
     var PDX_KNOWN_MODULES = [
       'trust', 'osint', 'threat', 'personas', 'builder', 'pipeline', 'automation',
-      'connectors', 'create', 'investigation', 'graph', 'memory', 'team', 'workspace'
+      'connectors', 'create', 'investigation', 'graph', 'memory', 'team', 'workspace', 'billing'
     ];
+
+    var PDX_MODULE_ALIASES = {
+      trustcheck: 'trust',
+      scan: 'trust',
+      workflow: 'builder',
+      workflows: 'builder',
+      agents: 'pipeline',
+      ea: 'personas'
+    };
 
     var MODULE_ACCENTS = {
       trust: '#ffffff', osint: '#f3f6fd', threat: '#888888', personas: '#7e7e7e',
@@ -164,7 +173,8 @@
     };
 
     function normalizeModuleId(moduleId) {
-      var id = (moduleId && String(moduleId)) || '';
+      var id = ((moduleId && String(moduleId)) || '').toLowerCase();
+      if (PDX_MODULE_ALIASES[id]) id = PDX_MODULE_ALIASES[id];
       if (PDX_KNOWN_MODULES.indexOf(id) >= 0) return id;
       if (C.modules && C.modules[id]) return id;
       return 'trust';
@@ -866,7 +876,11 @@
           (unverified ? '<div style="margin-top:6px;font-size:11px;color:var(--pdx-lo)">Not a verified assessment</div>' : (partial ? '<div style="margin-top:6px;font-size:11px;color:var(--pdx-yellow)">Partial assessment</div>' : '')) +
           (data.scan_id ? '<div class="pdx-risk-scan-id" style="margin-top:6px">Scan ID: ' + escHtml(data.scan_id) + '</div>' : '') +
         '</div>' +
-        '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn">Export</button>' +
+        '<div class="pdx-trust-actions">' +
+          '<button class="pdx-btn-ghost pdx-btn-sm pdx-trust-rescan-btn">Re-scan</button>' +
+          '<button class="pdx-btn-ghost pdx-btn-sm pdx-trust-new-target-btn">New Target</button>' +
+          '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn">Export</button>' +
+        '</div>' +
       '</div>';
 
       html += renderCoveragePanel(data, srcStatus);
@@ -1140,6 +1154,23 @@
 
       var expBtn = container.querySelector('.pdx-export-btn');
       if (expBtn) expBtn.addEventListener('click', function() { exportJSON('trust-' + displayTarget.replace(/[^a-z0-9.-]+/gi, '_'), data); });
+      var rescanBtn = container.querySelector('.pdx-trust-rescan-btn');
+      if (rescanBtn) {
+        rescanBtn.addEventListener('click', function() {
+          var input = document.getElementById('pdx-trust-input');
+          if (input) input.value = displayTarget || input.value;
+          runTrustScan();
+        });
+      }
+      var newTargetBtn = container.querySelector('.pdx-trust-new-target-btn');
+      if (newTargetBtn) {
+        newTargetBtn.addEventListener('click', function() {
+          var input = document.getElementById('pdx-trust-input');
+          if (!input) return;
+          input.focus();
+          input.select();
+        });
+      }
     }
 
 

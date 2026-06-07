@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## 8.10.5 — 2026-06-07
+
+**Frontend TrustCheck UI hotfix (SVG/text/layout) + dock module button resilience**
+
+- Fixed oversized TrustCheck warning/action SVG icons in customer-facing result cards by correcting icon sizing scope in `pdx-icons.css`.
+- Removed broad panel-wide SVG scaling (`#pdx-panel svg`) from `pdx-unified-ui.css` to avoid global side effects across frontend dock modules.
+- Hardened TrustCheck result text rendering (`.pdx-kv-val`, anomaly text, summary text) for horizontal readable wrapping (no compressed/vertical-looking output).
+- Added explicit TrustCheck result actions:
+  - **Re-scan** (run scan again for current target)
+  - **New Target** (focus/select input for quick new domain/IP scan)
+- Improved dock module button normalization for legacy labels/aliases (`trustcheck`, `workflow`, `agents`, `ea`) to open the correct module panel reliably.
+
+**Install:** `releases/paxdesign-toolbar-8.10.5.zip` — tag `v8.10.5`
+
 ## 8.10.4 — 2026-06-07
 
 **Admin SVG hotfix (Pricing) + upgrade cache/runtime cleanup**

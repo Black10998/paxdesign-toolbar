@@ -43,9 +43,7 @@
 .pdx-paywall-icon .pdx-icon,
 .pdx-report-summary-icon .pdx-icon,
 .pdx-cmd-icon .pdx-icon,
-.pdx-anomaly .pdx-icon,
-.pdx-dp-finding-icon .pdx-icon,
-.pdx-trace-agent .pdx-icon {
+.pdx-dp-finding-icon .pdx-icon {
   width: 100%;
   height: 100%;
 }
@@ -98,6 +96,23 @@
 .pdx-icon--danger {
   color: var(--pdx-danger, #888888) !important;
   stroke: var(--pdx-danger, #888888) !important;
+}
+
+/* Explicit sizing for inline action icons in flexible rows. */
+.pdx-anomaly .pdx-icon {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  flex: 0 0 14px;
+}
+
+.pdx-trace-agent .pdx-icon {
+  width: 12px;
+  height: 12px;
+  min-width: 12px;
+  min-height: 12px;
+  flex: 0 0 12px;
 }
 
 .pdx-dp-finding--ok .pdx-icon,
