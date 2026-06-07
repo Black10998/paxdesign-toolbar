@@ -126,10 +126,33 @@
         'X-WP-Nonce': cfg.restNonce || ''
       }
     }).then(function (res) {
-      return res.json().then(function (data) {
-        return { res: res, data: data };
+      return res.text().then(function (text) {
+        var data = null;
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (parseErr) {
+            var snippet = text.replace(/\s+/g, ' ').slice(0, 240);
+            throw new Error(
+              ((cfg.i18n && cfg.i18n.auditParseError) || 'Invalid server response.') +
+              ' (HTTP ' + res.status + '): ' + snippet
+            );
+          }
+        }
+        return { res: res, data: data || {}, text: text };
       });
     });
+  }
+
+  function isAuditPayload(data) {
+    return !!(data && Array.isArray(data.providers));
+  }
+
+  function showAuditNotice(errEl, message, type) {
+    if (!errEl) return;
+    errEl.className = 'notice pdx-notice-inline notice-' + (type || 'error');
+    errEl.textContent = message;
+    errEl.hidden = !message;
   }
 
   function restErrorMessage(payload) {
@@ -193,15 +216,43 @@
 
       adminRestGet(endpoint)
         .then(function (payload) {
+          var data = payload.data || {};
+
+          if (isAuditPayload(data)) {
+            if (summaryEl) {
+              summaryEl.innerHTML = renderAuditSummary(data);
+              summaryEl.hidden = false;
+            }
+            if (outEl) {
+              outEl.textContent = JSON.stringify(data, null, 2);
+              outEl.hidden = false;
+            }
+            if (errEl) {
+              if (data.has_provider_errors) {
+                showAuditNotice(
+                  errEl,
+                  data.message || ((cfg.i18n && cfg.i18n.auditPartial) || 'Some providers reported errors.'),
+                  'warning'
+                );
+              } else if (data.fatal_error) {
+                showAuditNotice(errEl, data.message || data.fatal_error, 'error');
+              } else {
+                showAuditNotice(errEl, '', 'warning');
+              }
+            }
+            return;
+          }
+
           if (!payload.res.ok) {
             throw new Error(restErrorMessage(payload));
           }
-          if (summaryEl && payload.data && payload.data.providers) {
-            summaryEl.innerHTML = renderAuditSummary(payload.data);
+
+          if (summaryEl && data.providers) {
+            summaryEl.innerHTML = renderAuditSummary(data);
             summaryEl.hidden = false;
           }
           if (outEl) {
-            outEl.textContent = JSON.stringify(payload.data, null, 2);
+            outEl.textContent = JSON.stringify(data, null, 2);
             outEl.hidden = false;
           }
         })

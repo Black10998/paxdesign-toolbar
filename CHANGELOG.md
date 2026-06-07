@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 8.9.3 — 2026-06-07
+
+**Integration Audit — partial results and resilient provider probes**
+
+- Audit endpoint always returns HTTP 200 with full provider JSON when the runner completes (no more 503 on individual provider errors).
+- Each provider probe wrapped in try/catch — one failure no longer terminates the audit.
+- Admin UI renders provider table even when some probes error; shows warning with server message instead of generic failure.
+- Improved error messages for VirusTotal/Shodan HTTP failures; server-side `error_log` for probe exceptions.
+
+**Install:** `releases/paxdesign-toolbar-8.9.3.zip` — tag `v8.9.3`
+
 ## 8.9.2 — 2026-06-07
 
 **Admin — Live Integration Audit REST authentication**

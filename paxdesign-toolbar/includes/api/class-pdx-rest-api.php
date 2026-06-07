@@ -1608,10 +1608,33 @@ class PDX_REST_API {
 	}
 
 	public function platform_integration_audit(): WP_REST_Response {
-		$audit  = new PDX_Integration_Audit( $this->intel, $this->settings );
-		$result = $audit->run_full();
-		$status = ( $result['summary']['error'] ?? 0 ) > 0 ? 503 : 200;
-		return new WP_REST_Response( $result, $status );
+		try {
+			$audit  = new PDX_Integration_Audit( $this->intel, $this->settings );
+			$result = $audit->run_full();
+			// Always HTTP 200 when the audit runner completes — per-provider status lives in JSON.
+			return new WP_REST_Response( $result, 200 );
+		} catch ( Throwable $e ) {
+			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+				error_log( '[PDX Integration Audit] fatal: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+			return new WP_REST_Response(
+				[
+					'audit_completed'     => false,
+					'has_provider_errors' => true,
+					'fatal_error'         => $e->getMessage(),
+					'message'             => 'Integration audit terminated before all probes could run: ' . $e->getMessage(),
+					'summary'             => [
+						'total'   => 0,
+						'ok'      => 0,
+						'partial' => 0,
+						'error'   => 1,
+						'skipped' => 0,
+					],
+					'providers'           => [],
+				],
+				500
+			);
+		}
 	}
 
 	/* ── Threat Intel: Live feed status ──────────────────── */

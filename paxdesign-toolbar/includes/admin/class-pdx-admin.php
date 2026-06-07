@@ -122,6 +122,8 @@ class PDX_Admin {
 				),
 				'auditNonce'     => __( 'REST session expired. Reload this page and try again.', 'paxdesign-toolbar' ),
 				'auditFailed'    => __( 'Integration audit request failed.', 'paxdesign-toolbar' ),
+				'auditPartial'   => __( 'Audit completed with provider errors — review the table below.', 'paxdesign-toolbar' ),
+				'auditParseError'=> __( 'Server returned an invalid response. Check PHP error logs.', 'paxdesign-toolbar' ),
 			],
 		] );
 	}
