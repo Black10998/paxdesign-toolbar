@@ -54,9 +54,14 @@ class PDX_CachePurge {
 		self::purge_all();
 		update_option( self::VERSION_OPT, PDX_VERSION, false );
 
-		// Also delete any cached asset URLs WordPress may have stored.
+		// Also delete runtime/config caches so updated CSS/JS and settings are
+		// immediately reflected without manual DB/cache cleanup.
 		delete_transient( 'pdx_asset_urls' );
 		wp_cache_delete( 'pdx_asset_urls' );
+		delete_transient( 'pdx_js_config' );
+		wp_cache_delete( 'pdx_js_config' );
+		delete_transient( 'pdx_purge_results' );
+		update_option( 'pdx_config_version', (int) get_option( 'pdx_config_version', 0 ) + 1, false );
 	}
 
 	/* ── Master purge ───────────────────────────────────── */

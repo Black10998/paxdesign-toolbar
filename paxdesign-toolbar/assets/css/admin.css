@@ -809,6 +809,40 @@ table.widefat td {
   line-height: 1.5;
 }
 
+/* ─── Pricing table icon sizing (scoped) ───────────────── */
+.pdx-pricing-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pdx-pricing-tool__icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pdx-text-muted);
+}
+
+.pdx-pricing-tool__icon svg,
+.pdx-pricing-tool__icon .pdx-icon,
+.pdx-pricing-tool__icon .pdx-mod-icon {
+  width: 16px;
+  height: 16px;
+  max-width: 16px;
+  max-height: 16px;
+  display: block;
+  stroke: currentColor;
+}
+
+.pdx-pricing-tool__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* ─── Role picker (compact chips, not cards) ──────────────── */
 .pdx-role-grid {
   display: flex;

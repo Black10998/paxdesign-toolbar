@@ -672,7 +672,6 @@ html:has(#pdx-root) {
 
 /* ─── SVG responsive scaling ─────────────────────────────── */
 #pdx-panel svg,
-.pdx-admin-wrap svg,
 .pdx-cmd-overlay svg {
   max-width: 100%;
   height: auto;

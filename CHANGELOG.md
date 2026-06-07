@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## 8.10.4 — 2026-06-07
+
+**Admin SVG hotfix (Pricing) + upgrade cache/runtime cleanup**
+
+- Fixed oversized SVG icons in `wp-admin/admin.php?page=paxdesign-toolbar-pricing`.
+- Removed broad admin-wide SVG scaling from `pdx-unified-ui.css` (`.pdx-admin-wrap svg`) to prevent cross-page icon blowups.
+- Added scoped Pricing icon sizing (`.pdx-pricing-tool__icon`) so module icons render at stable dimensions.
+- Kept SVG/CSS behavior scoped to intended UI areas instead of global admin selectors.
+- Strengthened automatic upgrade cleanup (`PDX_CachePurge::maybe_purge_on_update`) to clear stale runtime/config caches:
+  - `pdx_asset_urls`
+  - `pdx_js_config`
+  - `pdx_purge_results`
+  - increment `pdx_config_version` to force fresh config/assets consumers
+
+**Install:** `releases/paxdesign-toolbar-8.10.4.zip` — tag `v8.10.4`
+
 ## 8.10.3 — 2026-06-07
 
 **Final release packaging on latest `main` after full stabilization pass**
