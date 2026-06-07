@@ -1557,7 +1557,7 @@
       return '<div class="pdx-tab-pane">' +
         '<div class="pdx-input-row"><input id="pdx-surface-input" class="pdx-input" placeholder="domain.com or IP range" /><button id="pdx-surface-btn" class="pdx-btn-primary">Map Surface</button></div>' +
         '<div id="pdx-surface-result"></div>' +
-        '<div class="pdx-info-box">Maps exposed services, open ports, subdomains, and technology fingerprints using Shodan and DNS enumeration. Requires Shodan API key.</div>' +
+        '<div class="pdx-info-box">Maps exposed services, open ports, subdomains, and technology fingerprints using Shodan (host + DNS APIs) and independent DNS/CT enumeration. Shodan API key required for port and service data; DNS and subdomain discovery run without Shodan.</div>' +
       '</div>';
     }
 
@@ -5492,10 +5492,49 @@
       var subdomains = data.subdomains || [];
       var services   = data.services   || [];
       var techs      = data.technologies || data.tech || [];
-      var vulns      = data.vulnerabilities || [];
+      var vulns      = data.vulnerabilities || data.vulns || [];
+      var dns        = data.dns || [];
+      var providers  = data.provider_status || {};
+      var warnings   = data.warnings || [];
+      var hasData    = ports.length || subdomains.length || services.length || vulns.length || dns.length || techs.length;
+      var scanWarn   = data.scan_complete === false || warnings.length > 0;
       var html = '<div class="pdx-result">';
 
-      html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div><span>Attack surface mapped — ' + escHtml(domain) + '</span></div>';
+      html += '<div class="pdx-scan-complete' + (scanWarn ? ' pdx-scan-complete--warn' : '') + '">' +
+        '<div class="pdx-scan-complete-dot"></div><span>' +
+        escHtml(data.summary || (scanWarn ? 'Attack surface scan completed with gaps — ' + domain : 'Attack surface mapped — ' + domain)) +
+        '</span></div>';
+
+      if (warnings.length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title pdx-section-title--warn">Provider Warnings</div>';
+        warnings.forEach(function(w) { html += '<div class="pdx-anomaly">' + svgIcon('alert') + '<span>' + escHtml(w) + '</span></div>'; });
+        html += '</div>';
+      }
+
+      if (Object.keys(providers).length) {
+        html += '<div class="pdx-section"><div class="pdx-section-title">Provider Status</div>';
+        Object.keys(providers).forEach(function(key) {
+          var meta = providers[key] || {};
+          var st = mapSourceState(meta) || 'err';
+          var note = formatSourceStatusNote(meta) || (meta.state || 'unknown');
+          if (meta.http) note += ' · HTTP ' + meta.http;
+          if (meta.resolved_ip) note += ' · IP ' + meta.resolved_ip;
+          if (meta.key_loaded === false) note += ' · key not loaded';
+          html += '<div class="pdx-source-row"><div class="pdx-source-dot" style="background:' + sourceDotColor(st) + '"></div>' +
+            '<span class="pdx-source-name">' + escHtml(key.replace(/_/g, ' ')) + '</span>' +
+            '<span class="pdx-source-status pdx-source-status--' + st + '">' + escHtml(note) + '</span></div>';
+        });
+        if (data.api_keys && data.api_keys.shodan === false) {
+          html += '<div class="pdx-field-hint" style="margin-top:8px">Shodan API key not loaded — configure in Admin → API Keys.</div>';
+        } else if (data.resolved_ip) {
+          html += '<div class="pdx-field-hint" style="margin-top:8px">Resolved IP: ' + escHtml(data.resolved_ip) + '</div>';
+        }
+        html += '</div>';
+      }
+
+      if (!hasData && !scanWarn) {
+        html += '<div class="pdx-empty">No attack surface data returned. Check provider status above for authentication or connectivity errors.</div>';
+      }
 
       /* Metric grid */
       html += '<div class="pdx-metric-grid">' +
@@ -5510,9 +5549,19 @@
         html += '<div class="pdx-evidence-section"><button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">Open Ports (' + ports.length + ') <span class="pdx-evidence-toggle-arrow">▼</span></button><div class="pdx-evidence-body"><div class="pdx-kv-grid">';
         ports.slice(0, 20).forEach(function(p) {
           var port = typeof p === 'object' ? (p.port || p.number || safeStr(p)) : safeStr(p);
-          var svc  = typeof p === 'object' ? (p.service || p.name || '') : '';
-          var banner = typeof p === 'object' ? (p.banner || '') : '';
+          var svcEntry = services.find(function(s) { return String(s.port) === String(port); });
+          var svc  = svcEntry ? (svcEntry.service || '') : '';
+          var banner = svcEntry ? (svcEntry.banner || '') : '';
           html += kvRow('Port ' + port, (svc ? svc : '') + (banner ? ' — ' + banner.slice(0,60) : ''));
+        });
+        html += '</div></div></div>';
+      }
+
+      /* DNS records */
+      if (dns.length) {
+        html += '<div class="pdx-evidence-section"><button class="pdx-evidence-toggle" onclick="this.closest(\'.pdx-evidence-section\').classList.toggle(\'is-open\')">DNS Records (' + dns.length + ') <span class="pdx-evidence-toggle-arrow">▼</span></button><div class="pdx-evidence-body"><div class="pdx-kv-grid">';
+        dns.slice(0, 20).forEach(function(r) {
+          html += kvRow(r.type || 'Record', r.value || '');
         });
         html += '</div></div></div>';
       }

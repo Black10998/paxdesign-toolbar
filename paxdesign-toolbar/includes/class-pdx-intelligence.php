@@ -246,16 +246,16 @@ class PDX_Intelligence {
 			if ( in_array( $target_type, [ 'ip', 'domain', 'url', 'email' ], true ) ) {
 				$shodan_key = (string) $this->settings->get( 'api_keys.shodan', '' );
 				$shodan_ip  = $resolved_ip ?: ( 'ip' === $target_type ? $target : null );
-				$shodan     = $shodan_ip ? $this->fetch_shodan( $shodan_ip ) : null;
-				if ( $shodan ) {
-					$report['sources']['shodan']       = $shodan;
-					$report['source_status']['shodan'] = [ 'state' => 'ok', 'message' => 'Host data retrieved' ];
+				if ( $shodan_ip ) {
+					$shodan_out = $this->fetch_shodan_with_status( $shodan_ip );
+					if ( ! empty( $shodan_out['data'] ) ) {
+						$report['sources']['shodan']       = $shodan_out['data'];
+						$report['source_status']['shodan'] = $shodan_out['status'];
+					} else {
+						$report['source_status']['shodan'] = $shodan_out['status'];
+					}
 				} else {
-					$report['source_status']['shodan'] = $this->paid_api_status(
-						'Shodan',
-						$this->last_paid_api_response,
-						'' !== $shodan_key
-					);
+					$report['source_status']['shodan'] = $this->skipped_status( 'Could not resolve target to an IP for Shodan lookup.' );
 				}
 			} else {
 				$report['source_status']['shodan'] = $this->skipped_status( 'Shodan enrichment does not apply to this target type.' );
@@ -1426,39 +1426,331 @@ class PDX_Intelligence {
 
 	/* ── Shodan ─────────────────────────────────────────── */
 
-	public function fetch_shodan( string $target ): ?array {
-		$key = $this->settings->get( 'api_keys.shodan', '' );
-		if ( ! $key ) {
+	/**
+	 * @return array{data:?array,status:array<string,mixed>,resolved_ip:?string,http_code:int}
+	 */
+	public function fetch_shodan_with_status( string $target ): array {
+		$key = trim( (string) $this->settings->get( 'api_keys.shodan', '' ) );
+		if ( '' === $key ) {
 			$this->last_paid_api_response = null;
-			return null;
+			return [
+				'data'        => null,
+				'status'      => $this->skipped_status( 'Shodan API key not configured in Admin → API Keys.' ),
+				'resolved_ip' => null,
+				'http_code'   => 0,
+			];
 		}
 
-		$resp = wp_remote_get(
-			'https://api.shodan.io/shodan/host/' . rawurlencode( $target ) . '?key=' . rawurlencode( $key ),
-			[ 'timeout' => 10 ]
-		);
+		$resolved_ip = filter_var( $target, FILTER_VALIDATE_IP )
+			? $target
+			: $this->resolve_host_ip( $target );
+
+		if ( ! $resolved_ip ) {
+			return [
+				'data'        => null,
+				'status'      => [ 'state' => 'error', 'message' => 'Could not resolve ' . $target . ' to an IP address for Shodan lookup.' ],
+				'resolved_ip' => null,
+				'http_code'   => 0,
+			];
+		}
+
+		$url  = 'https://api.shodan.io/shodan/host/' . rawurlencode( $resolved_ip ) . '?key=' . rawurlencode( $key );
+		$http = PDX_Http::get( $url, [ 'timeout' => 15 ], 'shodan_host' );
+		$resp = $http['response'];
 		$this->last_paid_api_response = $resp;
-		if ( is_wp_error( $resp ) || wp_remote_retrieve_response_code( $resp ) !== 200 ) {
-			return null;
+
+		if ( is_wp_error( $resp ) ) {
+			return [
+				'data'        => null,
+				'status'      => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'Shodan request failed: ' . $resp->get_error_message() ],
+					$http['log']
+				),
+				'resolved_ip' => $resolved_ip,
+				'http_code'   => 0,
+			];
 		}
 
-		$data = json_decode( wp_remote_retrieve_body( $resp ), true );
-		if ( empty( $data ) || isset( $data['error'] ) ) return null;
+		$code = (int) wp_remote_retrieve_response_code( $resp );
+		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
 
-		$ports = array_unique( $data['ports'] ?? [] );
-		sort( $ports );
+		if ( 401 === $code || 403 === $code ) {
+			return [
+				'data'        => null,
+				'status'      => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'Shodan authentication failed (HTTP ' . $code . ') — verify API key.' ],
+					$http['log']
+				),
+				'resolved_ip' => $resolved_ip,
+				'http_code'   => $code,
+			];
+		}
+
+		if ( 429 === $code ) {
+			return [
+				'data'        => null,
+				'status'      => $this->with_http_log(
+					[ 'state' => 'partial', 'message' => 'Shodan rate limit reached (HTTP 429) — retry later.' ],
+					$http['log']
+				),
+				'resolved_ip' => $resolved_ip,
+				'http_code'   => $code,
+			];
+		}
+
+		if ( 404 === $code ) {
+			return [
+				'data'        => null,
+				'status'      => $this->with_http_log(
+					[
+						'state'   => 'partial',
+						'message' => 'Shodan has no scan data for ' . $resolved_ip . ' (HTTP 404) — host may not be indexed yet.',
+					],
+					$http['log']
+				),
+				'resolved_ip' => $resolved_ip,
+				'http_code'   => $code,
+			];
+		}
+
+		if ( 200 !== $code || ! is_array( $body ) || ! empty( $body['error'] ) ) {
+			$api_err = is_array( $body ) ? (string) ( $body['error'] ?? '' ) : '';
+			return [
+				'data'        => null,
+				'status'      => $this->with_http_log(
+					[
+						'state'   => 'error',
+						'message' => $api_err ? 'Shodan error: ' . $api_err : 'Shodan HTTP ' . $code . ' — unexpected response.',
+					],
+					$http['log']
+				),
+				'resolved_ip' => $resolved_ip,
+				'http_code'   => $code,
+			];
+		}
+
+		$data = $this->parse_shodan_host( $body, $resolved_ip );
 
 		return [
-			'label'    => 'Shodan',
-			'ip'       => $data['ip_str']  ?? null,
-			'org'      => $data['org']     ?? null,
-			'isp'      => $data['isp']     ?? null,
-			'country'  => $data['country_name'] ?? null,
-			'ports'    => $ports,
-			'vulns'    => array_keys( $data['vulns'] ?? [] ),
-			'hostnames'=> $data['hostnames'] ?? [],
-			'os'       => $data['os']      ?? null,
-			'last_update' => $data['last_update'] ?? null,
+			'data'        => $data,
+			'status'      => $this->with_http_log(
+				[
+					'state'   => 'ok',
+					'message' => 'Shodan host data for ' . $resolved_ip . ' (HTTP 200).',
+				],
+				$http['log']
+			),
+			'resolved_ip' => $resolved_ip,
+			'http_code'   => $code,
+		];
+	}
+
+	public function fetch_shodan( string $target ): ?array {
+		$result = $this->fetch_shodan_with_status( $target );
+		return $result['data'] ?? null;
+	}
+
+	/**
+	 * Shodan DNS API — subdomain discovery for a domain.
+	 *
+	 * @return array{subdomains:list<string>,status:array<string,mixed>,http_code:int}
+	 */
+	public function fetch_shodan_dns_subdomains( string $domain ): array {
+		$key = trim( (string) $this->settings->get( 'api_keys.shodan', '' ) );
+		if ( '' === $key ) {
+			return [
+				'subdomains' => [],
+				'status'     => $this->skipped_status( 'Shodan API key not configured.' ),
+				'http_code'  => 0,
+			];
+		}
+
+		$url  = 'https://api.shodan.io/dns/domain/' . rawurlencode( $domain ) . '?key=' . rawurlencode( $key );
+		$http = PDX_Http::get( $url, [ 'timeout' => 12 ], 'shodan_dns' );
+		$resp = $http['response'];
+
+		if ( is_wp_error( $resp ) ) {
+			return [
+				'subdomains' => [],
+				'status'     => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'Shodan DNS request failed: ' . $resp->get_error_message() ],
+					$http['log']
+				),
+				'http_code'  => 0,
+			];
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $resp );
+		$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+
+		if ( 401 === $code || 403 === $code ) {
+			return [
+				'subdomains' => [],
+				'status'     => $this->with_http_log(
+					[ 'state' => 'error', 'message' => 'Shodan DNS authentication failed (HTTP ' . $code . ').' ],
+					$http['log']
+				),
+				'http_code'  => $code,
+			];
+		}
+
+		if ( 200 !== $code || ! is_array( $body ) ) {
+			return [
+				'subdomains' => [],
+				'status'     => $this->with_http_log(
+					[ 'state' => 'partial', 'message' => 'Shodan DNS returned HTTP ' . $code . '.' ],
+					$http['log']
+				),
+				'http_code'  => $code,
+			];
+		}
+
+		$subs = [];
+		foreach ( (array) ( $body['subdomains'] ?? [] ) as $sub ) {
+			$sub = strtolower( trim( (string) $sub ) );
+			if ( '' !== $sub ) {
+				$subs[] = $sub . '.' . $domain;
+			}
+		}
+		foreach ( (array) ( $body['data'] ?? [] ) as $row ) {
+			if ( is_array( $row ) && ! empty( $row['subdomain'] ) ) {
+				$subs[] = strtolower( (string) $row['subdomain'] ) . '.' . $domain;
+			}
+		}
+		$subs = array_values( array_unique( $subs ) );
+
+		return [
+			'subdomains' => $subs,
+			'status'     => $this->with_http_log(
+				[
+					'state'   => 'ok',
+					'message' => count( $subs ) . ' subdomain(s) from Shodan DNS (HTTP 200).',
+				],
+				$http['log']
+			),
+			'http_code'  => $code,
+		];
+	}
+
+	/**
+	 * Certificate Transparency + common-prefix DNS checks (no API key).
+	 *
+	 * @return array{subdomains:list<array{subdomain:string,ip:?string,source:string}>,status:array<string,mixed>}
+	 */
+	public function enumerate_subdomains( string $domain ): array {
+		$found   = [];
+		$sources = [];
+
+		// crt.sh Certificate Transparency.
+		$crt_url  = 'https://crt.sh/?q=' . rawurlencode( '%.' . $domain ) . '&output=json';
+		$crt_http = PDX_Http::get( $crt_url, [ 'timeout' => 15 ], 'surface_crtsh' );
+		$crt_resp = $crt_http['response'];
+		if ( ! is_wp_error( $crt_resp ) && 200 === (int) wp_remote_retrieve_response_code( $crt_resp ) ) {
+			$crt_data = json_decode( wp_remote_retrieve_body( $crt_resp ), true );
+			if ( is_array( $crt_data ) ) {
+				foreach ( $crt_data as $row ) {
+					if ( ! is_array( $row ) ) {
+						continue;
+					}
+					$names = preg_split( '/\s*,\s*/', (string) ( $row['name_value'] ?? '' ) ) ?: [];
+					foreach ( $names as $name ) {
+						$name = strtolower( trim( $name ) );
+						if ( str_starts_with( $name, '*.' ) ) {
+							$name = substr( $name, 2 );
+						}
+						if ( $name && ( $name === $domain || str_ends_with( $name, '.' . $domain ) ) ) {
+							$found[ $name ] = [ 'subdomain' => $name, 'ip' => null, 'source' => 'crt.sh' ];
+						}
+					}
+				}
+				if ( ! empty( $found ) ) {
+					$sources[] = 'crt.sh';
+				}
+			}
+		}
+
+		// Common prefix DNS resolution.
+		$prefixes = [ 'www', 'mail', 'ftp', 'admin', 'api', 'dev', 'staging', 'test', 'shop', 'portal', 'vpn', 'webmail', 'blog', 'app', 'cdn', 'static', 'support', 'status', 'demo', 'secure', 'login', 'mx', 'ns', 'autodiscover', 'cpanel' ];
+		foreach ( $prefixes as $prefix ) {
+			$host = $prefix . '.' . $domain;
+			if ( isset( $found[ $host ] ) ) {
+				continue;
+			}
+			$ip = $this->resolve_host_ip( $host );
+			if ( $ip ) {
+				$found[ $host ] = [ 'subdomain' => $host, 'ip' => $ip, 'source' => 'dns' ];
+				$sources[]      = 'dns-prefix';
+			}
+		}
+
+		$subdomains = array_values( $found );
+		$status     = [
+			'state'   => ! empty( $subdomains ) ? 'ok' : 'partial',
+			'message' => ! empty( $subdomains )
+				? count( $subdomains ) . ' subdomain(s) via ' . implode( ', ', array_unique( $sources ) ) . '.'
+				: 'No subdomains discovered via CT logs or common-prefix DNS.',
+		];
+
+		return [
+			'subdomains' => $subdomains,
+			'status'     => $status,
+		];
+	}
+
+	/**
+	 * @param array<string, mixed> $body
+	 * @return array<string, mixed>
+	 */
+	private function parse_shodan_host( array $body, string $resolved_ip ): array {
+		$ports = array_values( array_unique( array_map( 'intval', $body['ports'] ?? [] ) ) );
+		sort( $ports );
+
+		$services     = [];
+		$technologies = [];
+		foreach ( (array) ( $body['data'] ?? [] ) as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+			$port    = (int) ( $item['port'] ?? 0 );
+			$product = (string) ( $item['product'] ?? '' );
+			$banner  = (string) ( $item['data'] ?? $item['banner'] ?? '' );
+			$service = [
+				'port'      => $port,
+				'service'   => $product ?: $this->port_label( $port ),
+				'transport' => (string) ( $item['transport'] ?? 'tcp' ),
+				'banner'    => substr( $banner, 0, 200 ),
+			];
+			$services[] = $service;
+			if ( $product ) {
+				$technologies[ strtolower( $product ) ] = [ 'name' => $product, 'port' => $port ];
+			}
+			if ( ! empty( $item['http']['server'] ) ) {
+				$server = (string) $item['http']['server'];
+				$technologies[ strtolower( $server ) ] = [ 'name' => $server, 'port' => $port, 'type' => 'http-server' ];
+			}
+		}
+
+		if ( empty( $services ) ) {
+			foreach ( $ports as $port ) {
+				$services[] = [ 'port' => $port, 'service' => $this->port_label( $port ), 'transport' => 'tcp', 'banner' => '' ];
+			}
+		}
+
+		$vulns = array_values( array_unique( array_map( 'strval', array_keys( (array) ( $body['vulns'] ?? [] ) ) ) ) );
+
+		return [
+			'label'        => 'Shodan',
+			'ip'           => $body['ip_str'] ?? $resolved_ip,
+			'org'          => $body['org'] ?? null,
+			'isp'          => $body['isp'] ?? null,
+			'country'      => $body['country_name'] ?? null,
+			'ports'        => $ports,
+			'vulns'        => $vulns,
+			'hostnames'    => $body['hostnames'] ?? [],
+			'os'           => $body['os'] ?? null,
+			'last_update'  => $body['last_update'] ?? null,
+			'services'     => $services,
+			'technologies' => array_values( $technologies ),
 		];
 	}
 
@@ -2414,107 +2706,213 @@ class PDX_Intelligence {
 		$resolved = PDX_Target::resolve( trim( $raw_target ) );
 		if ( is_wp_error( $resolved ) ) {
 			return [
-				'target'     => $raw_target,
-				'target_raw' => $raw_target,
-				'ports'      => [],
-				'vulns'      => [],
-				'dns'        => [],
-				'score'      => 0,
-				'summary'    => $resolved->get_error_message(),
-				'source'     => [],
-				'error'      => $resolved->get_error_message(),
+				'target'          => $raw_target,
+				'target_raw'      => $raw_target,
+				'ports'           => [],
+				'vulns'           => [],
+				'vulnerabilities' => [],
+				'dns'             => [],
+				'subdomains'      => [],
+				'services'        => [],
+				'technologies'    => [],
+				'score'           => 0,
+				'summary'         => $resolved->get_error_message(),
+				'source'          => [],
+				'provider_status' => [],
+				'error'           => $resolved->get_error_message(),
+				'scan_complete'   => false,
 			];
 		}
 
-		$target = PDX_Target::api_host( $resolved );
+		$domain = PDX_Target::api_host( $resolved );
+		$type   = (string) ( $resolved['type'] ?? 'domain' );
+		$key    = trim( (string) $this->settings->get( 'api_keys.shodan', '' ) );
+
 		$result = [
-			'target'     => $target,
-			'target_raw' => $resolved['raw'],
-			'ports'    => [],
-			'services' => [],
-			'vulns'    => [],
-			'dns'      => [],
-			'os'       => null,
-			'org'      => null,
-			'country'  => null,
-			'score'    => 0,
-			'summary'  => '',
-			'source'   => [],
+			'target'          => $domain,
+			'target_raw'      => $resolved['raw'],
+			'target_type'     => $type,
+			'resolved_ip'     => null,
+			'ports'           => [],
+			'services'        => [],
+			'vulns'           => [],
+			'vulnerabilities' => [],
+			'subdomains'      => [],
+			'technologies'    => [],
+			'dns'             => [],
+			'os'              => null,
+			'org'             => null,
+			'country'         => null,
+			'score'           => 0,
+			'summary'         => '',
+			'source'          => [],
+			'provider_status' => [],
+			'api_keys'        => [ 'shodan' => '' !== $key ],
+			'scan_complete'   => true,
 		];
 
-		// ── Shodan host data ──────────────────────────────
-		try {
-			$shodan = $this->fetch_shodan( $target );
-			if ( is_array( $shodan ) ) {
-				$result['ports']    = is_array( $shodan['ports'] ?? null )  ? $shodan['ports']  : [];
-				$result['vulns']    = is_array( $shodan['vulns'] ?? null )  ? $shodan['vulns']  : [];
-				$result['os']       = $shodan['os']      ?? null;
-				$result['org']      = $shodan['org']     ?? null;
-				$result['country']  = $shodan['country'] ?? null;
-				$result['source'][] = 'Shodan';
-				foreach ( $result['ports'] as $port ) {
-					if ( is_numeric( $port ) ) {
-						$result['services'][] = [ 'port' => (int) $port, 'service' => $this->port_label( (int) $port ) ];
+		// ── DNS (independent of Shodan) ─────────────────
+		if ( in_array( $type, [ 'domain', 'url', 'email' ], true ) ) {
+			$dns_out = $this->fetch_dns( $domain );
+			$result['provider_status']['dns'] = $dns_out['status'];
+			if ( ! empty( $dns_out['data'] ) ) {
+				$dns_data = $dns_out['data'];
+				foreach ( [ 'A' => 'a', 'AAAA' => 'aaaa', 'MX' => 'mx', 'TXT' => 'txt', 'NS' => 'ns', 'CAA' => 'caa' ] as $label => $key_name ) {
+					foreach ( (array) ( $dns_data[ $key_name ] ?? [] ) as $val ) {
+						$result['dns'][] = [ 'type' => $label, 'value' => (string) $val ];
 					}
 				}
+				if ( ! empty( $dns_data['spf'] ) ) {
+					$result['dns'][] = [ 'type' => 'SPF', 'value' => (string) $dns_data['spf'] ];
+				}
+				if ( ! empty( $dns_data['dmarc'] ) ) {
+					$result['dns'][] = [ 'type' => 'DMARC', 'value' => (string) $dns_data['dmarc'] ];
+				}
+				$result['source'][] = 'DNS';
+				$result['resolved_ip'] = $dns_data['a'][0] ?? $this->resolve_host_ip( $domain );
 			}
-		} catch ( Throwable $e ) {
-			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
-				error_log( '[PDX] fetch_attack_surface Shodan block exception: ' . $e->getMessage() );
+		} elseif ( 'ip' === $type ) {
+			$result['resolved_ip'] = $domain;
+		}
+
+		// ── Subdomain discovery ─────────────────────────
+		if ( in_array( $type, [ 'domain', 'url', 'email' ], true ) ) {
+			$enum = $this->enumerate_subdomains( $domain );
+			$result['provider_status']['subdomains_ct'] = $enum['status'];
+			$merged_subs = $enum['subdomains'];
+
+			if ( '' !== $key ) {
+				$shodan_dns = $this->fetch_shodan_dns_subdomains( $domain );
+				$result['provider_status']['shodan_dns'] = [
+					'state'   => $shodan_dns['status']['state'] ?? 'error',
+					'message' => (string) ( $shodan_dns['status']['message'] ?? '' ),
+					'http'    => $shodan_dns['http_code'] ?? 0,
+				];
+				foreach ( $shodan_dns['subdomains'] as $sub ) {
+					$merged_subs[] = [ 'subdomain' => $sub, 'ip' => null, 'source' => 'shodan-dns' ];
+				}
+				if ( ! empty( $shodan_dns['subdomains'] ) ) {
+					$result['source'][] = 'Shodan DNS';
+				}
+			}
+
+			$by_name = [];
+			foreach ( $merged_subs as $row ) {
+				$name = is_array( $row ) ? (string) ( $row['subdomain'] ?? '' ) : (string) $row;
+				if ( $name && ! isset( $by_name[ $name ] ) ) {
+					$by_name[ $name ] = is_array( $row ) ? $row : [ 'subdomain' => $name, 'ip' => null, 'source' => 'merged' ];
+				}
+			}
+			$result['subdomains'] = array_values( $by_name );
+			if ( ! empty( $result['subdomains'] ) && ! in_array( 'Subdomain enum', $result['source'], true ) ) {
+				$result['source'][] = 'Subdomain enum';
 			}
 		}
 
-		// ── DNS records via Google DoH ────────────────────
-		try {
-			$dns_types   = [ 'A', 'MX', 'TXT', 'NS', 'AAAA' ];
-			$dns_records = [];
-			foreach ( $dns_types as $type ) {
-				$dns_http = PDX_Http::get(
-					'https://dns.google/resolve?name=' . rawurlencode( $target ) . '&type=' . $type,
-					[ 'timeout' => 8, 'headers' => [ 'Accept' => 'application/dns-json' ] ],
-					'surface_dns'
-				);
-				$dns_resp = $dns_http['response'];
-				if ( ! is_wp_error( $dns_resp ) && (int) wp_remote_retrieve_response_code( $dns_resp ) === 200 ) {
-					$dns_data = json_decode( wp_remote_retrieve_body( $dns_resp ), true );
-					if ( is_array( $dns_data['Answer'] ?? null ) ) {
-						foreach ( $dns_data['Answer'] as $rec ) {
-							if ( is_array( $rec ) ) {
-								$dns_records[] = [ 'type' => $type, 'value' => (string) ( $rec['data'] ?? '' ) ];
-							}
-						}
-					}
-					$result['source'][] = 'DNS';
-				}
-			}
-			$result['dns']    = $dns_records;
-			$result['source'] = array_values( array_unique( $result['source'] ) );
-		} catch ( Throwable $e ) {
-			if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
-				error_log( '[PDX] fetch_attack_surface DNS block exception: ' . $e->getMessage() );
-			}
+		// ── Shodan host scan (requires IP + API key) ──────
+		$shodan_target = $result['resolved_ip'] ?: $domain;
+		$shodan_out    = $this->fetch_shodan_with_status( $shodan_target );
+		$result['provider_status']['shodan'] = array_merge(
+			$shodan_out['status'],
+			[
+				'http'        => $shodan_out['http_code'] ?? 0,
+				'resolved_ip' => $shodan_out['resolved_ip'] ?? null,
+				'key_loaded'  => '' !== $key,
+			]
+		);
+		if ( ! empty( $shodan_out['resolved_ip'] ) ) {
+			$result['resolved_ip'] = $shodan_out['resolved_ip'];
 		}
+
+		if ( ! empty( $shodan_out['data'] ) ) {
+			$shodan = $shodan_out['data'];
+			$result['ports']           = $shodan['ports'] ?? [];
+			$result['vulns']           = $shodan['vulns'] ?? [];
+			$result['vulnerabilities'] = array_map(
+				static fn( $id ) => [ 'id' => $id, 'cve' => $id, 'severity' => 'medium', 'source' => 'Shodan' ],
+				$result['vulns']
+			);
+			$result['services']        = $shodan['services'] ?? [];
+			$result['technologies']    = $shodan['technologies'] ?? [];
+			$result['os']              = $shodan['os'] ?? null;
+			$result['org']             = $shodan['org'] ?? null;
+			$result['country']         = $shodan['country'] ?? null;
+			$result['source'][]        = 'Shodan';
+		}
+
+		$result['source'] = array_values( array_unique( $result['source'] ) );
 
 		// ── Risk score ────────────────────────────────────
 		$port_count = count( $result['ports'] );
 		$vuln_count = count( $result['vulns'] );
 		$score      = 0;
-		if ( $port_count > 20 )     $score += 30;
-		elseif ( $port_count > 10 ) $score += 20;
-		elseif ( $port_count > 5 )  $score += 10;
+		if ( $port_count > 20 ) {
+			$score += 30;
+		} elseif ( $port_count > 10 ) {
+			$score += 20;
+		} elseif ( $port_count > 5 ) {
+			$score += 10;
+		}
 		$score += min( 50, $vuln_count * 10 );
 		$risky = array_intersect( $result['ports'], [ 21, 23, 445, 3389, 5900, 6379, 27017 ] );
 		$score += count( $risky ) * 5;
 		$result['score'] = min( 100, $score );
 
-		// ── Plain-language summary ────────────────────────
-		$parts = [];
-		if ( $port_count )   $parts[] = "{$port_count} open port" . ( $port_count !== 1 ? 's' : '' );
-		if ( $vuln_count )   $parts[] = "{$vuln_count} known CVE" . ( $vuln_count !== 1 ? 's' : '' );
-		if ( $result['os'] ) $parts[] = 'OS: ' . $result['os'];
-		$result['summary'] = $parts
-			? 'Attack surface analysis complete. Found: ' . implode( ', ', $parts ) . '.'
-			: 'No significant attack surface data found for this target.';
+		// ── Summary & warnings ──────────────────────────
+		$parts    = [];
+		$warnings = [];
+
+		if ( $port_count ) {
+			$parts[] = "{$port_count} open port" . ( 1 !== $port_count ? 's' : '' );
+		}
+		if ( $vuln_count ) {
+			$parts[] = "{$vuln_count} known CVE" . ( 1 !== $vuln_count ? 's' : '' );
+		}
+		if ( count( $result['subdomains'] ) ) {
+			$parts[] = count( $result['subdomains'] ) . ' subdomain(s)';
+		}
+		if ( $result['os'] ) {
+			$parts[] = 'OS: ' . $result['os'];
+		}
+
+		foreach ( $result['provider_status'] as $provider => $meta ) {
+			if ( ! is_array( $meta ) ) {
+				continue;
+			}
+			if ( 'error' === ( $meta['state'] ?? '' ) ) {
+				$warnings[] = ucfirst( str_replace( '_', ' ', $provider ) ) . ': ' . ( $meta['message'] ?? 'failed' );
+			}
+		}
+
+		if ( ! empty( $warnings ) ) {
+			$result['warnings'] = $warnings;
+		}
+
+		if ( '' === $key ) {
+			$result['summary'] = 'Shodan API key not configured — DNS and subdomain enumeration ran, but port/service data requires a key in Admin → API Keys.';
+			$result['scan_complete'] = ! empty( $result['dns'] ) || ! empty( $result['subdomains'] );
+		} elseif ( $parts ) {
+			$result['summary'] = 'Attack surface analysis complete. Found: ' . implode( ', ', $parts ) . '.';
+		} elseif ( ! empty( $warnings ) ) {
+			$result['summary'] = 'Scan completed with provider errors: ' . implode( '; ', $warnings );
+			$result['scan_complete'] = false;
+		} else {
+			$result['summary'] = 'No Shodan scan data for this target yet. DNS/subdomain enumeration may still have returned records below.';
+		}
+
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log(
+				'[PDX] attack_surface ' . $domain
+				. ' shodan_key=' . ( '' !== $key ? 'yes' : 'no' )
+				. ' ip=' . ( $result['resolved_ip'] ?? 'none' )
+				. ' ports=' . $port_count
+				. ' subs=' . count( $result['subdomains'] )
+				. ' providers=' . wp_json_encode( array_map(
+					static fn( $m ) => is_array( $m ) ? ( $m['state'] ?? '?' ) . '@' . ( $m['http'] ?? '' ) : '?',
+					$result['provider_status']
+				) )
+			);
+		}
 
 		return $result;
 	}

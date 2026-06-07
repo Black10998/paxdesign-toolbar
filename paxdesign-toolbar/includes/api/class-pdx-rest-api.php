@@ -1760,7 +1760,7 @@ class PDX_REST_API {
 		}
 		$target = $norm['host'];
 
-		$cache_key = 'surface_' . md5( strtolower( $target ) );
+		$cache_key = 'surface_v2_' . md5( strtolower( $target ) );
 		try {
 			$cached = PDX_Cache::get( $cache_key );
 			if ( is_array( $cached ) && ! empty( $cached ) ) {

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-06-07T10:20:06.767Z",
+  "timestamp": "2026-06-07T11:41:34.737Z",
   "engine": "live-integration-audit",
   "version": "8.9.1",
   "environment": "cloud-agent",
@@ -24,8 +24,8 @@
   },
   "summary": {
     "total": 17,
-    "ok": 10,
-    "partial": 1,
+    "ok": 11,
+    "partial": 0,
     "error": 0,
     "skipped": 6
   },
@@ -47,35 +47,35 @@
       "provider": "RDAP domain",
       "status": "ok",
       "message": "Handle 2336799_DOMAIN_COM-VRSN",
-      "latency_ms": 165,
+      "latency_ms": 187,
       "handle": "2336799_DOMAIN_COM-VRSN"
     },
     {
       "provider": "RDAP IP network",
       "status": "ok",
       "message": "GOGL",
-      "latency_ms": 228,
+      "latency_ms": 75,
       "name": "GOGL"
     },
     {
       "provider": "Reverse DNS",
       "status": "ok",
       "message": "dns.google",
-      "latency_ms": 1,
+      "latency_ms": 2,
       "ptr": "dns.google"
     },
     {
       "provider": "DNS (DoH)",
       "status": "ok",
       "message": "2 A record(s)",
-      "latency_ms": 27,
+      "latency_ms": 29,
       "a_records": 2
     },
     {
       "provider": "GeoIP (ip-api.com)",
       "status": "ok",
       "message": "Resolved United States",
-      "latency_ms": 18,
+      "latency_ms": 19,
       "country": "United States",
       "asn": "AS15169 Google LLC"
     },
@@ -83,7 +83,7 @@
       "provider": "OTX",
       "status": "ok",
       "message": "Pulse count 50",
-      "latency_ms": 1860,
+      "latency_ms": 3111,
       "pulses": 50
     },
     {
@@ -94,10 +94,11 @@
     },
     {
       "provider": "SSL Labs",
-      "status": "partial",
-      "message": "SSL Labs status: ERROR",
-      "latency_ms": 120,
-      "grade": null
+      "status": "ok",
+      "message": "Grade pending (audit sample host: mozilla.org)",
+      "latency_ms": 249,
+      "grade": null,
+      "sample_host": "mozilla.org"
     },
     {
       "provider": "VirusTotal",
@@ -121,7 +122,7 @@
       "provider": "NVD / CIRCL CVE",
       "status": "ok",
       "message": "CVE sample retrieved via NVD",
-      "latency_ms": 579,
+      "latency_ms": 238,
       "total": 1,
       "source": "NVD"
     },
@@ -135,7 +136,7 @@
       "provider": "URL forensics",
       "status": "ok",
       "message": "HTTP 404 after redirects",
-      "latency_ms": 30,
+      "latency_ms": 35,
       "final_url": "https://example.com/login",
       "http": 404
     },

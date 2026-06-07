@@ -434,16 +434,18 @@ class PDX_Integration_Audit {
 			$this->record( 'Shodan', 'skipped', 'API key not configured.', $started );
 			return;
 		}
-		$ref    = new ReflectionClass( $this->intel );
-		$method = $ref->getMethod( 'fetch_shodan' );
-		$method->setAccessible( true );
-		$data   = $method->invoke( $this->intel, '8.8.8.8' );
+		$out   = $this->intel->fetch_shodan_with_status( '8.8.8.8' );
+		$state = $out['status']['state'] ?? 'error';
 		$this->record(
 			'Shodan',
-			$data ? 'ok' : 'error',
-			$data ? 'Host data retrieved.' : $this->paid_api_error_message( 'Shodan request failed.' ),
+			in_array( $state, [ 'ok', 'partial' ], true ) ? $state : 'error',
+			(string) ( $out['status']['message'] ?? 'No message' ) . ' (HTTP ' . ( $out['http_code'] ?? 0 ) . ')',
 			$started,
-			[ 'ports' => count( (array) ( $data['ports'] ?? [] ) ) ]
+			[
+				'resolved_ip' => $out['resolved_ip'] ?? null,
+				'http'        => $out['http_code'] ?? 0,
+				'ports'       => count( (array) ( $out['data']['ports'] ?? [] ) ),
+			]
 		);
 	}
 

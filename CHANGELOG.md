@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## 8.10.1 — 2026-06-07
+
+**Attack Surface — Shodan authentication, subdomain discovery, and provider diagnostics**
+
+- Shodan host lookups now resolve domains to IP first (API requires IP, not hostname).
+- New `fetch_shodan_with_status()` surfaces HTTP codes, auth failures, rate limits, and 404 (not indexed).
+- Shodan DNS API + Certificate Transparency + common-prefix DNS for subdomain discovery.
+- Attack surface returns `provider_status`, `vulnerabilities`, `subdomains`, `technologies`, and `warnings`.
+- UI shows Provider Status panel with HTTP codes; no more silent zero-result "success".
+- DNS enumeration runs independently via existing `fetch_dns()` pipeline.
+
+**Install:** `releases/paxdesign-toolbar-8.10.1.zip` — tag `v8.10.1`
+
 ## 8.10.0 — 2026-06-07
 
 **Intelligence reliability — verified vs partial vs incomplete assessments**
