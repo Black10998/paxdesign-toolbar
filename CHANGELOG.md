@@ -1,5 +1,30 @@
 ﻿# Changelog
 
+## 8.8.0 — 2026-06-06
+
+**Phase 2 platform audit — security, permissions, and API correctness**
+
+### REST security (IDOR + auth)
+- Workspace get/update now require ownership (`PDX_Workspace::user_can_access`).
+- Queue job status now requires job ownership (`PDX_Queue::user_can_access`).
+- Team members, cases, and case notes require login + team RBAC (`PDX_Team::user_can`).
+- Worker callback requires worker ID + token authentication (same as heartbeat).
+- Worker list and global queue stats restricted to administrators.
+- SSE job channels require job ownership; activity audit stream restricted to administrators.
+- PayPal capture validates order initiator (logged-in user or guest session binding).
+
+### Abuse prevention
+- New `PDX_Security` helper: actor identity, resource ownership, SSRF-safe outbound URL validation.
+- Connector test endpoint blocks private/internal URL targets.
+- `quota_check()` wired to scans, AI chat, builder, pipeline, automation, threat intel, connectors.
+- Usage tracking metric fixed: `scans_per_day` (was `scan`).
+
+### API correctness
+- Threat CVE/surface/feeds return HTTP 503 when upstream intelligence fails (not HTTP 200 with hidden errors).
+- UI surfaces CVE/surface/feed failures instead of empty success states.
+
+**Install:** `releases/paxdesign-toolbar-8.8.0.zip` — tag `v8.8.0`
+
 ## 8.7.5 — 2026-06-06
 
 **Platform audit — accuracy, UI honesty, and security hardening**

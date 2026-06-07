@@ -188,6 +188,11 @@ class PDX_Queue {
 		return $row;
 	}
 
+	public static function user_can_access( string $job_id ): bool {
+		$job = self::get( $job_id );
+		return $job ? PDX_Security::actor_owns_row( $job ) : false;
+	}
+
 	/**
 	 * Get jobs for the current user/session.
 	 */

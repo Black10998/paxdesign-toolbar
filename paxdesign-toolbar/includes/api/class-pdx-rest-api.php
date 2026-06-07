@@ -105,6 +105,71 @@ class PDX_REST_API {
 		return null;
 	}
 
+	private function require_logged_in(): ?WP_REST_Response {
+		if ( ! is_user_logged_in() ) {
+			return new WP_REST_Response( [ 'error' => 'Authentication required.' ], 401 );
+		}
+		return null;
+	}
+
+	private function require_actor(): ?WP_REST_Response {
+		if ( ! PDX_Security::require_actor() ) {
+			return new WP_REST_Response( [ 'error' => 'Session required. Reload the page and try again.' ], 401 );
+		}
+		return null;
+	}
+
+	private function deny_unless( bool $allowed, string $message = 'Access denied.' ): ?WP_REST_Response {
+		if ( ! $allowed ) {
+			return new WP_REST_Response( [ 'error' => $message ], 403 );
+		}
+		return null;
+	}
+
+	private function track_usage( string $metric, string $module = '' ): void {
+		if ( is_user_logged_in() ) {
+			PDX_Billing::record_usage( get_current_user_id(), $metric, 1, $module );
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $payload
+	 */
+	private function upstream_error_status( array $payload ): int {
+		$source = $payload['source'] ?? null;
+		if ( 'error' === $source ) {
+			return 503;
+		}
+		if ( is_array( $source ) && empty( $source ) && ! empty( $payload['error'] ) ) {
+			return 503;
+		}
+		return 200;
+	}
+
+	private function bind_guest_order( string $order_id ): void {
+		if ( is_user_logged_in() ) {
+			return;
+		}
+		$guest = sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
+		if ( ! $guest ) {
+			$guest = wp_generate_password( 32, false );
+			setcookie( 'pdx_guest', $guest, time() + YEAR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN, is_ssl(), true );
+		}
+		set_transient( 'pdx_order_owner_' . $order_id, $guest, DAY_IN_SECONDS );
+	}
+
+	private function guest_owns_order( string $order_id ): bool {
+		if ( is_user_logged_in() ) {
+			return true;
+		}
+		$guest = sanitize_text_field( $_COOKIE['pdx_guest'] ?? '' );
+		$owner = get_transient( 'pdx_order_owner_' . $order_id );
+		if ( ! $owner ) {
+			return false;
+		}
+		return hash_equals( (string) $owner, $guest );
+	}
+
 	public function register_routes(): void {
 		$ns  = 'pdx/v1';
 		$pub = '__return_true';
@@ -143,7 +208,7 @@ class PDX_REST_API {
 		// Queue
 		register_rest_route( $ns, '/queue/jobs',  [ 'methods' => 'GET', 'callback' => [ $this, 'queue_jobs'  ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/queue/job',   [ 'methods' => 'GET', 'callback' => [ $this, 'job_status'  ], 'permission_callback' => $pub, 'args' => [ 'job_id' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
-		register_rest_route( $ns, '/queue/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'queue_stats_endpoint' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/queue/stats', [ 'methods' => 'GET', 'callback' => [ $this, 'queue_stats_endpoint' ], 'permission_callback' => $adm ] );
 
 		// Workspaces
 		register_rest_route( $ns, '/workspace',                          [ [ 'methods' => 'GET',   'callback' => [ $this, 'workspace_list'   ], 'permission_callback' => $pub ], [ 'methods' => 'POST', 'callback' => [ $this, 'workspace_create' ], 'permission_callback' => $pub ] ] );
@@ -190,11 +255,11 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/worker/register',  [ 'methods' => 'POST', 'callback' => [ $this, 'worker_register'  ], 'permission_callback' => $adm ] );
 		register_rest_route( $ns, '/worker/heartbeat', [ 'methods' => 'POST', 'callback' => [ $this, 'worker_heartbeat' ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/worker/callback',  [ 'methods' => 'POST', 'callback' => [ $this, 'worker_callback'  ], 'permission_callback' => $pub ] );
-		register_rest_route( $ns, '/worker/list',      [ 'methods' => 'GET',  'callback' => [ $this, 'worker_list'      ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/worker/list',      [ 'methods' => 'GET',  'callback' => [ $this, 'worker_list'      ], 'permission_callback' => $adm ] );
 		register_rest_route( $ns, '/worker/profiles',  [ 'methods' => 'GET',  'callback' => [ $this, 'worker_profiles'  ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/worker/(?P<worker_id>[a-z0-9\-]+)', [ 'methods' => 'DELETE', 'callback' => [ $this, 'worker_delete' ], 'permission_callback' => $adm ] );
-		// Alias: dock.js calls /workers (plural)
-		register_rest_route( $ns, '/workers', [ 'methods' => 'GET', 'callback' => [ $this, 'worker_list' ], 'permission_callback' => $pub ] );
+		// Alias: dock.js calls /workers (plural) — admin only.
+		register_rest_route( $ns, '/workers', [ 'methods' => 'GET', 'callback' => [ $this, 'worker_list' ], 'permission_callback' => $adm ] );
 
 		// AI Memory
 		register_rest_route( $ns, '/memory/store',   [ 'methods' => 'POST', 'callback' => [ $this, 'memory_store'   ], 'permission_callback' => $pub ] );
@@ -244,6 +309,16 @@ class PDX_REST_API {
 	/* ── Trust check ─────────────────────────────────────── */
 
 	public function trust_check( WP_REST_Request $req ): WP_REST_Response {
+		$rl = $this->rate_limit_check( 'trust_scan' );
+		if ( $rl ) {
+			return $rl;
+		}
+
+		$quota = $this->quota_check( 'scans_per_day' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		$raw    = (string) $req->get_param( 'domain' );
 		$norm   = $this->resolve_target_param( $raw, 'domain' );
 		if ( $norm instanceof WP_REST_Response ) {
@@ -272,6 +347,8 @@ class PDX_REST_API {
 		// Webhook
 		PDX_Webhook::dispatch( 'scan.completed', [ 'module' => 'trust', 'domain' => $domain, 'risk' => $report['risk'] ] );
 
+		$this->track_usage( 'scans_per_day', 'trust' );
+
 		return new WP_REST_Response( $report, 200 );
 	}
 
@@ -290,6 +367,11 @@ class PDX_REST_API {
 		$denied = $this->check_module_access( $module_id );
 		if ( $denied ) {
 			return $denied;
+		}
+
+		$quota = $this->quota_check( 'ai_messages_per_day' );
+		if ( $quota ) {
+			return $quota;
 		}
 
 		$thread_id = sanitize_text_field( $req->get_param( 'thread_id' ) ?? '' );
@@ -323,6 +405,8 @@ class PDX_REST_API {
 		);
 
 		PDX_Audit::log( $module_id, 'ai_chat', [ 'persona' => $persona, 'thread_id' => $thread_id ] );
+
+		$this->track_usage( 'ai_messages_per_day', $module_id );
 
 		$payload = [
 			'reply'       => $result['content'],
@@ -367,6 +451,16 @@ class PDX_REST_API {
 	/* ── OSINT scan ──────────────────────────────────────── */
 
 	public function osint_scan( WP_REST_Request $req ): WP_REST_Response {
+		$rl = $this->rate_limit_check( 'osint_scan' );
+		if ( $rl ) {
+			return $rl;
+		}
+
+		$quota = $this->quota_check( 'scans_per_day' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		$raw       = sanitize_text_field( $req->get_param( 'target' ) ?? '' );
 		$norm      = $this->resolve_target_param( $raw, 'target' );
 		if ( $norm instanceof WP_REST_Response ) {
@@ -389,6 +483,7 @@ class PDX_REST_API {
 				'locked_sources' => [ 'geolocation', 'virustotal', 'shodan', 'hunter', 'behavioral' ],
 			];
 			PDX_Audit::log( $module_id, 'preview_scan', [ 'target' => $target ] );
+			$this->track_usage( 'scans_per_day', $module_id );
 			return new WP_REST_Response( $report, 200 );
 		}
 
@@ -403,6 +498,8 @@ class PDX_REST_API {
 
 		PDX_Audit::log( $module_id, 'full_scan_completed', [ 'target' => $target, 'score' => $report['risk']['score'] ] );
 		PDX_Webhook::dispatch( 'scan.completed', [ 'module' => $module_id, 'target' => $target, 'risk' => $report['risk'] ] );
+
+		$this->track_usage( 'scans_per_day', $module_id );
 
 		return new WP_REST_Response( $report, 200 );
 	}
@@ -453,6 +550,7 @@ class PDX_REST_API {
 		if ( is_wp_error( $order ) ) return new WP_REST_Response( [ 'error' => $order->get_error_message() ], 502 );
 
 		PDX_Access::create_pending( $module_id, $order['id'], (float) $mod['price'], $mod['currency'] );
+		$this->bind_guest_order( (string) $order['id'] );
 
 		$approve_url = '';
 		foreach ( $order['links'] ?? [] as $link ) {
@@ -480,6 +578,14 @@ class PDX_REST_API {
 		}
 		if ( ( $pending['module_id'] ?? '' ) !== $module_id ) {
 			return new WP_REST_Response( [ 'error' => 'Module does not match the pending order.' ], 400 );
+		}
+
+		$user_id = is_user_logged_in() ? get_current_user_id() : 0;
+		if ( $user_id && (int) ( $pending['user_id'] ?? 0 ) !== $user_id ) {
+			return new WP_REST_Response( [ 'error' => 'This order belongs to another account.' ], 403 );
+		}
+		if ( ! $user_id && ! $this->guest_owns_order( (string) $order_id ) ) {
+			return new WP_REST_Response( [ 'error' => 'This payment session does not match the order initiator.' ], 403 );
 		}
 
 		$capture = $this->commerce->capture_order( $order_id );
@@ -585,6 +691,12 @@ class PDX_REST_API {
 		if ( ! PDX_Access::has_access( $module_id ) && ( $mod['tier'] ?? 'paid' ) !== 'free' ) {
 			return new WP_REST_Response( [ 'error' => 'payment_required', 'module_id' => $module_id, 'price' => $mod['price'], 'currency' => $mod['currency'] ], 402 );
 		}
+
+		$quota = $this->quota_check( 'automation_tasks' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		$raw_url = trim( (string) ( $req->get_param( 'url' ) ?? '' ) );
 		$task    = sanitize_textarea_field( $req->get_param( 'task' ) ?? '' );
 		if ( ! $raw_url || ! $task ) {
@@ -621,6 +733,8 @@ class PDX_REST_API {
 		PDX_Webhook::dispatch( 'job.completed', [ 'module' => $module_id, 'job_id' => $job_id ] );
 		$ws_id = PDX_Workspace::create( $module_id, 'automation', 'Automation: ' . parse_url( $url, PHP_URL_HOST ), $result );
 
+		$this->track_usage( 'automation_tasks', $module_id );
+
 		$job = PDX_Queue::get( $job_id );
 
 		return new WP_REST_Response(
@@ -652,11 +766,28 @@ class PDX_REST_API {
 		$endpoint = esc_url_raw( $req->get_param( 'endpoint' ) ?? '' );
 		$auth     = sanitize_text_field( $req->get_param( 'auth_token' ) ?? '' );
 		if ( ! $type || ! $endpoint ) return new WP_REST_Response( [ 'error' => 'Connector type and endpoint required.' ], 400 );
+
+		$url_err = PDX_Security::validate_outbound_url( $endpoint );
+		if ( $url_err ) {
+			return new WP_REST_Response( [ 'ok' => false, 'error' => $url_err, 'type' => $type ], 400 );
+		}
+
+		$rl = $this->rate_limit_check( 'connector_test' );
+		if ( $rl ) {
+			return $rl;
+		}
+
+		$quota = $this->quota_check( 'api_calls_per_min' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		$start  = microtime( true );
 		$result = $this->test_connector( $type, $endpoint, $auth );
 		$result['latency_ms'] = round( ( microtime( true ) - $start ) * 1000 );
 		PDX_Audit::log( $module_id, 'connector_tested', [ 'type' => $type, 'endpoint' => $endpoint, 'ok' => $result['ok'] ] );
 		PDX_Webhook::dispatch( 'connector.test', [ 'type' => $type, 'ok' => $result['ok'] ] );
+		$this->track_usage( 'api_calls_per_min', $module_id );
 		return new WP_REST_Response( $result, 200 );
 	}
 
@@ -705,6 +836,11 @@ class PDX_REST_API {
 			return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
 		}
 
+		$quota = $this->quota_check( 'builder_runs' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		$flow_name = sanitize_text_field( $req->get_param( 'flow_name' ) ?? 'Untitled Flow' );
 		$steps     = (array) ( $req->get_param( 'steps' ) ?? [] );
 		$input     = sanitize_textarea_field( $req->get_param( 'input' ) ?? '' );
@@ -720,6 +856,8 @@ class PDX_REST_API {
 		PDX_Audit::log( $module_id, 'flow_executed', [ 'flow_name' => $flow_name, 'steps' => count( $steps ), 'job_id' => $job_id ] );
 		PDX_Webhook::dispatch( 'builder.deploy', [ 'flow_name' => $flow_name, 'job_id' => $job_id ] );
 		$ws_id = PDX_Workspace::create( $module_id, 'builder', $flow_name, [ 'steps' => $steps, 'result' => $result ] );
+
+		$this->track_usage( 'builder_runs', $module_id );
 
 		return new WP_REST_Response(
 			[
@@ -786,6 +924,11 @@ class PDX_REST_API {
 			return new WP_REST_Response( [ 'error' => 'OpenAI API key not configured.' ], 503 );
 		}
 
+		$quota = $this->quota_check( 'pipeline_runs' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		$pipeline_name = sanitize_text_field( $req->get_param( 'pipeline_name' ) ?? 'Untitled Pipeline' );
 		$agents        = (array) ( $req->get_param( 'agents' ) ?? [] );
 		$objective     = sanitize_textarea_field( $req->get_param( 'objective' ) ?? '' );
@@ -801,6 +944,8 @@ class PDX_REST_API {
 		PDX_Audit::log( $module_id, 'pipeline_executed', [ 'pipeline_name' => $pipeline_name, 'agents' => count( $agents ), 'job_id' => $job_id ] );
 		PDX_Webhook::dispatch( 'pipeline.run', [ 'pipeline_name' => $pipeline_name, 'job_id' => $job_id ] );
 		$ws_id = PDX_Workspace::create( $module_id, 'pipeline', $pipeline_name, [ 'agents' => $agents, 'result' => $result ] );
+
+		$this->track_usage( 'pipeline_runs', $module_id );
 
 		return new WP_REST_Response(
 			[
@@ -861,6 +1006,12 @@ class PDX_REST_API {
 	public function job_status( WP_REST_Request $req ): WP_REST_Response {
 		$job_id = sanitize_text_field( $req->get_param( 'job_id' ) ?? '' );
 		if ( ! $job_id ) return new WP_REST_Response( [ 'error' => 'job_id required.' ], 400 );
+
+		$denied = $this->deny_unless( PDX_Queue::user_can_access( $job_id ) );
+		if ( $denied ) {
+			return $denied;
+		}
+
 		$job = PDX_Queue::get( $job_id );
 		if ( ! $job ) return new WP_REST_Response( [ 'error' => 'Job not found.' ], 404 );
 		return new WP_REST_Response( $job, 200 );
@@ -877,6 +1028,16 @@ class PDX_REST_API {
 	}
 
 	public function workspace_create( WP_REST_Request $req ): WP_REST_Response {
+		$actor = $this->require_actor();
+		if ( $actor ) {
+			return $actor;
+		}
+
+		$quota = $this->quota_check( 'workspaces' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		$module  = sanitize_key( $req->get_param( 'module' ) ?? '' );
 		$type    = sanitize_key( $req->get_param( 'type' ) ?? 'general' );
 		$title   = sanitize_text_field( $req->get_param( 'title' ) ?? 'Untitled' );
@@ -891,6 +1052,10 @@ class PDX_REST_API {
 
 	public function workspace_get( WP_REST_Request $req ): WP_REST_Response {
 		$ws_id = sanitize_text_field( $req->get_param( 'ws_id' ) ?? '' );
+		$denied = $this->deny_unless( PDX_Workspace::user_can_access( $ws_id ) );
+		if ( $denied ) {
+			return $denied;
+		}
 		$ws    = PDX_Workspace::get( $ws_id );
 		if ( ! $ws ) return new WP_REST_Response( [ 'error' => 'Workspace not found.' ], 404 );
 		return new WP_REST_Response( $ws, 200 );
@@ -898,6 +1063,10 @@ class PDX_REST_API {
 
 	public function workspace_update( WP_REST_Request $req ): WP_REST_Response {
 		$ws_id  = sanitize_text_field( $req->get_param( 'ws_id' ) ?? '' );
+		$denied = $this->deny_unless( PDX_Workspace::user_can_access( $ws_id ) );
+		if ( $denied ) {
+			return $denied;
+		}
 		$fields = $req->get_json_params() ?? [];
 		if ( ! $ws_id ) return new WP_REST_Response( [ 'error' => 'ws_id required.' ], 400 );
 		$ok = PDX_Workspace::update( $ws_id, $fields );
@@ -1020,6 +1189,17 @@ class PDX_REST_API {
 	public function intel_correlate( WP_REST_Request $req ): WP_REST_Response {
 		$rl = $this->rate_limit_check( 'intel' );
 		if ( $rl ) return $rl;
+
+		$denied = $this->check_module_access( 'threat' );
+		if ( $denied ) {
+			return $denied;
+		}
+
+		$quota = $this->quota_check( 'scans_per_day' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		// Support both GET query params and POST JSON body
 		$body  = $req->get_json_params() ?: [];
 		$raw   = sanitize_text_field( $req->get_param( 'value' ) ?? $body['value'] ?? '' );
@@ -1034,10 +1214,16 @@ class PDX_REST_API {
 		$api_key = $this->settings->get( 'api_keys.openai', '' );
 		if ( $api_key ) $data['ai_summary'] = PDX_Correlation::ai_summary( $value, $data, $api_key );
 		PDX_Audit::log( 'intel', 'correlation_run', [ 'value' => $value, 'type' => $type ] );
+		$this->track_usage( 'scans_per_day', 'intel' );
 		return new WP_REST_Response( $data, 200 );
 	}
 
 	public function intel_timeline( WP_REST_Request $req ): WP_REST_Response {
+		$denied = $this->check_module_access( 'threat' );
+		if ( $denied ) {
+			return $denied;
+		}
+
 		$raw  = sanitize_text_field( $req->get_param( 'target' ) ?? '' );
 		$days = min( 365, (int) ( $req->get_param( 'days' ) ?? 90 ) );
 		$norm = $this->resolve_target_param( $raw, 'target' );
@@ -1055,10 +1241,18 @@ class PDX_REST_API {
 	}
 
 	public function intel_clusters(): WP_REST_Response {
+		$denied = $this->check_module_access( 'threat' );
+		if ( $denied ) {
+			return $denied;
+		}
 		return new WP_REST_Response( [ 'clusters' => PDX_Correlation::cluster_threats() ], 200 );
 	}
 
 	public function intel_search( WP_REST_Request $req ): WP_REST_Response {
+		$denied = $this->check_module_access( 'threat' );
+		if ( $denied ) {
+			return $denied;
+		}
 		$q = sanitize_text_field( $req->get_param( 'q' ) ?? '' );
 		if ( strlen( $q ) < 2 ) return new WP_REST_Response( [ 'results' => [] ], 200 );
 		return new WP_REST_Response( [ 'results' => PDX_Correlation::search( $q ) ], 200 );
@@ -1088,10 +1282,18 @@ class PDX_REST_API {
 	}
 
 	public function worker_callback( WP_REST_Request $req ): WP_REST_Response {
+		$worker_id = sanitize_text_field( $req->get_param( 'worker_id' ) ?? '' );
+		$token     = sanitize_text_field( $req->get_param( 'token' ) ?? '' );
+		if ( ! PDX_Worker::authenticate( $worker_id, $token ) ) {
+			return new WP_REST_Response( [ 'error' => 'Unauthorized worker.' ], 401 );
+		}
+
 		$job_id  = sanitize_text_field( $req->get_param( 'job_id' ) ?? '' );
 		$success = (bool) $req->get_param( 'success' );
 		$result  = (array) ( $req->get_param( 'result' ) ?? [] );
 		if ( ! $job_id ) return new WP_REST_Response( [ 'error' => 'job_id required.' ], 400 );
+
+		$result['worker_id'] = $worker_id;
 		PDX_Worker::receive_callback( $job_id, $result, $success );
 		return new WP_REST_Response( [ 'ok' => true ], 200 );
 	}
@@ -1158,28 +1360,59 @@ class PDX_REST_API {
 	}
 
 	public function team_members( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_logged_in();
+		if ( $auth ) {
+			return $auth;
+		}
 		$team_id = sanitize_text_field( $req->get_param( 'team_id' ) ?? '' );
+		$actor   = get_current_user_id();
+		$denied  = $this->deny_unless( PDX_Team::user_can( $team_id, $actor, 'view_all' ) );
+		if ( $denied ) {
+			return $denied;
+		}
 		return new WP_REST_Response( [ 'members' => PDX_Team::get_members( $team_id ) ], 200 );
 	}
 
 	public function team_add_member( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_logged_in();
+		if ( $auth ) {
+			return $auth;
+		}
 		$team_id = sanitize_text_field( $req->get_param( 'team_id' ) ?? '' );
 		$user_id = (int) $req->get_param( 'user_id' );
 		$role    = sanitize_key( $req->get_param( 'role' ) ?? 'viewer' );
-		$actor   = is_user_logged_in() ? get_current_user_id() : 0;
+		$actor   = get_current_user_id();
 		if ( ! PDX_Team::user_can( $team_id, $actor, 'invite_members' ) ) return new WP_REST_Response( [ 'error' => 'Insufficient permissions.' ], 403 );
 		$ok = PDX_Team::add_member( $team_id, $user_id, $role, $actor );
 		return new WP_REST_Response( [ 'ok' => $ok ], $ok ? 200 : 400 );
 	}
 
 	public function team_cases( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_logged_in();
+		if ( $auth ) {
+			return $auth;
+		}
 		$team_id = sanitize_text_field( $req->get_param( 'team_id' ) ?? '' );
+		$actor   = get_current_user_id();
+		$denied  = $this->deny_unless( PDX_Team::user_can( $team_id, $actor, 'view_all' ) );
+		if ( $denied ) {
+			return $denied;
+		}
 		$status  = sanitize_key( $req->get_param( 'status' ) ?? '' );
 		return new WP_REST_Response( [ 'cases' => PDX_Team::get_cases( $team_id, $status ) ], 200 );
 	}
 
 	public function team_create_case( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_logged_in();
+		if ( $auth ) {
+			return $auth;
+		}
 		$team_id = sanitize_text_field( $req->get_param( 'team_id' ) ?? '' );
+		$actor   = get_current_user_id();
+		$denied  = $this->deny_unless( PDX_Team::user_can( $team_id, $actor, 'create_case' ) );
+		if ( $denied ) {
+			return $denied;
+		}
 		$title   = sanitize_text_field( $req->get_param( 'title' ) ?? '' );
 		$desc    = sanitize_textarea_field( $req->get_param( 'description' ) ?? '' );
 		$prio    = sanitize_key( $req->get_param( 'priority' ) ?? 'medium' );
@@ -1190,12 +1423,30 @@ class PDX_REST_API {
 	}
 
 	public function case_notes( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_logged_in();
+		if ( $auth ) {
+			return $auth;
+		}
 		$case_id = sanitize_text_field( $req->get_param( 'case_id' ) ?? '' );
+		$actor   = get_current_user_id();
+		$denied  = $this->deny_unless( PDX_Team::user_can_access_case( $case_id, $actor ) );
+		if ( $denied ) {
+			return $denied;
+		}
 		return new WP_REST_Response( [ 'notes' => PDX_Team::get_notes( $case_id ) ], 200 );
 	}
 
 	public function case_add_note( WP_REST_Request $req ): WP_REST_Response {
+		$auth = $this->require_logged_in();
+		if ( $auth ) {
+			return $auth;
+		}
 		$case_id = sanitize_text_field( $req->get_param( 'case_id' ) ?? '' );
+		$actor   = get_current_user_id();
+		$denied  = $this->deny_unless( PDX_Team::user_can_access_case( $case_id, $actor ) );
+		if ( $denied ) {
+			return $denied;
+		}
 		$content = sanitize_textarea_field( $req->get_param( 'content' ) ?? '' );
 		$type    = sanitize_key( $req->get_param( 'type' ) ?? 'comment' );
 		if ( ! $content ) return new WP_REST_Response( [ 'error' => 'content required.' ], 400 );
@@ -1295,13 +1546,33 @@ class PDX_REST_API {
 	/* ── Threat Intel: Live feed status ──────────────────── */
 
 	public function threat_feeds( WP_REST_Request $req ): WP_REST_Response {
+		$denied = $this->check_module_access( 'threat' );
+		if ( $denied ) {
+			return $denied;
+		}
+
 		$domain = sanitize_text_field( $req->get_param( 'domain' ) ?? '' );
-		return new WP_REST_Response( PDX_Threat_Feeds::aggregate( $domain ), 200 );
+		$data   = PDX_Threat_Feeds::aggregate( $domain );
+		$status = 200;
+		if ( 'error' === ( $data['status']['state'] ?? '' ) ) {
+			$status = 503;
+		}
+		return new WP_REST_Response( $data, $status );
 	}
 
 	/* ── Threat Intel: CVE Lookup ────────────────────────── */
 
 	public function threat_cve( WP_REST_Request $req ): WP_REST_Response {
+		$denied = $this->check_module_access( 'threat' );
+		if ( $denied ) {
+			return $denied;
+		}
+
+		$quota = $this->quota_check( 'scans_per_day' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		// Rate-limit check — wrapped so a missing DB table doesn't 500.
 		try {
 			$rl = $this->rate_limit_check( 'threat_cve' );
@@ -1343,8 +1614,8 @@ class PDX_REST_API {
 				'cves'   => [],
 				'total'  => 0,
 				'source' => 'error',
-				'error'  => 'CVE lookup failed: ' . $e->getMessage(),
-			], 200 );
+				'error'  => 'CVE lookup failed. Check server outbound HTTPS connectivity.',
+			], 503 );
 		}
 
 		// Ensure result is always a well-formed array before caching/returning.
@@ -1361,12 +1632,24 @@ class PDX_REST_API {
 			PDX_Audit::log( 'threat', 'cve_lookup', [ 'query' => $query, 'total' => (int) ( $result['total'] ?? 0 ) ] );
 		} catch ( Throwable $e ) { /* non-fatal — audit table may not exist */ }
 
-		return new WP_REST_Response( $result, 200 );
+		$this->track_usage( 'scans_per_day', 'threat' );
+
+		return new WP_REST_Response( $result, $this->upstream_error_status( $result ) );
 	}
 
 	/* ── Threat Intel: Attack Surface ────────────────────── */
 
 	public function threat_surface( WP_REST_Request $req ): WP_REST_Response {
+		$denied = $this->check_module_access( 'threat' );
+		if ( $denied ) {
+			return $denied;
+		}
+
+		$quota = $this->quota_check( 'scans_per_day' );
+		if ( $quota ) {
+			return $quota;
+		}
+
 		try {
 			$rl = $this->rate_limit_check( 'threat_surface' );
 			if ( $rl ) return $rl;
@@ -1411,10 +1694,10 @@ class PDX_REST_API {
 				'vulns'   => [],
 				'dns'     => [],
 				'score'   => 0,
-				'summary' => 'Attack surface scan failed: ' . $e->getMessage(),
-				'source'  => [],
-				'error'   => $e->getMessage(),
-			], 200 );
+				'summary' => 'Attack surface scan failed.',
+				'source'  => 'error',
+				'error'   => 'Attack surface scan could not be completed.',
+			], 503 );
 		}
 
 		if ( ! is_array( $result ) ) {
@@ -1429,6 +1712,8 @@ class PDX_REST_API {
 			PDX_Audit::log( 'threat', 'surface_scan', [ 'target' => $target, 'score' => (int) ( $result['score'] ?? 0 ) ] );
 		} catch ( Throwable $e ) { /* non-fatal */ }
 
-		return new WP_REST_Response( $result, 200 );
+		$this->track_usage( 'scans_per_day', 'threat' );
+
+		return new WP_REST_Response( $result, $this->upstream_error_status( $result ) );
 	}
 }

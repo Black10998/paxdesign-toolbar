@@ -5256,6 +5256,10 @@
               if (apiDone) renderCVEResult(res, apiData, q);
             });
             apiFetch('GET', '/threat/cve?q=' + encodeURIComponent(q)).then(function(data) {
+              if (!data || data._ok === false || data.error) {
+                res.innerHTML = '<div class="pdx-error">' + escHtml((data && (data.error || data.message)) || 'CVE lookup failed.') + '</div>';
+                return;
+              }
               apiData = data; apiDone = true;
               if (pipelineDone) renderCVEResult(res, data, q);
             });
@@ -5303,6 +5307,10 @@
               if (apiDone) renderSurfaceResult(res, apiData, domain);
             });
             apiFetch('GET', '/threat/surface?domain=' + encodeURIComponent(domain)).then(function(data) {
+              if (!data || data._ok === false || data.error) {
+                res.innerHTML = '<div class="pdx-error">' + escHtml((data && (data.error || data.message)) || 'Attack surface scan failed.') + '</div>';
+                return;
+              }
               apiData = data; apiDone = true;
               if (pipelineDone) renderSurfaceResult(res, data, domain);
             });
@@ -5320,7 +5328,11 @@
        CVE RESULT RENDERER
     ══════════════════════════════════════════════════════ */
     function renderCVEResult(container, data, q) {
-      if (!data || !data.cves) { container.innerHTML = '<div class="pdx-empty">No CVEs found for "' + escHtml(q) + '".</div>'; return; }
+      if (!data || data._ok === false || data.error) {
+        container.innerHTML = '<div class="pdx-error">' + escHtml(data && (data.error || data.message) ? (data.error || data.message) : 'CVE lookup failed.') + '</div>';
+        return;
+      }
+      if (!data.cves || !data.cves.length) { container.innerHTML = '<div class="pdx-empty">No CVEs found for "' + escHtml(q) + '".</div>'; return; }
       var cves = data.cves.slice(0, 8);
       var html = '<div class="pdx-result">';
       html += '<div class="pdx-scan-complete"><div class="pdx-scan-complete-dot"></div><span>' + cves.length + ' CVE' + (cves.length !== 1 ? 's' : '') + ' found for "' + escHtml(q) + '"</span></div>';
@@ -5374,7 +5386,10 @@
        ATTACK SURFACE RESULT RENDERER
     ══════════════════════════════════════════════════════ */
     function renderSurfaceResult(container, data, domain) {
-      if (!data) { container.innerHTML = '<div class="pdx-error">Surface mapping failed.</div>'; return; }
+      if (!data || data._ok === false || data.error) {
+        container.innerHTML = '<div class="pdx-error">' + escHtml(data && (data.error || data.message) ? (data.error || data.message) : 'Attack surface scan failed.') + '</div>';
+        return;
+      }
       var ports      = data.ports      || [];
       var subdomains = data.subdomains || [];
       var services   = data.services   || [];

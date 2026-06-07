@@ -138,6 +138,10 @@ class PDX_SSE {
 	}
 
 	private function poll_activity( int $user_id, array &$cursors ): void {
+		if ( ! current_user_can( PDX_CAP ) ) {
+			return;
+		}
+
 		$last_id = $cursors['activity_last_id'] ?? 0;
 		global $wpdb;
 
@@ -155,6 +159,10 @@ class PDX_SSE {
 	}
 
 	private function poll_job( string $job_id, array &$cursors ): void {
+		if ( ! PDX_Queue::user_can_access( $job_id ) ) {
+			return;
+		}
+
 		$job = PDX_Queue::get( $job_id );
 		if ( ! $job ) return;
 

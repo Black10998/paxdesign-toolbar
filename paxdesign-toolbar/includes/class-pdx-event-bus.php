@@ -111,7 +111,7 @@ class PDX_EventBus {
 		// Track billing usage on scan
 		self::on( 'scan.completed', static function( array $p ) {
 			if ( is_user_logged_in() ) {
-				PDX_Billing::record_usage( get_current_user_id(), 'scan', 1, $p['module'] ?? 'unknown' );
+				PDX_Billing::record_usage( get_current_user_id(), 'scans_per_day', 1, $p['module'] ?? 'unknown' );
 			}
 		} );
 

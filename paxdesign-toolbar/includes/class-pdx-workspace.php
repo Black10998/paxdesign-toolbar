@@ -166,6 +166,11 @@ class PDX_Workspace {
 		return $row;
 	}
 
+	public static function user_can_access( string $ws_id ): bool {
+		$ws = self::get( $ws_id );
+		return $ws ? PDX_Security::actor_owns_row( $ws ) : false;
+	}
+
 	public static function get_user_workspaces(
 		string $module = '',
 		string $status = 'active',

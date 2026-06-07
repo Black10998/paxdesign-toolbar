@@ -219,6 +219,33 @@ class PDX_Team {
 		return $case_id;
 	}
 
+	public static function get_case( string $case_id ): ?array {
+		global $wpdb;
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}" . self::T_CASES . " WHERE case_id = %s LIMIT 1",
+				$case_id
+			),
+			ARRAY_A
+		);
+		return $row ?: null;
+	}
+
+	public static function user_can_access_case( string $case_id, int $user_id ): bool {
+		if ( PDX_Security::is_platform_admin() ) {
+			return true;
+		}
+		$case = self::get_case( $case_id );
+		if ( ! $case ) {
+			return false;
+		}
+		return self::user_can( (string) $case['team_id'], $user_id, 'view_all' );
+	}
+
+	public static function is_team_member( string $team_id, int $user_id ): bool {
+		return null !== self::user_role( $team_id, $user_id );
+	}
+
 	public static function get_cases( string $team_id, string $status = '', int $limit = 50 ): array {
 		global $wpdb;
 		$where = $status ? $wpdb->prepare( 'AND status = %s', $status ) : '';
