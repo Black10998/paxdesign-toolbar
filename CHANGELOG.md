@@ -1,5 +1,15 @@
 ﻿# Changelog
 
+## 8.10.3 — 2026-06-07
+
+**Final release packaging on latest `main` after full stabilization pass**
+
+- Synced release from the latest upstream `main` baseline (backend/frontend/CSS/Queue/API hardening included).
+- Published a fresh WordPress-installable package for production deployment.
+- Retained recent reliability fixes around feed sync, provider diagnostics, SVG scaling, dark mode readability, and truthful error paths.
+
+**Install:** `releases/paxdesign-toolbar-8.10.3.zip` — tag `v8.10.3`
+
 ## 8.10.2 — 2026-06-07
 
 **Reliability, UI scaling, and dark-mode readability**
