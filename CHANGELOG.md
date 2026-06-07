@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## 8.10.6 — 2026-06-07
+
+**Updater reliability hotfix (GitHub API 429 fallback)**
+
+- Fixed update-check failures when GitHub API rate limits return HTTP 429/403.
+- Added resilient fallback in updater:
+  - Parse `releases/latest` redirect to detect newest version without API dependency.
+  - Build direct package URL from `main/releases/paxdesign-toolbar-<version>.zip`.
+  - Reuse last known cached release metadata when API and fallback both temporarily fail.
+- Prevented admin Updates panel from degrading to “Could not determine / Check failed” on transient GitHub API throttling.
+
+**Install:** `releases/paxdesign-toolbar-8.10.6.zip` — tag `v8.10.6`
+
 ## 8.10.5 — 2026-06-07
 
 **Frontend TrustCheck UI hotfix (SVG/text/layout) + dock module button resilience**

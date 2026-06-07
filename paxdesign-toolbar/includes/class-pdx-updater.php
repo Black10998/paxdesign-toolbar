@@ -635,6 +635,13 @@ class PDX_Updater {
 	 * @return array<string, mixed>
 	 */
 	public function fetch_release( bool $force = false ): array {
+		$stale_cached = get_transient( self::CACHE_KEY );
+		if ( is_array( $stale_cached ) ) {
+			$stale_cached = $this->normalize_release_data( $stale_cached );
+		} else {
+			$stale_cached = null;
+		}
+
 		if ( $force ) {
 			delete_transient( self::CACHE_KEY );
 		}
@@ -665,6 +672,16 @@ class PDX_Updater {
 		update_option( self::LAST_CHECK_OPTION, time() );
 
 		if ( is_wp_error( $res ) ) {
+			$fallback = $this->fetch_release_via_latest_redirect();
+			if ( is_array( $fallback ) ) {
+				set_transient( self::CACHE_KEY, $fallback, self::CACHE_TTL );
+				return $fallback;
+			}
+
+			if ( is_array( $stale_cached ) && ! empty( $stale_cached['version'] ) && ! empty( $stale_cached['package'] ) ) {
+				return $stale_cached;
+			}
+
 			return $this->normalize_release_data(
 				[
 					'error'   => $res->get_error_message(),
@@ -679,6 +696,18 @@ class PDX_Updater {
 
 		$code = wp_remote_retrieve_response_code( $res );
 		if ( 200 !== (int) $code ) {
+			if ( in_array( (int) $code, [ 403, 429, 500, 502, 503, 504 ], true ) ) {
+				$fallback = $this->fetch_release_via_latest_redirect();
+				if ( is_array( $fallback ) ) {
+					set_transient( self::CACHE_KEY, $fallback, self::CACHE_TTL );
+					return $fallback;
+				}
+
+				if ( is_array( $stale_cached ) && ! empty( $stale_cached['version'] ) && ! empty( $stale_cached['package'] ) ) {
+					return $stale_cached;
+				}
+			}
+
 			return $this->normalize_release_data(
 				[
 					'error'   => sprintf( 'GitHub API returned HTTP %d.', (int) $code ),
@@ -754,6 +783,73 @@ class PDX_Updater {
 
 		set_transient( self::CACHE_KEY, $data, self::CACHE_TTL );
 		return $data;
+	}
+
+	/**
+	 * Fallback when GitHub API is rate-limited: parse releases/latest redirect
+	 * and build a direct ZIP URL from repository contents on main.
+	 *
+	 * @return array<string, mixed>|null
+	 */
+	private function fetch_release_via_latest_redirect(): ?array {
+		$latest_url = 'https://github.com/' . self::GITHUB_REPO . '/releases/latest';
+		$res        = wp_remote_get(
+			$latest_url,
+			[
+				'timeout'     => self::HTTP_TIMEOUT,
+				'redirection' => 0,
+				'headers'     => [
+					'Accept'     => 'text/html,application/xhtml+xml',
+					'User-Agent' => 'PaxDesign-Toolbar-Updater/' . PDX_VERSION,
+				],
+			]
+		);
+
+		if ( is_wp_error( $res ) ) {
+			return null;
+		}
+
+		$version = '';
+		$url     = '';
+
+		$location = wp_remote_retrieve_header( $res, 'location' );
+		if ( is_array( $location ) ) {
+			$location = (string) reset( $location );
+		}
+		$location = is_string( $location ) ? $location : '';
+
+		if ( '' !== $location && preg_match( '#/releases/tag/v?([0-9][0-9A-Za-z.\-_+]*)#', $location, $m ) ) {
+			$version = (string) $m[1];
+			$url     = $location;
+		}
+
+		if ( '' === $version ) {
+			$body = (string) wp_remote_retrieve_body( $res );
+			if ( preg_match( '#/releases/tag/v?([0-9][0-9A-Za-z.\-_+]*)#', $body, $m ) ) {
+				$version = (string) $m[1];
+			}
+		}
+
+		if ( '' === $version ) {
+			return null;
+		}
+
+		if ( '' === $url ) {
+			$url = 'https://github.com/' . self::GITHUB_REPO . '/releases/tag/v' . $version;
+		}
+
+		$package = 'https://raw.githubusercontent.com/' . self::GITHUB_REPO . '/main/releases/paxdesign-toolbar-' . $version . '.zip';
+
+		return $this->normalize_release_data(
+			[
+				'version' => $version,
+				'package' => $package,
+				'url'     => $url,
+				'name'    => 'PaxDesign Utility Dock',
+				'notes'   => '',
+				'error'   => '',
+			]
+		);
 	}
 
 	/**
