@@ -281,8 +281,12 @@ class PDX_Intelligence {
 		}
 
 		$report['risk']           = $this->compute_risk( $report['sources'], $report['source_status'], [], $target_type );
-		$report['confidence']     = $this->compute_confidence( $report['source_status'], $target_type );
 		$report['report_quality'] = $this->assess_report_quality( $report['source_status'], $target_type, $report['risk'] );
+		$report['confidence']     = $this->compute_confidence(
+			$report['source_status'],
+			$target_type,
+			(string) ( $report['report_quality']['coverage_tier'] ?? 'verified' )
+		);
 		$narrative                = $this->build_narrative( $target, $report );
 		$report['ai_summary']      = $narrative['summary'];
 		$report['recommendations'] = $narrative['recommendations'];
@@ -379,54 +383,88 @@ class PDX_Intelligence {
 	 * @return array{data:?array,status:array,queried:string}
 	 */
 	public function fetch_rdap_resolved( string $domain ): array {
-		$tried    = $this->rdap_lookup_candidates( $domain );
-		$last_err = 'RDAP lookup failed.';
-		$last_log = [];
+		$tried     = $this->rdap_lookup_candidates( $domain );
+		$last_err  = 'RDAP lookup failed.';
+		$last_log  = [];
+		$last_code = 0;
 
 		foreach ( $tried as $candidate ) {
-			$url  = 'https://rdap.org/domain/' . rawurlencode( $candidate );
-			$http = PDX_Http::get(
-				$url,
-				[
-					'timeout' => 15,
-					'headers' => [ 'Accept' => 'application/rdap+json, application/json' ],
-				],
-				'rdap'
-			);
-			$resp = $http['response'];
+			foreach ( $this->rdap_endpoint_urls( $candidate ) as $url ) {
+				$http = PDX_Http::get(
+					$url,
+					[
+						'timeout' => 15,
+						'headers' => [ 'Accept' => 'application/rdap+json, application/json' ],
+					],
+					'rdap'
+				);
+				$resp = $http['response'];
 
-			if ( is_wp_error( $resp ) ) {
-				$last_err = $resp->get_error_message();
-				$last_log = $http['log'];
-				continue;
+				if ( is_wp_error( $resp ) ) {
+					$last_err  = $resp->get_error_message();
+					$last_log  = $http['log'];
+					$last_code = 0;
+					continue;
+				}
+
+				$code = (int) wp_remote_retrieve_response_code( $resp );
+				if ( 200 !== $code ) {
+					$last_err  = "RDAP HTTP {$code} for {$candidate}" . ( str_contains( $url, 'rdap.org' ) ? '' : ' via registry endpoint' );
+					$last_log  = $http['log'];
+					$last_code = $code;
+					continue;
+				}
+
+				$body = json_decode( wp_remote_retrieve_body( $resp ), true );
+				if ( ! is_array( $body ) || ! $this->is_valid_rdap_domain_response( $body, $candidate ) ) {
+					$last_err                 = 'Invalid RDAP response (parse failed).';
+					$last_log                 = $http['log'];
+					$last_log['parse_status'] = 'parse_error';
+					$last_code                = 200;
+					continue;
+				}
+
+				$last_log['parse_status'] = 'ok';
+
+				return [
+					'data'    => $body,
+					'queried' => $candidate,
+					'status'  => $this->with_http_log(
+						[
+							'state'   => 'ok',
+							'message' => $candidate === $domain ? 'Registration data retrieved.' : "Parent zone {$candidate} used.",
+						],
+						$http['log']
+					),
+				];
 			}
+		}
 
-			$code = (int) wp_remote_retrieve_response_code( $resp );
-			if ( 200 !== $code ) {
-				$last_err = "RDAP HTTP {$code} for {$candidate}";
-				$last_log = $http['log'];
-				continue;
-			}
-
-			$body = json_decode( wp_remote_retrieve_body( $resp ), true );
-			if ( ! is_array( $body ) || empty( $body['ldhName'] ) ) {
-				$last_err = 'Invalid RDAP response (parse failed).';
-				$last_log = $http['log'];
-				$last_log['parse_status'] = 'parse_error';
-				continue;
-			}
-
-			$last_log['parse_status'] = 'ok';
-
+		if ( $this->rdap_registry_unlisted( $domain ) ) {
+			$tld = $this->domain_tld( $domain );
 			return [
-				'data'    => $body,
-				'queried' => $candidate,
+				'data'    => null,
+				'queried' => $domain,
 				'status'  => $this->with_http_log(
 					[
-						'state'   => 'ok',
-						'message' => $candidate === $domain ? 'Registration data retrieved.' : "Parent zone {$candidate} used.",
+						'state'   => 'skipped',
+						'message' => ".{$tld} is not listed in the IANA RDAP bootstrap — registration data unavailable via RDAP (WHOIS web lookup may still exist).",
 					],
-					$http['log']
+					$last_log
+				),
+			];
+		}
+
+		if ( 404 === $last_code ) {
+			return [
+				'data'    => null,
+				'queried' => $domain,
+				'status'  => $this->with_http_log(
+					[
+						'state'   => 'skipped',
+						'message' => 'No RDAP record published for this domain — registration age and ownership could not be verified.',
+					],
+					$last_log
 				),
 			];
 		}
@@ -441,6 +479,63 @@ class PDX_Intelligence {
 			'queried' => $domain,
 			'status'  => $fail_status,
 		];
+	}
+
+	/**
+	 * @return list<string>
+	 */
+	private function rdap_endpoint_urls( string $domain ): array {
+		$encoded = rawurlencode( $domain );
+		$urls    = [ 'https://rdap.org/domain/' . $encoded ];
+		$tld     = $this->domain_tld( $domain );
+
+		$registry_bases = [
+			'at'    => 'https://rdap.nic.at/domain/',
+			'co.at' => 'https://rdap.nic.at/domain/',
+			'or.at' => 'https://rdap.nic.at/domain/',
+			'de'    => 'https://rdap.denic.de/domain/',
+			'fr'    => 'https://rdap.nic.fr/domain/',
+			'uk'    => 'https://rdap.nominet.uk/uk/domain/',
+		];
+
+		if ( isset( $registry_bases[ $tld ] ) ) {
+			$urls[] = $registry_bases[ $tld ] . $encoded;
+		}
+
+		return array_values( array_unique( $urls ) );
+	}
+
+	private function domain_tld( string $domain ): string {
+		$domain = strtolower( trim( $domain, '.' ) );
+		foreach ( [ 'co.at', 'or.at' ] as $special ) {
+			if ( $domain === $special || str_ends_with( $domain, '.' . $special ) ) {
+				return $special;
+			}
+		}
+		$parts = explode( '.', $domain );
+		return (string) ( end( $parts ) ?: '' );
+	}
+
+	/**
+	 * TLDs known to be absent from the IANA RDAP bootstrap (rdap.org returns 404).
+	 */
+	private function rdap_registry_unlisted( string $domain ): bool {
+		$tld = $this->domain_tld( $domain );
+		return in_array( $tld, [ 'at', 'co.at', 'or.at' ], true );
+	}
+
+	private function is_valid_rdap_domain_response( array $body, string $candidate ): bool {
+		if ( ! empty( $body['ldhName'] ) ) {
+			return true;
+		}
+		$unicode = strtolower( (string) ( $body['unicodeName'] ?? '' ) );
+		if ( $unicode && $unicode === strtolower( $candidate ) ) {
+			return true;
+		}
+		if ( ! empty( $body['handle'] ) && ! empty( $body['entities'] ) ) {
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -1498,175 +1593,219 @@ class PDX_Intelligence {
 	/* ── Risk Scoring ───────────────────────────────────── */
 
 	/**
-	 * Compute a 0-100 risk score and risk matrix from aggregated sources.
+	 * Sources that must respond for a verified verdict (by target type).
 	 *
-	 * @param array<string, mixed>                   $sources
-	 * @param array<string, array{state?:string}>    $source_status
+	 * @return list<string>
 	 */
-	public function compute_risk( array $sources, array $source_status = [], array $forensics = [], string $target_type = 'domain' ): array {
-		$score   = 0;
-		$factors = [];
+	public function required_sources_for( string $target_type ): array {
+		return match ( $target_type ) {
+			'ip'    => [ 'geo', 'threat' ],
+			'hash'  => [ 'threat' ],
+			'email' => [ 'dns', 'threat' ],
+			'url'   => [ 'threat', 'url_forensics' ],
+			default => [ 'dns', 'threat' ],
+		};
+	}
 
-		// SSL grade — only when assessment completed
+	/**
+	 * Whether a source status allows its data to contribute to risk scoring.
+	 */
+	private function source_scoring_eligible( string $key, array $source_status ): bool {
+		$state = $source_status[ $key ]['state'] ?? 'error';
+		return in_array( $state, [ 'ok', 'partial' ], true );
+	}
+
+	public function compute_risk( array $sources, array $source_status = [], array $forensics = [], string $target_type = 'domain' ): array {
+		$score                 = 0;
+		$factors               = [];
+		$contributing_sources  = [];
+
+		// SSL grade — only when assessment completed and source verified.
 		$ssl = $sources['ssl'] ?? [];
-		if ( ! empty( $ssl['assessed'] ) && ! empty( $ssl['grade'] ) ) {
+		if ( $this->source_scoring_eligible( 'ssl', $source_status ) && ! empty( $ssl['assessed'] ) && ! empty( $ssl['grade'] ) ) {
 			$grade_map = [ 'A+' => 0, 'A' => 5, 'A-' => 8, 'B' => 20, 'C' => 35, 'D' => 50, 'E' => 65, 'F' => 80, 'T' => 70, 'M' => 60 ];
 			$ssl_grade = $ssl['grade'];
 			$ssl_risk  = $grade_map[ $ssl_grade ] ?? 20;
 			$score    += $ssl_risk;
 			if ( $ssl_risk > 0 ) {
-				$factors[] = [ 'factor' => 'SSL Grade', 'value' => $ssl_grade, 'risk' => $ssl_risk, 'weight' => 'medium' ];
+				$factors[] = [ 'factor' => 'SSL Grade', 'value' => $ssl_grade, 'risk' => $ssl_risk, 'weight' => 'medium', 'source' => 'ssl' ];
+			}
+			$contributing_sources[] = 'ssl';
+		}
+
+		// Domain age (RDAP) — only when RDAP succeeded.
+		if ( $this->source_scoring_eligible( 'rdap', $source_status ) ) {
+			$age_days = $sources['rdap']['age_days'] ?? null;
+			if ( null !== $age_days ) {
+				if ( $age_days < 30 ) {
+					$score    += 30;
+					$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 30, 'weight' => 'high', 'source' => 'rdap' ];
+				} elseif ( $age_days < 180 ) {
+					$score    += 15;
+					$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 15, 'weight' => 'medium', 'source' => 'rdap' ];
+				} elseif ( $age_days < 365 ) {
+					$score    += 5;
+					$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 5, 'weight' => 'low', 'source' => 'rdap' ];
+				}
+				$contributing_sources[] = 'rdap';
 			}
 		}
 
-		// Domain age (RDAP)
-		$age_days = $sources['rdap']['age_days'] ?? null;
-		if ( null !== $age_days ) {
-			if ( $age_days < 30 ) {
-				$score    += 30;
-				$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 30, 'weight' => 'high' ];
-			} elseif ( $age_days < 180 ) {
-				$score    += 15;
-				$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 15, 'weight' => 'medium' ];
-			} elseif ( $age_days < 365 ) {
-				$score    += 5;
-				$factors[] = [ 'factor' => 'Domain Age', 'value' => "{$age_days}d", 'risk' => 5, 'weight' => 'low' ];
+		// Threat intelligence — only when feeds responded.
+		if ( $this->source_scoring_eligible( 'threat', $source_status ) ) {
+			$threat = $sources['threat'] ?? [];
+			$mal    = (int) ( $threat['malicious'] ?? $sources['virustotal']['malicious'] ?? 0 );
+			$sus    = (int) ( $threat['suspicious'] ?? $sources['virustotal']['suspicious'] ?? 0 );
+			if ( $mal > 5 ) {
+				$score    += 40;
+				$factors[] = [ 'factor' => 'Threat Feed Detections', 'value' => "{$mal} malicious", 'risk' => 40, 'weight' => 'critical', 'source' => 'threat' ];
+			} elseif ( $mal > 0 ) {
+				$score    += 25;
+				$factors[] = [ 'factor' => 'Threat Feed Detections', 'value' => "{$mal} malicious", 'risk' => 25, 'weight' => 'high', 'source' => 'threat' ];
+			} elseif ( $sus > 0 ) {
+				$score    += 12;
+				$factors[] = [ 'factor' => 'Threat Feed Suspicious', 'value' => "{$sus} suspicious", 'risk' => 12, 'weight' => 'medium', 'source' => 'threat' ];
 			}
-		}
-
-		// Threat intelligence (aggregated + VT)
-		$threat = $sources['threat'] ?? [];
-		$mal    = (int) ( $threat['malicious'] ?? $sources['virustotal']['malicious'] ?? 0 );
-		$sus    = (int) ( $threat['suspicious'] ?? $sources['virustotal']['suspicious'] ?? 0 );
-		if ( $mal > 5 ) {
-			$score    += 40;
-			$factors[] = [ 'factor' => 'Threat Feed Detections', 'value' => "{$mal} malicious", 'risk' => 40, 'weight' => 'critical' ];
-		} elseif ( $mal > 0 ) {
-			$score    += 25;
-			$factors[] = [ 'factor' => 'Threat Feed Detections', 'value' => "{$mal} malicious", 'risk' => 25, 'weight' => 'high' ];
-		} elseif ( $sus > 0 ) {
-			$score    += 12;
-			$factors[] = [ 'factor' => 'Threat Feed Suspicious', 'value' => "{$sus} suspicious", 'risk' => 12, 'weight' => 'medium' ];
+			$contributing_sources[] = 'threat';
 		}
 
 		$abuse = $sources['abuseipdb'] ?? [];
-		if ( ! empty( $abuse ) ) {
+		if ( $this->source_scoring_eligible( 'abuseipdb', $source_status ) && ! empty( $abuse ) ) {
 			$conf    = (int) ( $abuse['abuse_confidence'] ?? 0 );
 			$reports = (int) ( $abuse['total_reports'] ?? 0 );
 			if ( $conf >= 75 || $reports >= 20 ) {
 				$score    += 35;
-				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence ({$reports} reports)", 'risk' => 35, 'weight' => 'critical' ];
+				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence ({$reports} reports)", 'risk' => 35, 'weight' => 'critical', 'source' => 'abuseipdb' ];
 			} elseif ( $conf >= 50 || $reports >= 5 ) {
 				$score    += 22;
-				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence ({$reports} reports)", 'risk' => 22, 'weight' => 'high' ];
+				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence ({$reports} reports)", 'risk' => 22, 'weight' => 'high', 'source' => 'abuseipdb' ];
 			} elseif ( $conf >= 25 ) {
 				$score    += 10;
-				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence", 'risk' => 10, 'weight' => 'medium' ];
+				$factors[] = [ 'factor' => 'AbuseIPDB Reputation', 'value' => "{$conf}% confidence", 'risk' => 10, 'weight' => 'medium', 'source' => 'abuseipdb' ];
 			}
+			$contributing_sources[] = 'abuseipdb';
 		}
 
-		// Shodan
-		if ( isset( $sources['shodan'] ) ) {
+		if ( $this->source_scoring_eligible( 'shodan', $source_status ) && isset( $sources['shodan'] ) ) {
 			$vulns = count( $sources['shodan']['vulns'] ?? [] );
 			$ports = count( $sources['shodan']['ports'] ?? [] );
 			if ( $vulns > 0 ) {
 				$risk_v = min( 30, $vulns * 8 );
 				$score += $risk_v;
-				$factors[] = [ 'factor' => 'Known CVEs', 'value' => "{$vulns} CVEs", 'risk' => $risk_v, 'weight' => 'critical' ];
+				$factors[] = [ 'factor' => 'Known CVEs', 'value' => "{$vulns} CVEs", 'risk' => $risk_v, 'weight' => 'critical', 'source' => 'shodan' ];
 			}
 			if ( $ports > 20 ) {
 				$score    += 10;
-				$factors[] = [ 'factor' => 'Open Ports', 'value' => "{$ports} ports", 'risk' => 10, 'weight' => 'medium' ];
+				$factors[] = [ 'factor' => 'Open Ports', 'value' => "{$ports} ports", 'risk' => 10, 'weight' => 'medium', 'source' => 'shodan' ];
+			}
+			if ( $vulns > 0 || $ports > 20 ) {
+				$contributing_sources[] = 'shodan';
 			}
 		}
 
-		// Hosting / CDN (low weight)
-		if ( ! empty( $sources['geolocation']['hosting'] ) ) {
+		if ( $this->source_scoring_eligible( 'geo', $source_status ) && ! empty( $sources['geolocation']['hosting'] ) ) {
 			$score    += 3;
-			$factors[] = [ 'factor' => 'Hosting Provider IP', 'value' => 'Yes', 'risk' => 3, 'weight' => 'low' ];
+			$factors[] = [ 'factor' => 'Hosting Provider IP', 'value' => 'Yes', 'risk' => 3, 'weight' => 'low', 'source' => 'geo' ];
+			$contributing_sources[] = 'geo';
 		}
 
-		// Missing email auth (informational risk)
 		$dns = $sources['dns'] ?? [];
-		if ( ! empty( $dns ) && empty( $dns['spf'] ) && ! empty( $dns['mx'] ) ) {
+		if ( $this->source_scoring_eligible( 'dns', $source_status ) && ! empty( $dns ) && empty( $dns['spf'] ) && ! empty( $dns['mx'] ) ) {
 			$score    += 5;
-			$factors[] = [ 'factor' => 'Email Auth', 'value' => 'No SPF', 'risk' => 5, 'weight' => 'low' ];
+			$factors[] = [ 'factor' => 'Email Auth', 'value' => 'No SPF', 'risk' => 5, 'weight' => 'low', 'source' => 'dns' ];
+			$contributing_sources[] = 'dns';
 		}
 
-		// URL forensics / phishing heuristics (v8)
-		$phish_score = (int) ( $forensics['phishing_score'] ?? $sources['url_forensics']['phishing']['score'] ?? 0 );
-		if ( $phish_score >= 25 ) {
-			$phish_risk = min( 35, $phish_score );
-			$score     += $phish_risk;
-			$factors[] = [
-				'factor' => 'Phishing / Page Forensics',
-				'value'  => ( $forensics['phishing_verdict'] ?? 'elevated' ) . " ({$phish_score})",
-				'risk'   => $phish_risk,
-				'weight' => $phish_score >= 45 ? 'critical' : 'high',
-			];
+		$forensics_eligible = $this->source_scoring_eligible( 'url_forensics', $source_status )
+			|| ( 'url' !== $target_type && ! empty( $forensics ) );
+		if ( $forensics_eligible ) {
+			$phish_score = (int) ( $forensics['phishing_score'] ?? $sources['url_forensics']['phishing']['score'] ?? 0 );
+			if ( $phish_score >= 25 ) {
+				$phish_risk = min( 35, $phish_score );
+				$score     += $phish_risk;
+				$factors[] = [
+					'factor' => 'Phishing / Page Forensics',
+					'value'  => ( $forensics['phishing_verdict'] ?? 'elevated' ) . " ({$phish_score})",
+					'risk'   => $phish_risk,
+					'weight' => $phish_score >= 45 ? 'critical' : 'high',
+					'source' => 'url_forensics',
+				];
+				$contributing_sources[] = 'url_forensics';
+			}
+
+			if ( ! empty( $forensics['has_login_form'] ) ) {
+				$score    += 10;
+				$factors[] = [ 'factor' => 'Credential Form on Page', 'value' => 'Detected', 'risk' => 10, 'weight' => 'medium', 'source' => 'url_forensics' ];
+				$contributing_sources[] = 'url_forensics';
+			}
+
+			if ( ! empty( $forensics['redirect_hops'] ) && (int) $forensics['redirect_hops'] > 3 ) {
+				$score    += 8;
+				$factors[] = [ 'factor' => 'Redirect Chain', 'value' => (int) $forensics['redirect_hops'] . ' hops', 'risk' => 8, 'weight' => 'medium', 'source' => 'url_forensics' ];
+				$contributing_sources[] = 'url_forensics';
+			}
+
+			$path_risk = (int) ( $forensics['path_risk_score'] ?? 0 );
+			if ( $path_risk >= 10 ) {
+				$path_factor = min( 18, $path_risk );
+				$score      += $path_factor;
+				$factors[]   = [ 'factor' => 'Suspicious URL Path', 'value' => "{$path_risk}", 'risk' => $path_factor, 'weight' => 'high', 'source' => 'url_forensics' ];
+				$contributing_sources[] = 'url_forensics';
+			}
+
+			$landing_risk = (int) ( $forensics['landing_risk_score'] ?? 0 );
+			if ( $landing_risk >= 10 ) {
+				$land_factor = min( 20, $landing_risk );
+				$score      += $land_factor;
+				$factors[]   = [ 'factor' => 'Landing Page Heuristics', 'value' => "{$landing_risk}", 'risk' => $land_factor, 'weight' => 'high', 'source' => 'url_forensics' ];
+				$contributing_sources[] = 'url_forensics';
+			}
+
+			$intent = (string) ( $forensics['redirect_intent'] ?? '' );
+			if ( in_array( $intent, [ 'multi_hop_laundering', 'cross_domain_delivery' ], true ) ) {
+				$score    += 10;
+				$factors[] = [ 'factor' => 'Redirect Intent', 'value' => $intent, 'risk' => 10, 'weight' => 'high', 'source' => 'url_forensics' ];
+				$contributing_sources[] = 'url_forensics';
+			}
+
+			if ( ! empty( $forensics['external_form_action'] ) ) {
+				$score    += 14;
+				$factors[] = [ 'factor' => 'Credential Exfiltration Form', 'value' => 'External action', 'risk' => 14, 'weight' => 'critical', 'source' => 'url_forensics' ];
+				$contributing_sources[] = 'url_forensics';
+			}
+
+			$malware = (array) ( $forensics['malware_indicators'] ?? [] );
+			if ( ! empty( $malware ) ) {
+				$mal_risk = min( 22, count( $malware ) * 8 );
+				$score   += $mal_risk;
+				$factors[] = [
+					'factor' => 'Malware / Abuse Indicators',
+					'value'  => implode( ', ', array_slice( $malware, 0, 3 ) ),
+					'risk'   => $mal_risk,
+					'weight' => 'high',
+					'source' => 'url_forensics',
+				];
+				$contributing_sources[] = 'url_forensics';
+			}
+
+			$infra_score = (int) ( $forensics['infrastructure_score'] ?? 0 );
+			if ( $infra_score > 0 ) {
+				$score    += $infra_score;
+				$factors[] = [
+					'factor' => 'Infrastructure Fingerprint',
+					'value'  => (string) ( $forensics['infrastructure_fingerprint'] ?? 'mapped' ),
+					'risk'   => $infra_score,
+					'weight' => 'medium',
+					'source' => 'url_forensics',
+				];
+				$contributing_sources[] = 'url_forensics';
+			}
 		}
 
-		if ( ! empty( $forensics['has_login_form'] ) ) {
-			$score    += 10;
-			$factors[] = [ 'factor' => 'Credential Form on Page', 'value' => 'Detected', 'risk' => 10, 'weight' => 'medium' ];
-		}
-
-		if ( ! empty( $forensics['redirect_hops'] ) && (int) $forensics['redirect_hops'] > 3 ) {
-			$score    += 8;
-			$factors[] = [ 'factor' => 'Redirect Chain', 'value' => (int) $forensics['redirect_hops'] . ' hops', 'risk' => 8, 'weight' => 'medium' ];
-		}
-
-		$path_risk = (int) ( $forensics['path_risk_score'] ?? 0 );
-		if ( $path_risk >= 10 ) {
-			$path_factor = min( 18, $path_risk );
-			$score      += $path_factor;
-			$factors[]   = [ 'factor' => 'Suspicious URL Path', 'value' => "{$path_risk}", 'risk' => $path_factor, 'weight' => 'high' ];
-		}
-
-		$landing_risk = (int) ( $forensics['landing_risk_score'] ?? 0 );
-		if ( $landing_risk >= 10 ) {
-			$land_factor = min( 20, $landing_risk );
-			$score      += $land_factor;
-			$factors[]   = [ 'factor' => 'Landing Page Heuristics', 'value' => "{$landing_risk}", 'risk' => $land_factor, 'weight' => 'high' ];
-		}
-
-		$intent = (string) ( $forensics['redirect_intent'] ?? '' );
-		if ( in_array( $intent, [ 'multi_hop_laundering', 'cross_domain_delivery' ], true ) ) {
-			$score    += 10;
-			$factors[] = [ 'factor' => 'Redirect Intent', 'value' => $intent, 'risk' => 10, 'weight' => 'high' ];
-		}
-
-		if ( ! empty( $forensics['external_form_action'] ) ) {
-			$score    += 14;
-			$factors[] = [ 'factor' => 'Credential Exfiltration Form', 'value' => 'External action', 'risk' => 14, 'weight' => 'critical' ];
-		}
-
-		$malware = (array) ( $forensics['malware_indicators'] ?? [] );
-		if ( ! empty( $malware ) ) {
-			$mal_risk = min( 22, count( $malware ) * 8 );
-			$score   += $mal_risk;
-			$factors[] = [
-				'factor' => 'Malware / Abuse Indicators',
-				'value'  => implode( ', ', array_slice( $malware, 0, 3 ) ),
-				'risk'   => $mal_risk,
-				'weight' => 'high',
-			];
-		}
-
-		$infra_score = (int) ( $forensics['infrastructure_score'] ?? 0 );
-		if ( $infra_score > 0 ) {
-			$score    += $infra_score;
-			$factors[] = [
-				'factor' => 'Infrastructure Fingerprint',
-				'value'  => (string) ( $forensics['infrastructure_fingerprint'] ?? 'mapped' ),
-				'risk'   => $infra_score,
-				'weight' => 'medium',
-			];
-		}
-
-		$score = min( 100, max( 0, $score ) );
-
-		$verdict = $this->resolve_verdict( $score, $source_status, $factors, $target_type );
+		$contributing_sources = array_values( array_unique( $contributing_sources ) );
+		$indicative_score     = min( 100, max( 0, $score ) );
+		$verdict              = $this->resolve_verdict( $indicative_score, $source_status, $target_type );
+		$verified_score       = 'insufficient_data' === $verdict ? 0 : $indicative_score;
 
 		$labels = [
 			'clean'             => 'Clean',
@@ -1678,19 +1817,23 @@ class PDX_Intelligence {
 		];
 
 		return [
-			'score'      => $score,
-			'verdict'    => $verdict,
-			'factors'    => $factors,
-			'label'      => $labels[ $verdict ] ?? ucfirst( $verdict ),
-			'confidence' => $this->compute_confidence( $source_status, $target_type ),
+			'score'                => $verified_score,
+			'indicative_score'     => $indicative_score,
+			'verdict'              => $verdict,
+			'factors'              => $factors,
+			'contributing_sources' => $contributing_sources,
+			'label'                => $labels[ $verdict ] ?? ucfirst( $verdict ),
+			'confidence'           => 0,
 		];
 	}
 
-	/**
-	 * @param list<array<string, mixed>> $factors
-	 */
-	private function resolve_verdict( int $score, array $source_status, array $factors, string $target_type ): string {
-		if ( ! $this->scan_has_sufficient_coverage( $source_status, $target_type, $factors ) ) {
+	private function resolve_verdict( int $score, array $source_status, string $target_type ): string {
+		if ( ! $this->scan_has_sufficient_coverage( $source_status, $target_type ) ) {
+			return 'insufficient_data';
+		}
+
+		$threat_state = $source_status['threat']['state'] ?? 'error';
+		if ( ! in_array( $threat_state, [ 'ok', 'partial' ], true ) ) {
 			return 'insufficient_data';
 		}
 
@@ -1705,38 +1848,15 @@ class PDX_Intelligence {
 			$verdict = 'low';
 		}
 
-		// Never return Clean unless threat reputation was successfully queried.
-		if ( in_array( $verdict, [ 'clean', 'low' ], true ) && ! $this->threat_reputation_verified( $source_status ) ) {
+		if ( in_array( $verdict, [ 'clean', 'low' ], true ) && 'ok' !== $threat_state ) {
 			return 'insufficient_data';
 		}
 
 		return $verdict;
 	}
 
-	/**
-	 * Threat feeds must respond successfully before a non-elevated verdict is issued.
-	 */
-	private function threat_reputation_verified( array $source_status ): bool {
-		return 'ok' === ( $source_status['threat']['state'] ?? 'error' );
-	}
-
-	/**
-	 * @param list<array<string, mixed>> $factors
-	 */
-	private function scan_has_sufficient_coverage( array $source_status, string $target_type, array $factors ): bool {
-		if ( ! empty( $factors ) ) {
-			return true;
-		}
-
-		$required = match ( $target_type ) {
-			'ip'    => [ 'geo', 'threat' ],
-			'hash'  => [ 'threat' ],
-			'email' => [ 'dns', 'threat' ],
-			'url'   => [ 'threat', 'url_forensics' ],
-			default => [ 'dns', 'threat' ],
-		};
-
-		foreach ( $required as $key ) {
+	private function scan_has_sufficient_coverage( array $source_status, string $target_type ): bool {
+		foreach ( $this->required_sources_for( $target_type ) as $key ) {
 			$state = $source_status[ $key ]['state'] ?? 'error';
 			if ( ! in_array( $state, [ 'ok', 'partial' ], true ) ) {
 				return false;
@@ -1750,12 +1870,15 @@ class PDX_Intelligence {
 	 * Summarize whether the report is reliable enough for customer-facing verdicts.
 	 *
 	 * @param array<string, mixed> $risk
-	 * @return array{reliable:bool,failed_sources:list<string>,skipped_sources:list<string>,partial_sources:list<string>,message:string}
+	 * @return array<string, mixed>
 	 */
 	public function assess_report_quality( array $source_status, string $target_type, array $risk = [] ): array {
-		$failed   = [];
-		$skipped  = [];
-		$partial  = [];
+		$required         = $this->required_sources_for( $target_type );
+		$failed_required  = [];
+		$failed_optional  = [];
+		$skipped          = [];
+		$partial          = [];
+		$required_states  = [];
 
 		foreach ( $source_status as $key => $meta ) {
 			if ( ! is_array( $meta ) ) {
@@ -1763,36 +1886,64 @@ class PDX_Intelligence {
 			}
 			$state = $meta['state'] ?? 'error';
 			if ( 'error' === $state ) {
-				$failed[] = (string) $key;
+				if ( in_array( $key, $required, true ) ) {
+					$failed_required[] = (string) $key;
+				} else {
+					$failed_optional[] = (string) $key;
+				}
 			} elseif ( 'skipped' === $state ) {
 				$skipped[] = (string) $key;
 			} elseif ( 'partial' === $state ) {
 				$partial[] = (string) $key;
 			}
+			if ( in_array( $key, $required, true ) ) {
+				$required_states[ $key ] = $state;
+			}
 		}
 
-		$verdict  = (string) ( $risk['verdict'] ?? 'insufficient_data' );
-		$reliable = 'insufficient_data' !== $verdict && empty( $failed ) && $this->scan_has_sufficient_coverage( $source_status, $target_type, (array) ( $risk['factors'] ?? [] ) );
+		$verdict       = (string) ( $risk['verdict'] ?? 'insufficient_data' );
+		$required_ok   = empty( $failed_required ) && $this->scan_has_sufficient_coverage( $source_status, $target_type );
+		$coverage_tier = 'verified';
 
-		$message = $reliable
-			? 'Required intelligence sources responded successfully.'
-			: ( ! empty( $failed )
-				? 'One or more required intelligence sources failed — results are not verified safe.'
-				: 'Insufficient intelligence coverage — do not treat this target as verified safe.' );
+		if ( ! $required_ok || 'insufficient_data' === $verdict ) {
+			$coverage_tier = 'incomplete';
+		} elseif ( ! empty( $failed_optional ) || ! empty( $partial ) ) {
+			$coverage_tier = 'partial';
+		}
+
+		$reliable = 'verified' === $coverage_tier;
+
+		if ( $reliable ) {
+			$message = 'Required intelligence sources responded successfully.';
+		} elseif ( 'partial' === $coverage_tier ) {
+			$gaps = array_merge( $failed_optional, $partial, $skipped );
+			$message = 'Partial intelligence — core sources verified'
+				. ( ! empty( $gaps ) ? '; unavailable: ' . implode( ', ', $gaps ) : '' )
+				. '. Risk score reflects verified sources only.';
+		} elseif ( ! empty( $failed_required ) ) {
+			$message = 'Required sources failed (' . implode( ', ', $failed_required ) . ') — risk score and verdict are not verified.';
+		} else {
+			$message = 'Insufficient intelligence coverage — do not treat this target as verified safe.';
+		}
 
 		return [
-			'reliable'         => $reliable,
-			'failed_sources'   => $failed,
-			'skipped_sources'  => $skipped,
-			'partial_sources'  => $partial,
-			'message'          => $message,
+			'reliable'              => $reliable,
+			'coverage_tier'         => $coverage_tier,
+			'failed_sources'        => array_values( array_unique( array_merge( $failed_required, $failed_optional ) ) ),
+			'failed_required'       => $failed_required,
+			'failed_optional'       => $failed_optional,
+			'skipped_sources'       => $skipped,
+			'partial_sources'       => $partial,
+			'required_sources'      => $required_states,
+			'contributing_sources'  => (array) ( $risk['contributing_sources'] ?? [] ),
+			'message'               => $message,
 		];
 	}
 
 	/**
 	 * @param array<string, array{state?:string}> $source_status
 	 */
-	public function compute_confidence( array $source_status, string $target_type = 'domain' ): int {
+	public function compute_confidence( array $source_status, string $target_type = 'domain', string $coverage_tier = 'verified' ): int {
 		$weights = match ( $target_type ) {
 			'ip'    => [ 'ip_network' => 20, 'reverse_dns' => 10, 'geo' => 25, 'threat' => 25, 'abuseipdb' => 20 ],
 			'hash'  => [ 'threat' => 70, 'virustotal' => 30 ],
@@ -1801,19 +1952,29 @@ class PDX_Intelligence {
 			default => [ 'rdap' => 25, 'dns' => 25, 'ssl' => 25, 'threat' => 25 ],
 		};
 
-		$total = 0;
+		$required = $this->required_sources_for( $target_type );
+		$total    = 0;
 		foreach ( $weights as $key => $weight ) {
 			$state = $source_status[ $key ]['state'] ?? 'error';
 			if ( 'ok' === $state ) {
 				$total += $weight;
 			} elseif ( 'partial' === $state ) {
 				$total += (int) round( $weight * 0.5 );
-			} elseif ( 'skipped' === $state ) {
-				$total += (int) round( $weight * 0.25 );
+			} elseif ( 'skipped' === $state && ! in_array( $key, $required, true ) ) {
+				$total += (int) round( $weight * 0.15 );
 			}
 		}
 
-		return min( 100, max( 0, $total ) );
+		$total = min( 100, max( 0, $total ) );
+
+		if ( 'incomplete' === $coverage_tier ) {
+			return min( $total, 20 );
+		}
+		if ( 'partial' === $coverage_tier ) {
+			return min( $total, 85 );
+		}
+
+		return $total;
 	}
 
 	/**
@@ -1885,6 +2046,15 @@ class PDX_Intelligence {
 
 		if ( ( $status['rdap']['state'] ?? '' ) === 'error' && 'ip' !== ( $report['target_type'] ?? '' ) ) {
 			$recs[] = 'WHOIS/RDAP lookup failed; registration ownership could not be verified.';
+		} elseif ( ( $status['rdap']['state'] ?? '' ) === 'skipped' && 'ip' !== ( $report['target_type'] ?? '' ) ) {
+			$recs[] = 'RDAP is unavailable for this TLD — registration age and ownership were not verified.';
+		}
+
+		$coverage = (string) ( $report['report_quality']['coverage_tier'] ?? 'verified' );
+		if ( 'incomplete' === $coverage ) {
+			$recs[] = 'Do not treat this assessment as verified — required intelligence sources did not all respond.';
+		} elseif ( 'partial' === $coverage ) {
+			$recs[] = 'Partial assessment — review provider status below; some optional sources were unavailable.';
 		}
 		if ( ( $status['ip_network']['state'] ?? '' ) === 'error' && 'ip' === ( $report['target_type'] ?? '' ) ) {
 			$recs[] = 'IP network registration lookup failed; ASN/CIDR ownership could not be verified.';

@@ -801,6 +801,11 @@
       var hibp      = src.hibp || {};
       var srcStatus = data.source_status || {};
       var banner    = scanBannerMeta(data, displayTarget, 'Analysis complete');
+      var unverified = isReportUnverified(data);
+      var partial    = isReportPartial(data);
+      var displayScore = unverified ? (risk.indicative_score != null ? risk.indicative_score : 0) : score;
+      var scoreLabel = unverified ? (risk.indicative_score != null && risk.indicative_score !== score ? 'Indic.' : 'N/A') : 'Risk';
+      if (unverified && risk.indicative_score == null) displayScore = 0;
       var anomalies = data.anomalies  || [];
       var behavioral= data.behavioral || [];
       var confidence= data.confidence != null ? data.confidence : (risk.confidence || 0);
@@ -845,26 +850,32 @@
 
       /* ── Risk header with score ring ── */
       var circumference = 2 * Math.PI * 26; // r=26
-      var dashOffset = circumference - (score / 100) * circumference;
-      var ringStroke = verdict === 'clean' ? '#ffffff' : verdict === 'low' ? '#7e7e7e' : verdict === 'medium' ? '#7e7e7e' : verdict === 'insufficient_data' ? '#888888' : '#888888';
-      html += '<div class="pdx-risk-header">' +
+      var dashOffset = unverified && risk.indicative_score == null
+        ? circumference
+        : circumference - (displayScore / 100) * circumference;
+      var ringStroke = unverified ? '#888888' : (verdict === 'clean' ? '#ffffff' : verdict === 'low' ? '#7e7e7e' : verdict === 'medium' ? '#7e7e7e' : verdict === 'insufficient_data' ? '#888888' : '#888888');
+      html += '<div class="pdx-risk-header' + (unverified ? ' pdx-risk-header--unverified' : '') + (partial ? ' pdx-risk-header--partial' : '') + '">' +
         '<div class="pdx-risk-ring">' +
           '<svg viewBox="0 0 64 64"><circle class="pdx-risk-ring-track" cx="32" cy="32" r="26"/>' +
           '<circle class="pdx-risk-ring-fill" cx="32" cy="32" r="26" stroke="' + ringStroke + '" stroke-dasharray="' + circumference.toFixed(1) + '" stroke-dashoffset="' + dashOffset.toFixed(1) + '"/></svg>' +
-          '<div class="pdx-risk-ring-label"><div class="pdx-risk-ring-num">' + score + '</div><div class="pdx-risk-ring-text">Risk</div></div>' +
+          '<div class="pdx-risk-ring-label"><div class="pdx-risk-ring-num">' + (unverified && risk.indicative_score == null ? '—' : displayScore) + '</div><div class="pdx-risk-ring-text">' + scoreLabel + '</div></div>' +
         '</div>' +
         '<div class="pdx-risk-meta">' +
           '<div class="pdx-risk-domain">' + escHtml(displayTarget) + '</div>' +
           '<div style="margin-top:4px"><span class="pdx-tag" style="background:' + ringStroke + '22;color:' + ringStroke + ';border-color:' + ringStroke + '44">' + verdictLabel + '</span></div>' +
+          (unverified ? '<div style="margin-top:6px;font-size:11px;color:var(--pdx-lo)">Not a verified assessment</div>' : (partial ? '<div style="margin-top:6px;font-size:11px;color:var(--pdx-yellow)">Partial assessment</div>' : '')) +
           (data.scan_id ? '<div class="pdx-risk-scan-id" style="margin-top:6px">Scan ID: ' + escHtml(data.scan_id) + '</div>' : '') +
         '</div>' +
         '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn">Export</button>' +
       '</div>';
 
+      html += renderCoveragePanel(data, srcStatus);
+
       /* ── Confidence bar ── */
-      if (confidence > 0) {
+      if (confidence > 0 || unverified) {
+        var confNote = unverified ? ' (incomplete)' : (partial ? ' (partial)' : '');
         html += '<div class="pdx-confidence-bar">' +
-          '<span class="pdx-confidence-label">Confidence</span>' +
+          '<span class="pdx-confidence-label">Confidence' + confNote + '</span>' +
           '<div class="pdx-confidence-track"><div class="pdx-confidence-fill" style="width:' + confidence + '%"></div></div>' +
           '<span class="pdx-confidence-pct">' + confidence + '%</span>' +
         '</div>';
@@ -1260,6 +1271,10 @@
         };
       }
       var banner = scanBannerMeta(data, displayTarget, 'OSINT investigation complete');
+      var unverified = isReportUnverified(data);
+      var partial = isReportPartial(data);
+      var displayScore = unverified ? (risk.indicative_score != null ? risk.indicative_score : 0) : (risk.score != null ? risk.score : 0);
+      var scoreLabel = unverified ? (risk.indicative_score != null ? 'Indic.' : 'N/A') : 'Risk';
 
       var scoreColor = risk.verdict === 'clean' ? 'var(--pdx-green)' : risk.verdict === 'low' ? '#7e7e7e' : risk.verdict === 'medium' ? 'var(--pdx-yellow)' : risk.verdict === 'insufficient_data' ? 'var(--pdx-lo)' : 'var(--pdx-red)';
       var html = '<div class="pdx-result">';
@@ -1272,27 +1287,33 @@
       '</div>';
 
       /* ── Risk score ── */
-      if (risk.score !== undefined) {
+      if (risk.score !== undefined || risk.indicative_score != null || unverified) {
         var circumference = 2 * Math.PI * 26;
-        var dashOffset = circumference - (risk.score / 100) * circumference;
-        var ringStroke = risk.verdict === 'clean' ? '#ffffff' : risk.verdict === 'low' ? '#7e7e7e' : risk.verdict === 'medium' ? '#7e7e7e' : risk.verdict === 'insufficient_data' ? '#888888' : '#888888';
-        html += '<div class="pdx-risk-header">' +
+        var dashOffset = unverified && risk.indicative_score == null
+          ? circumference
+          : circumference - (displayScore / 100) * circumference;
+        var ringStroke = unverified ? '#888888' : (risk.verdict === 'clean' ? '#ffffff' : risk.verdict === 'low' ? '#7e7e7e' : risk.verdict === 'medium' ? '#7e7e7e' : risk.verdict === 'insufficient_data' ? '#888888' : '#888888');
+        html += '<div class="pdx-risk-header' + (unverified ? ' pdx-risk-header--unverified' : '') + '">' +
           '<div class="pdx-risk-ring">' +
             '<svg viewBox="0 0 64 64"><circle class="pdx-risk-ring-track" cx="32" cy="32" r="26"/>' +
             '<circle class="pdx-risk-ring-fill" cx="32" cy="32" r="26" stroke="' + ringStroke + '" stroke-dasharray="' + circumference.toFixed(1) + '" stroke-dashoffset="' + dashOffset.toFixed(1) + '"/></svg>' +
-            '<div class="pdx-risk-ring-label"><div class="pdx-risk-ring-num">' + risk.score + '</div><div class="pdx-risk-ring-text">Risk</div></div>' +
+            '<div class="pdx-risk-ring-label"><div class="pdx-risk-ring-num">' + (unverified && risk.indicative_score == null ? '—' : displayScore) + '</div><div class="pdx-risk-ring-text">' + scoreLabel + '</div></div>' +
           '</div>' +
           '<div class="pdx-risk-meta">' +
             '<div class="pdx-risk-domain">' + escHtml(displayTarget) + '</div>' +
             '<div style="margin-top:4px"><span class="pdx-tag" style="background:' + ringStroke + '22;color:' + ringStroke + '">' + escHtml(risk.label || risk.verdict || 'Unknown') + '</span></div>' +
+            (unverified ? '<div style="margin-top:6px;font-size:11px;color:var(--pdx-lo)">Not a verified assessment</div>' : (partial ? '<div style="margin-top:6px;font-size:11px;color:var(--pdx-yellow)">Partial assessment</div>' : '')) +
           '</div>' +
           (data.paid ? '<button class="pdx-btn-ghost pdx-btn-sm pdx-export-btn">Export</button>' : '') +
         '</div>';
       }
 
+      html += renderCoveragePanel(data, srcStatus);
+
       /* ── Confidence ── */
-      if (confidence) {
-        html += '<div class="pdx-confidence-bar"><span class="pdx-confidence-label">Confidence</span>' +
+      if (confidence || unverified) {
+        var confNote = unverified ? ' (incomplete)' : (partial ? ' (partial)' : '');
+        html += '<div class="pdx-confidence-bar"><span class="pdx-confidence-label">Confidence' + confNote + '</span>' +
           '<div class="pdx-confidence-track"><div class="pdx-confidence-fill" style="width:' + confidence + '%"></div></div>' +
           '<span class="pdx-confidence-pct">' + confidence + '%</span></div>';
       }
@@ -3520,22 +3541,78 @@
       return 'var(--pdx-red)';
     }
 
-    function isReportUnreliable(data) {
-      var risk = (data && data.risk) || {};
+    function getReportCoverage(data) {
       var q = (data && data.report_quality) || {};
+      return q.coverage_tier || (q.reliable === false ? 'partial' : 'verified');
+    }
+
+    function isReportUnverified(data) {
+      var risk = (data && data.risk) || {};
       if (risk.verdict === 'insufficient_data') return true;
-      if (q.reliable === false) return true;
-      if (q.failed_sources && q.failed_sources.length) return true;
-      return false;
+      return getReportCoverage(data) === 'incomplete';
+    }
+
+    function isReportPartial(data) {
+      return getReportCoverage(data) === 'partial';
+    }
+
+    function isReportUnreliable(data) {
+      return isReportUnverified(data) || isReportPartial(data);
     }
 
     function scanBannerMeta(data, displayTarget, completePrefix) {
-      var unreliable = isReportUnreliable(data);
+      var unverified = isReportUnverified(data);
+      var partial = isReportPartial(data);
       var q = (data && data.report_quality) || {};
-      var msg = unreliable
-        ? (q.message || 'Insufficient or failed intelligence — do not treat as verified safe') + ' — ' + displayTarget
-        : (completePrefix || 'Analysis complete') + ' — ' + displayTarget;
-      return { warn: unreliable, message: msg };
+      var msg;
+      if (unverified) {
+        msg = q.message || 'Insufficient or failed intelligence — do not treat as verified safe';
+      } else if (partial) {
+        msg = q.message || 'Partial intelligence — core sources verified; review provider status below';
+      } else {
+        msg = (completePrefix || 'Analysis complete') + ' — verified assessment';
+      }
+      return { warn: unverified || partial, message: msg + ' — ' + displayTarget, tier: getReportCoverage(data) };
+    }
+
+    function renderCoveragePanel(data, srcStatus) {
+      var q = (data && data.report_quality) || {};
+      var risk = (data && data.risk) || {};
+      var tier = getReportCoverage(data);
+      var tierLabel = tier === 'verified' ? 'Verified' : tier === 'partial' ? 'Partial' : 'Incomplete';
+      var tierColor = tier === 'verified' ? 'var(--pdx-green)' : tier === 'partial' ? 'var(--pdx-yellow)' : 'var(--pdx-red)';
+      var html = '<div class="pdx-section pdx-coverage-panel">' +
+        '<div class="pdx-section-title">Assessment Coverage <span class="pdx-tag" style="margin-left:8px;background:' + tierColor + '22;color:' + tierColor + ';border-color:' + tierColor + '44">' + escHtml(tierLabel) + '</span></div>' +
+        '<p class="pdx-field-hint" style="margin:0 0 10px">' + escHtml(q.message || '') + '</p>';
+
+      var required = q.required_sources || {};
+      Object.keys(required).forEach(function(key) {
+        html += '<div class="pdx-source-row">' +
+          '<div class="pdx-source-dot" style="background:' + sourceDotColor(mapSourceState({ state: required[key] })) + '"></div>' +
+          '<span class="pdx-source-name">' + escHtml(key) + ' (required)</span>' +
+          '<span class="pdx-source-status">' + escHtml(required[key]) + '</span></div>';
+      });
+
+      var contributors = risk.contributing_sources || q.contributing_sources || [];
+      if (contributors.length) {
+        html += '<div class="pdx-mt-sm" style="font-size:11px;color:var(--pdx-mid,#8b949e)">Scored from verified sources: ' + escHtml(contributors.join(', ')) + '</div>';
+      } else if (isReportUnverified(data)) {
+        html += '<div class="pdx-mt-sm" style="font-size:11px;color:var(--pdx-mid,#8b949e)">No verified sources contributed to the risk score.</div>';
+      }
+
+      if (risk.indicative_score != null && isReportUnverified(data) && risk.indicative_score !== risk.score) {
+        html += '<div class="pdx-mt-sm" style="font-size:11px;color:var(--pdx-lo)">Indicative score (not verified): ' + escHtml(String(risk.indicative_score)) + '/100</div>';
+      }
+
+      (q.failed_optional || []).forEach(function(key) {
+        var note = formatSourceStatusNote(srcStatus[key]) || 'Unavailable';
+        html += '<div class="pdx-source-row"><div class="pdx-source-dot" style="background:var(--pdx-red)"></div>' +
+          '<span class="pdx-source-name">' + escHtml(key) + ' (optional)</span>' +
+          '<span class="pdx-source-status">' + escHtml(note) + '</span></div>';
+      });
+
+      html += '</div>';
+      return html;
     }
 
     function formatThreatBool(val, checked) {
@@ -3659,6 +3736,9 @@
       var rdap      = (data.sources && data.sources.rdap) || {};
       var ssl       = (data.sources && data.sources.ssl)  || {};
       var threat    = (data.sources && data.sources.threat) || {};
+      var unverified = isReportUnverified(data);
+      var partial = isReportPartial(data);
+      var contributors = (risk.contributing_sources || []).join(', ');
 
       var verdictText = verdict === 'clean' ? 'no significant threats detected'
         : verdict === 'low'    ? 'low-level risk indicators present'
@@ -3667,6 +3747,22 @@
         : verdict === 'critical' ? 'critical risk indicators detected'
         : verdict === 'insufficient_data' ? 'insufficient intelligence was collected for a reliable assessment'
         : 'risk assessment completed with limited source coverage';
+
+      if (unverified) {
+        var parts = ['Analysis of ' + target + ' could not be fully verified — ' + verdictText + '.'];
+        if (risk.indicative_score != null && risk.indicative_score !== score) {
+          parts.push('Indicative score (not verified): ' + risk.indicative_score + '/100.');
+        }
+        parts.push('Do not treat this target as verified safe until required sources respond.');
+        return parts.join(' ');
+      }
+
+      if (partial) {
+        var pParts = ['Partial intelligence analysis of ' + target + ' — ' + verdictText + '.'];
+        if (contributors) pParts.push('Verified score based on: ' + contributors + '.');
+        pParts.push('Overall risk score: ' + score + '/100.');
+        return pParts.join(' ');
+      }
 
       if (type === 'email') {
         var breached = (data.sources && data.sources.hibp && data.sources.hibp.breached);
@@ -3753,7 +3849,8 @@
       var recs = [];
       var risk   = data.risk   || {};
       var quality = data.report_quality || {};
-      var reliable = quality.reliable !== false && risk.verdict !== 'insufficient_data';
+      var coverage = quality.coverage_tier || 'verified';
+      var reliable = coverage === 'verified' && risk.verdict !== 'insufficient_data';
       var rdap   = (data.sources && data.sources.rdap) || {};
       var ssl    = (data.sources && data.sources.ssl)  || {};
       var dns    = (data.sources && data.sources.dns)  || {};

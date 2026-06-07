@@ -58,12 +58,25 @@ class PDX_Scan_Orchestrator {
 			$report['forensics'],
 			$target_type
 		);
-		$report['confidence'] = $this->intel->compute_confidence( $report['source_status'], $target_type );
 		$report['report_quality'] = $this->intel->assess_report_quality(
 			$report['source_status'],
 			$target_type,
 			$report['risk']
 		);
+		$report['confidence'] = $this->intel->compute_confidence(
+			$report['source_status'],
+			$target_type,
+			(string) ( $report['report_quality']['coverage_tier'] ?? 'verified' )
+		);
+
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log(
+				'[PDX] orchestrator ' . ( $report['target'] ?? $raw_target )
+				. ' tier=' . ( $report['report_quality']['coverage_tier'] ?? '?' )
+				. ' score=' . ( $report['risk']['score'] ?? 0 )
+				. ' contributing=' . wp_json_encode( $report['risk']['contributing_sources'] ?? [] )
+			);
+		}
 
 		$narrative = $this->intel->build_narrative( $report['target'], $report );
 		$report['ai_summary']      = $narrative['summary'];

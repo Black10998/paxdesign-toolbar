@@ -215,16 +215,26 @@ class PDX_Integration_Audit {
 			'dns'    => [ 'state' => 'error' ],
 			'threat' => [ 'state' => 'error' ],
 		];
-		$verdict = $method->invoke( $this->intel, 5, $failed_sources, [], 'domain' );
+		$verdict = $method->invoke( $this->intel, 35, $failed_sources, 'domain' );
+
+		// Optional SSL factor must not bypass failed required sources.
+		$ssl_bypass_sources = [
+			'dns'    => [ 'state' => 'error' ],
+			'threat' => [ 'state' => 'error' ],
+			'ssl'    => [ 'state' => 'ok' ],
+		];
+		$bypass_verdict = $method->invoke( $this->intel, 35, $ssl_bypass_sources, 'domain' );
+
+		$ok = 'insufficient_data' === $verdict && 'insufficient_data' === $bypass_verdict;
 
 		$this->record(
 			'Verdict integrity',
-			'insufficient_data' === $verdict ? 'ok' : 'error',
-			'insufficient_data' === $verdict
-				? 'Failed sources never produce Clean/Low Risk verdicts.'
-				: 'Verdict was "' . $verdict . '" with failed required sources.',
+			$ok ? 'ok' : 'error',
+			$ok
+				? 'Failed required sources never produce scored verdicts (SSL factor bypass blocked).'
+				: 'Verdict was "' . $bypass_verdict . '" with failed required sources.',
 			$started,
-			[ 'sample_verdict' => $verdict ]
+			[ 'sample_verdict' => $verdict, 'bypass_verdict' => $bypass_verdict ]
 		);
 	}
 
@@ -233,12 +243,12 @@ class PDX_Integration_Audit {
 		$ref     = new ReflectionClass( $this->intel );
 		$method  = $ref->getMethod( 'fetch_rdap_resolved' );
 		$method->setAccessible( true );
-		$out     = $method->invoke( $this->intel, 'example.com' );
+		$out     = $method->invoke( $this->intel, 'paxdesign.at' );
 		$state   = $out['status']['state'] ?? 'error';
 		$this->record(
 			'RDAP domain',
-			'ok' === $state ? 'ok' : ( 'partial' === $state ? 'partial' : 'error' ),
-			(string) ( $out['status']['message'] ?? 'No message' ) . ' (RDAP replaces legacy WHOIS for domains.)',
+			in_array( $state, [ 'ok', 'skipped' ], true ) ? ( 'ok' === $state ? 'ok' : 'partial' ) : 'error',
+			(string) ( $out['status']['message'] ?? 'No message' ) . ' (sample: paxdesign.at — .at TLD RDAP bootstrap test.)',
 			$started,
 			[ 'sample' => $out['data']['handle'] ?? null ]
 		);

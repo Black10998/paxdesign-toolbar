@@ -17,9 +17,9 @@ class PDX_Threat_Feeds {
 		$feeds  = [
 			self::feed_row( 'AlienVault OTX', 'otx', 'https://otx.alienvault.com', self::probe_otx( $target ) ),
 			self::feed_row( 'URLhaus (Abuse.ch)', 'urlhaus', 'https://urlhaus.abuse.ch', self::probe_urlhaus( $target ) ),
-			self::feed_row( 'NVD / CIRCL CVE', 'cve', 'https://nvd.nist.gov', [ 'state' => 'ok', 'message' => 'CVE API available via Threat Intel tab.' ] ),
-			self::feed_row( 'Google DNS (DoH)', 'dns', 'https://dns.google', [ 'state' => 'ok', 'message' => 'Passive DNS resolution active.' ] ),
-			self::feed_row( 'RDAP / WHOIS', 'rdap', 'https://rdap.org', [ 'state' => 'ok', 'message' => 'Registration intelligence active.' ] ),
+			self::feed_row( 'NVD / CIRCL CVE', 'cve', 'https://nvd.nist.gov', self::probe_cve() ),
+			self::feed_row( 'Google DNS (DoH)', 'dns', 'https://dns.google', self::probe_dns() ),
+			self::feed_row( 'RDAP / WHOIS', 'rdap', 'https://rdap.org', self::probe_rdap( $target ) ),
 		];
 
 		$ok = 0;
@@ -171,5 +171,69 @@ class PDX_Threat_Feeds {
 			return '';
 		}
 		return PDX_Target::scan_host( $r );
+	}
+
+	/**
+	 * @return array{state:string,message?:string}
+	 */
+	private static function probe_cve(): array {
+		if ( ! function_exists( 'pdx_container' ) ) {
+			return [ 'state' => 'partial', 'message' => 'CVE engine not loaded.' ];
+		}
+		$result = pdx_container()->intel->fetch_cve( 'CVE-2021-44228' );
+		if ( ! empty( $result['cves'] ) ) {
+			return [ 'state' => 'ok', 'message' => 'NVD/CIRCL responded (' . ( $result['source'] ?? 'unknown' ) . ').' ];
+		}
+		return [
+			'state'   => 'partial',
+			'message' => (string) ( $result['error'] ?? 'CVE lookup returned no data.' ),
+		];
+	}
+
+	/**
+	 * @return array{state:string,message?:string}
+	 */
+	private static function probe_dns(): array {
+		$http = PDX_Http::get(
+			'https://cloudflare-dns.com/dns-query?name=example.com&type=A',
+			[ 'timeout' => 8, 'headers' => [ 'Accept' => 'application/dns-json' ] ],
+			'dns_probe'
+		);
+		if ( is_wp_error( $http['response'] ) ) {
+			return [ 'state' => 'error', 'message' => 'DNS over HTTPS unreachable.' ];
+		}
+		$code = (int) wp_remote_retrieve_response_code( $http['response'] );
+		if ( 200 !== $code ) {
+			return [ 'state' => 'partial', 'message' => 'DoH HTTP ' . $code ];
+		}
+		return [ 'state' => 'ok', 'message' => 'Passive DNS resolution active.' ];
+	}
+
+	/**
+	 * @return array{state:string,message?:string}
+	 */
+	private static function probe_rdap( string $target ): array {
+		if ( ! function_exists( 'pdx_container' ) ) {
+			return [ 'state' => 'partial', 'message' => 'RDAP engine not loaded.' ];
+		}
+		$sample = 'example.com';
+		if ( '' !== $target ) {
+			$resolved = PDX_Target::resolve( $target );
+			if ( ! is_wp_error( $resolved ) ) {
+				$host = PDX_Target::scan_host( $resolved );
+				if ( '' !== $host ) {
+					$sample = $host;
+				}
+			}
+		}
+		$out   = pdx_container()->intel->fetch_rdap_resolved( $sample );
+		$state = $out['status']['state'] ?? 'error';
+		if ( 'ok' === $state ) {
+			return [ 'state' => 'ok', 'message' => 'Registration data retrieved for ' . $sample . '.' ];
+		}
+		if ( 'skipped' === $state ) {
+			return [ 'state' => 'partial', 'message' => (string) ( $out['status']['message'] ?? 'RDAP unavailable for this TLD.' ) ];
+		}
+		return [ 'state' => 'error', 'message' => (string) ( $out['status']['message'] ?? 'RDAP lookup failed.' ) ];
 	}
 }

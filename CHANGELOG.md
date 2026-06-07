@@ -1,5 +1,33 @@
 ﻿# Changelog
 
+## 8.10.0 — 2026-06-07
+
+**Intelligence reliability — verified vs partial vs incomplete assessments**
+
+### Scoring & verdict integrity
+- Removed factor bypass that allowed SSL/forensics data to produce scored verdicts when required sources (DNS, threat feeds) failed.
+- Risk factors only count when their provider source status is `ok` or `partial`.
+- `insufficient_data` verdict zeroes the verified risk score; optional `indicative_score` preserved for transparency.
+- Threat feeds must respond before any scored verdict; clean/low require threat status `ok`.
+- New `report_quality.coverage_tier`: `verified` | `partial` | `incomplete` with accurate messages.
+- `contributing_sources` lists which providers were used in the final score.
+- Confidence capped when coverage is partial or incomplete.
+
+### RDAP / .at TLD
+- `.at` / `co.at` / `or.at` domains no longer error when rdap.org returns 404 (not in IANA bootstrap).
+- Direct registry fallback endpoints (nic.at, denic, nic.fr, nominet).
+- Relaxed RDAP JSON validation for registry-specific response shapes.
+
+### UI
+- Trust Check and OSINT show Assessment Coverage panel with required source states and score contributors.
+- Incomplete assessments display "—" / indicative score instead of a verified risk ring.
+- Intelligence summary and recommendations respect coverage tier.
+
+### Threat Intel feeds
+- Feed sync probes NVD/CIRCL, DoH DNS, and RDAP live instead of hardcoded "active" status.
+
+**Install:** `releases/paxdesign-toolbar-8.10.0.zip` — tag `v8.10.0`
+
 ## 8.9.4 — 2026-06-07
 
 **Integration Audit — GeoIP and SSL Labs provider fixes**
