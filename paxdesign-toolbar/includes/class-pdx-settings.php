@@ -116,6 +116,13 @@ class PDX_Settings {
 
 	/** Get a single setting by dot-notation key */
 	public function get( string $key, $fallback = null ) {
+		if ( str_starts_with( $key, 'api_keys.' ) && is_user_logged_in() && class_exists( 'PDX_Account', false ) ) {
+			$provider = substr( $key, 9 );
+			$user_key = PDX_Account::get_user_api_key( get_current_user_id(), $provider );
+			if ( '' !== $user_key ) {
+				return $user_key;
+			}
+		}
 		$all  = $this->all();
 		$keys = explode( '.', $key );
 		$val  = $all;

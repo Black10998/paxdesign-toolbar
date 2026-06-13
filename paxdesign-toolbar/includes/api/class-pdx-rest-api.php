@@ -335,6 +335,20 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/threat/cve',     [ 'methods' => 'GET', 'callback' => [ $this, 'threat_cve'     ], 'permission_callback' => $pub, 'args' => [ 'q' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
 		register_rest_route( $ns, '/threat/surface', [ 'methods' => 'GET', 'callback' => [ $this, 'threat_surface' ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
 		register_rest_route( $ns, '/threat/feeds',   [ 'methods' => 'GET', 'callback' => [ $this, 'threat_feeds'   ], 'permission_callback' => $pub, 'args' => [ 'domain' => [ 'required' => false, 'sanitize_callback' => 'sanitize_text_field' ] ] ] );
+
+		// Authentication & account
+		register_rest_route( $ns, '/auth/register',          [ 'methods' => 'POST', 'callback' => [ $this, 'auth_register' ],          'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/auth/login',             [ 'methods' => 'POST', 'callback' => [ $this, 'auth_login' ],             'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/auth/logout',            [ 'methods' => 'POST', 'callback' => [ $this, 'auth_logout' ],            'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/auth/me',                [ 'methods' => 'GET',  'callback' => [ $this, 'auth_me' ],                'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/auth/forgot-password',   [ 'methods' => 'POST', 'callback' => [ $this, 'auth_forgot_password' ],   'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/auth/reset-password',    [ 'methods' => 'POST', 'callback' => [ $this, 'auth_reset_password' ],    'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/auth/resend-verification',[ 'methods' => 'POST', 'callback' => [ $this, 'auth_resend_verification' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/auth/verify',            [ 'methods' => 'POST', 'callback' => [ $this, 'auth_verify' ],            'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/account/dashboard',      [ 'methods' => 'GET',  'callback' => [ $this, 'account_dashboard' ],      'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/account/profile',        [ 'methods' => 'POST', 'callback' => [ $this, 'account_update_profile' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/account/api-keys',       [ 'methods' => 'POST', 'callback' => [ $this, 'account_update_api_key' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/account/api-keys/validate', [ 'methods' => 'POST', 'callback' => [ $this, 'account_validate_api_key' ], 'permission_callback' => $pub ] );
 	}
 
 	/**
@@ -1835,5 +1849,140 @@ class PDX_REST_API {
 		$this->track_usage( 'scans_per_day', 'threat' );
 
 		return new WP_REST_Response( $result, $this->upstream_error_status( $result ) );
+	}
+
+	/* ── Authentication & account ─────────────────────────── */
+
+	private function auth_rate_limit_response( string $action ): ?WP_REST_Response {
+		$result = PDX_Auth::auth_rate_limit( $action );
+		if ( ! $result['allowed'] ) {
+			return new WP_REST_Response( [
+				'success'     => false,
+				'error'       => 'rate_limited',
+				'message'     => 'Too many attempts. Please try again later.',
+				'retry_after' => $result['retry_after'],
+			], 429 );
+		}
+		return null;
+	}
+
+	public function auth_register( WP_REST_Request $req ): WP_REST_Response {
+		$rl = $this->auth_rate_limit_response( 'register' );
+		if ( $rl ) {
+			return $rl;
+		}
+		$result = PDX_Auth::register(
+			sanitize_email( (string) $req->get_param( 'email' ) ),
+			(string) $req->get_param( 'password' ),
+			sanitize_text_field( (string) $req->get_param( 'name' ) )
+		);
+		return new WP_REST_Response( $result, $result['success'] ? 201 : 400 );
+	}
+
+	public function auth_login( WP_REST_Request $req ): WP_REST_Response {
+		$rl = $this->auth_rate_limit_response( 'login' );
+		if ( $rl ) {
+			return $rl;
+		}
+		$result = PDX_Auth::login(
+			sanitize_email( (string) $req->get_param( 'email' ) ),
+			(string) $req->get_param( 'password' ),
+			(bool) $req->get_param( 'remember' )
+		);
+		return new WP_REST_Response( $result, $result['success'] ? 200 : 401 );
+	}
+
+	public function auth_logout(): WP_REST_Response {
+		return new WP_REST_Response( PDX_Auth::logout(), 200 );
+	}
+
+	public function auth_me(): WP_REST_Response {
+		return new WP_REST_Response( PDX_Auth::user_payload(), 200 );
+	}
+
+	public function auth_forgot_password( WP_REST_Request $req ): WP_REST_Response {
+		$rl = $this->auth_rate_limit_response( 'forgot' );
+		if ( $rl ) {
+			return $rl;
+		}
+		$result = PDX_Auth::forgot_password( sanitize_email( (string) $req->get_param( 'email' ) ) );
+		return new WP_REST_Response( $result, 200 );
+	}
+
+	public function auth_reset_password( WP_REST_Request $req ): WP_REST_Response {
+		$result = PDX_Auth::reset_password(
+			sanitize_text_field( (string) $req->get_param( 'token' ) ),
+			(int) $req->get_param( 'uid' ),
+			(string) $req->get_param( 'password' )
+		);
+		return new WP_REST_Response( $result, $result['success'] ? 200 : 400 );
+	}
+
+	public function auth_resend_verification(): WP_REST_Response {
+		$rl = $this->auth_rate_limit_response( 'resend' );
+		if ( $rl ) {
+			return $rl;
+		}
+		$deny = $this->require_logged_in();
+		if ( $deny ) {
+			return $deny;
+		}
+		$result = PDX_Auth::resend_verification();
+		return new WP_REST_Response( $result, $result['success'] ? 200 : 400 );
+	}
+
+	public function auth_verify( WP_REST_Request $req ): WP_REST_Response {
+		$result = PDX_Auth::verify_email(
+			(int) $req->get_param( 'uid' ),
+			sanitize_text_field( (string) $req->get_param( 'token' ) )
+		);
+		return new WP_REST_Response( $result, $result['success'] ? 200 : 400 );
+	}
+
+	public function account_dashboard(): WP_REST_Response {
+		$deny = $this->require_logged_in();
+		if ( $deny ) {
+			return $deny;
+		}
+		return new WP_REST_Response( PDX_Account::dashboard( get_current_user_id() ), 200 );
+	}
+
+	public function account_update_profile( WP_REST_Request $req ): WP_REST_Response {
+		$deny = $this->require_logged_in();
+		if ( $deny ) {
+			return $deny;
+		}
+		$result = PDX_Account::update_profile( get_current_user_id(), [
+			'display_name'    => $req->get_param( 'display_name' ),
+			'email'           => $req->get_param( 'email' ),
+			'current_password'=> $req->get_param( 'current_password' ),
+			'new_password'    => $req->get_param( 'new_password' ),
+		] );
+		return new WP_REST_Response( $result, $result['success'] ? 200 : 400 );
+	}
+
+	public function account_update_api_key( WP_REST_Request $req ): WP_REST_Response {
+		$deny = $this->require_logged_in();
+		if ( $deny ) {
+			return $deny;
+		}
+		$result = PDX_Account::update_api_key(
+			get_current_user_id(),
+			sanitize_key( (string) $req->get_param( 'provider' ) ),
+			sanitize_text_field( (string) $req->get_param( 'key' ) )
+		);
+		return new WP_REST_Response( $result, $result['success'] ? 200 : 400 );
+	}
+
+	public function account_validate_api_key( WP_REST_Request $req ): WP_REST_Response {
+		$deny = $this->require_logged_in();
+		if ( $deny ) {
+			return $deny;
+		}
+		$result = PDX_Account::validate_api_key(
+			get_current_user_id(),
+			sanitize_key( (string) $req->get_param( 'provider' ) )
+		);
+		return new WP_REST_Response( $result, 200 );
 	}
 }

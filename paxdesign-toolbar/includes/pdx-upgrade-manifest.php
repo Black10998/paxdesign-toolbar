@@ -21,6 +21,8 @@ return [
 		'includes/class-pdx-flow-store.php',
 		'includes/class-pdx-workflow-engine.php',
 		'includes/class-pdx-browser-automation.php',
+		'includes/class-pdx-auth.php',
+		'includes/class-pdx-account.php',
 	],
 	'legacy_remove'    => [],
 ];

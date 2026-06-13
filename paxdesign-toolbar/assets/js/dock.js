@@ -153,7 +153,7 @@
     /* ── Module registry + panel theme (must exist before openPanel) ── */
     var PDX_KNOWN_MODULES = [
       'trust', 'osint', 'threat', 'personas', 'builder', 'pipeline', 'automation',
-      'connectors', 'create', 'investigation', 'graph', 'memory', 'team', 'workspace', 'billing'
+      'connectors', 'create', 'investigation', 'graph', 'memory', 'team', 'workspace', 'billing', 'account'
     ];
 
     var PDX_MODULE_ALIASES = {
@@ -276,6 +276,18 @@
 
     function openPanel(moduleId) {
       var mid = normalizeModuleId(moduleId);
+
+      /* Access control — redirect to login/verify gate for protected modules */
+      if (mid !== 'account' && window.PDXAuth) {
+        if (window.PDXAuth.moduleRequiresAuth(mid) && !window.PDXAuth.isLoggedIn()) {
+          window.PDXAuth.openLogin(mid);
+          return;
+        }
+        if (window.PDXAuth.moduleRequiresAuth(mid) && window.PDXAuth.isLoggedIn() && !window.PDXAuth.isVerified()) {
+          /* Allow panel open — renderPanel shows verify gate */
+        }
+      }
+
       var renderGen = ++_panelRenderGen;
       if (state.commandPaletteOpen) closeCommandPalette();
       state.activeModule = mid;
@@ -625,6 +637,12 @@
       panelInner = resolvePanelInner();
       if (!panelInner) return;
       setPanelModuleTheme(mid);
+
+      if (mid === 'account') {
+        renderAccount();
+        return;
+      }
+
       var mod = (C.modules && C.modules[mid]) || null;
       if (!mod) { panelInner.innerHTML = '<div class="pdx-empty">Module not found.</div>'; return; }
 
@@ -641,6 +659,8 @@
       if (access.currency)          liveOverrides.currency    = access.currency;
       if (access.description)       liveOverrides.description = access.description;
       if (Object.keys(liveOverrides).length) mod = Object.assign({}, mod, liveOverrides);
+
+      if (mid !== 'account' && renderAuthGateIfNeeded(mid, mod)) return;
 
       switch (mid) {
         case 'trust':          renderTrust(mod, access); break;
@@ -661,6 +681,41 @@
         case 'memory':         renderMemory(mod, access, locked); break;
         default:               panelInner.innerHTML = '<div class="pdx-empty">Coming soon.</div>';
       }
+    }
+
+    function renderAccount() {
+      panelInner.innerHTML =
+        '<div class="pdx-ph pdx-ph--account">' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title"><span>Account</span></div>' +
+            '<div class="pdx-ph-desc">Manage your profile, API keys, integrations, and subscription.</div>' +
+          '</div>' +
+          '<div class="pdx-ph-body" id="pdx-account-body"></div>' +
+        '</div>';
+      var body = document.getElementById('pdx-account-body');
+      if (window.PDXAuth && body) {
+        if (!window.PDXAuth.isLoggedIn()) {
+          window.PDXAuth.renderAuthGate(body, 'account', 'login');
+        } else {
+          window.PDXAuth.renderAccountDashboard(body);
+        }
+      }
+    }
+
+    function renderAuthGateIfNeeded(mid, mod) {
+      if (!window.PDXAuth || !window.PDXAuth.moduleRequiresAuth(mid)) return false;
+      if (window.PDXAuth.canAccessModule(mid)) return false;
+      panelInner.innerHTML =
+        '<div class="pdx-ph pdx-ph--' + mid + '">' +
+          '<div class="pdx-ph-hd">' +
+            '<div class="pdx-ph-title"><span>' + escHtml(mod.label || mid) + '</span></div>' +
+          '</div>' +
+          '<div class="pdx-ph-body" id="pdx-auth-gate-body"></div>' +
+        '</div>';
+      var gate = document.getElementById('pdx-auth-gate-body');
+      var reason = window.PDXAuth.isLoggedIn() ? 'verify' : 'login';
+      window.PDXAuth.renderAuthGate(gate, mod.label || mid, reason);
+      return true;
     }
 
 
@@ -5694,6 +5749,13 @@
       html += '</div>';
       container.innerHTML = html;
     }
+
+    /* ── PDXDock public API (used by pdx-auth.js) ─────────── */
+    window.PDXDock = {
+      openPanel: openPanel,
+      closePanel: closePanel,
+      showNotif: showNotif,
+    };
 
   } /* end init */
 }());

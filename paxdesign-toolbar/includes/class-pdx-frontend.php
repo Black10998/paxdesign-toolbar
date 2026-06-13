@@ -99,6 +99,13 @@ class PDX_Frontend {
 			$this->asset_version( 'assets/css/pdx-unified-ui.css' )
 		);
 
+		wp_enqueue_style(
+			'pdx-auth',
+			PDX_URL . 'assets/css/pdx-auth.css',
+			[ 'pdx-unified-ui' ],
+			$this->asset_version( 'assets/css/pdx-auth.css' )
+		);
+
 		// Use defer strategy (WP 6.3+) so the script always runs after the DOM is ready.
 		// Falls back to in_footer=true on older WordPress, which is safe because
 		// dock.js wraps its init in a DOMContentLoaded guard.
@@ -131,6 +138,14 @@ class PDX_Frontend {
 			PDX_URL . 'assets/js/dock-v81.js',
 			[ 'pdx-dock' ],
 			$this->asset_version( 'assets/js/dock-v81.js' ),
+			$script_args
+		);
+
+		wp_enqueue_script(
+			'pdx-auth',
+			PDX_URL . 'assets/js/pdx-auth.js',
+			[ 'pdx-dock' ],
+			$this->asset_version( 'assets/js/pdx-auth.js' ),
 			$script_args
 		);
 
@@ -206,6 +221,10 @@ class PDX_Frontend {
 			'nonce'            => wp_create_nonce( 'wp_rest' ),
 			'userId'           => get_current_user_id(),
 			'isLoggedIn'       => is_user_logged_in(),
+			'emailVerified'    => is_user_logged_in() ? PDX_Auth::is_email_verified( get_current_user_id() ) : false,
+			'userName'         => is_user_logged_in() ? wp_get_current_user()->display_name : '',
+			'userEmail'        => is_user_logged_in() ? wp_get_current_user()->user_email : '',
+			'publicModules'    => PDX_Auth::public_modules(),
 		];
 	}
 

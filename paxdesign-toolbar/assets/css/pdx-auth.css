@@ -1,0 +1,607 @@
+/* PaxDesign Auth — login/register forms (exact provided design) + account dashboard */
+
+/* ─── Auth bar (header login button) ─────────────────────── */
+#pdx-auth-bar {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top, 12px));
+  right: max(12px, env(safe-area-inset-right, 12px));
+  z-index: 99995;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body.admin-bar #pdx-auth-bar {
+  top: calc(32px + max(12px, env(safe-area-inset-top, 12px)));
+}
+
+@media screen and (max-width: 782px) {
+  body.admin-bar #pdx-auth-bar {
+    top: calc(46px + max(8px, env(safe-area-inset-top, 8px)));
+  }
+}
+
+.pdx-user-profile {
+  width: 131px;
+  height: 51px;
+  border-radius: 15px;
+  cursor: pointer;
+  transition: 0.3s ease;
+  background: linear-gradient(
+    to bottom right,
+    rgba(255, 224, 166, 0.6) 0%,
+    rgba(255, 224, 166, 0) 30%
+  );
+  background-color: rgba(255, 224, 166, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+
+.pdx-user-profile:hover,
+.pdx-user-profile:focus {
+  background-color: rgba(255, 224, 166, 0.25);
+  box-shadow: 0 0 10px rgba(255, 224, 166, 0.25);
+  outline: none;
+}
+
+.pdx-user-profile-inner {
+  width: 127px;
+  height: 47px;
+  border-radius: 13px;
+  background-color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.pdx-user-profile-inner svg {
+  width: 22px;
+  height: 22px;
+  fill: #ffe0a6;
+  flex-shrink: 0;
+}
+
+.pdx-user-profile-inner p {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 72px;
+}
+
+.pdx-user-profile--verified .pdx-user-profile-inner svg {
+  fill: #ffe0a6;
+}
+
+@media (max-width: 480px) {
+  .pdx-user-profile {
+    width: 48px;
+    height: 48px;
+  }
+  .pdx-user-profile-inner {
+    width: 44px;
+    height: 44px;
+    gap: 0;
+  }
+  .pdx-user-profile-inner p {
+    display: none;
+  }
+}
+
+/* ─── Auth overlay ───────────────────────────────────────── */
+#pdx-auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100010;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(6px);
+  padding: 20px;
+}
+
+#pdx-auth-overlay.is-open {
+  display: flex;
+}
+
+.pdx-auth-wrapper {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  place-content: center;
+  background: black;
+  position: relative;
+}
+
+.pdx-auth-form {
+  padding: 2rem 3rem;
+  display: grid;
+  place-items: center;
+  gap: 2rem;
+  border: 1px solid transparent;
+  border-image: linear-gradient(transparent, #ffe0a6, transparent) 1;
+  border-width: 0 2px 0 2px;
+  background:
+    radial-gradient(100% 61.73% at 100% 50%, rgba(255, 224, 166, 0.05) 0%, transparent 100%),
+    radial-gradient(91.09% 56.23% at 0% 50%, rgba(255, 224, 166, 0.05) 0%, transparent 100%);
+  position: relative;
+  width: 100%;
+}
+
+.pdx-auth-form::before,
+.pdx-auth-form::after {
+  content: "";
+  position: absolute;
+  border: inherit;
+  z-index: -1;
+}
+
+.pdx-auth-form::before {
+  inset: -1rem;
+  opacity: 15%;
+}
+
+.pdx-auth-form::after {
+  inset: -2rem;
+  opacity: 5%;
+}
+
+.pdx-auth-form .pdx-auth-title {
+  color: white;
+  font-size: 1.75rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.75rem;
+  text-transform: uppercase;
+  background: linear-gradient(rgb(170, 170, 170), rgb(78, 78, 78));
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.pdx-auth-input-container {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: radial-gradient(47.3% 73.08% at 50% 94.23%, rgba(255, 255, 255, 0.1) 5%, rgba(0, 0, 0, 0) 100%);
+  border: 1px solid transparent;
+  border-image: radial-gradient(circle, rgba(255, 255, 255, 0.445) 0%, rgba(0, 0, 0, 0) 100%) 1;
+  border-width: 0 0 1px 0;
+}
+
+.pdx-auth-input-container svg {
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.pdx-auth-input-container svg g {
+  transition: all 0.2s ease-in-out;
+}
+
+.pdx-auth-input-container .pdx-auth-input {
+  background: none;
+  border: none;
+  padding: 0.5rem 1rem;
+  color: white;
+  width: 100%;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.pdx-auth-input-container .pdx-auth-input:focus {
+  outline: none;
+  color: #ffe0a6;
+}
+
+.pdx-auth-input-container:focus-within {
+  background: radial-gradient(47.3% 73.08% at 50% 94.23%, rgba(255, 224, 166, 0.1) 5%, rgba(0, 0, 0, 0) 100%);
+  border-image: radial-gradient(circle, #ffe0a6 0%, transparent 100%) 1;
+}
+
+.pdx-auth-input-container:focus-within svg g {
+  stroke: #ffe0a6;
+}
+
+.pdx-auth-submit-wrap {
+  width: 100%;
+  position: relative;
+  transition: all 0.2s ease-in-out;
+}
+
+.pdx-auth-submit-wrap .pdx-auth-submit {
+  cursor: pointer;
+  padding: 1rem;
+  width: 100%;
+  background:
+    radial-gradient(100% 45% at 100% 50%, rgba(255, 224, 166, 0.084) 0%, rgba(115, 115, 115, 0) 100%),
+    radial-gradient(100% 45% at 0% 50%, rgba(255, 224, 166, 0.084) 0%, rgba(115, 115, 115, 0) 100%);
+  border: 1px solid transparent;
+  border-image: linear-gradient(transparent, #ffe0a6, transparent) 1;
+  border-width: 0 1px 0 1px;
+  text-align: center;
+  color: #ffe0a6;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.pdx-auth-submit-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(0deg, rgba(255, 255, 255, 0.38) 0.5px, transparent 0.5px);
+  background-size: 0.1px 3px;
+  mix-blend-mode: soft-light;
+  mask-image:
+    radial-gradient(40% 45% at 100% 50%, white 0%, transparent 100%),
+    radial-gradient(40% 45% at 0% 50%, white 0%, transparent 100%);
+}
+
+.pdx-auth-submit-wrap:hover {
+  animation: pdx-auth-flicker 0.5s infinite;
+  width: 105%;
+}
+
+.pdx-auth-submit-wrap:active {
+  width: 95%;
+}
+
+.pdx-auth-texture {
+  position: absolute;
+  background-image: linear-gradient(0deg, #ffffff 1px, transparent 1px);
+  background-size: 1px 5px;
+  inset: 0;
+  mix-blend-mode: soft-light;
+  mask-image:
+    radial-gradient(30% 45% at 100% 50%, white 0%, transparent 100%),
+    radial-gradient(30% 45% at 0% 50%, white 0%, transparent 100%);
+  pointer-events: none;
+  animation: pdx-auth-moving-lines 1s linear infinite;
+}
+
+.pdx-auth-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  text-align: center;
+}
+
+.pdx-auth-link {
+  background: none;
+  border: none;
+  color: #8b8b8b;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+
+.pdx-auth-link:hover {
+  color: #ffe0a6;
+}
+
+.pdx-auth-message {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.pdx-auth-message--error {
+  background: rgba(136, 136, 136, 0.15);
+  color: #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pdx-auth-message--success {
+  background: rgba(255, 224, 166, 0.08);
+  color: #ffe0a6;
+  border: 1px solid rgba(255, 224, 166, 0.2);
+}
+
+.pdx-auth-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 22px;
+  cursor: pointer;
+  z-index: 2;
+  line-height: 1;
+  padding: 4px 8px;
+}
+
+.pdx-auth-close:hover {
+  color: #ffe0a6;
+}
+
+@keyframes pdx-auth-flicker {
+  0% { filter: brightness(100%); }
+  10% { filter: brightness(80%); }
+  20% { filter: brightness(120%); }
+  30% { filter: brightness(90%); }
+  40% { filter: brightness(110%); }
+  50% { filter: brightness(100%); }
+  60% { filter: brightness(85%); }
+  70% { filter: brightness(95%); }
+  80% { filter: brightness(105%); }
+  90% { filter: brightness(115%); }
+  100% { filter: brightness(100%); }
+}
+
+@keyframes pdx-auth-moving-lines {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 5px; }
+}
+
+/* ─── Account dashboard (inside panel) ───────────────────── */
+.pdx-account-dash {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 100%;
+}
+
+.pdx-account-nav {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.pdx-account-nav-btn {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #8b8b8b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.pdx-account-nav-btn:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.pdx-account-nav-btn.is-active {
+  color: #ffe0a6;
+  border-color: rgba(255, 224, 166, 0.35);
+  background: rgba(255, 224, 166, 0.06);
+}
+
+.pdx-account-section {
+  padding: 16px 20px;
+  display: none;
+}
+
+.pdx-account-section.is-active {
+  display: block;
+}
+
+.pdx-account-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.pdx-account-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 12px;
+  letter-spacing: 0.02em;
+}
+
+.pdx-account-field {
+  margin-bottom: 12px;
+}
+
+.pdx-account-field label {
+  display: block;
+  font-size: 11px;
+  color: #8b8b8b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pdx-account-field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.pdx-account-field input:focus {
+  outline: none;
+  border-color: rgba(255, 224, 166, 0.4);
+}
+
+.pdx-account-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pdx-account-status--verified {
+  background: rgba(255, 224, 166, 0.1);
+  color: #ffe0a6;
+  border: 1px solid rgba(255, 224, 166, 0.25);
+}
+
+.pdx-account-status--pending {
+  background: rgba(126, 126, 126, 0.15);
+  color: #aaa;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pdx-api-key-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pdx-api-key-row:last-child {
+  border-bottom: none;
+}
+
+.pdx-api-key-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pdx-api-key-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.pdx-api-key-status {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.pdx-api-key-status--connected,
+.pdx-api-key-status--active {
+  background: rgba(255, 224, 166, 0.12);
+  color: #ffe0a6;
+}
+
+.pdx-api-key-status--disconnected {
+  background: rgba(85, 85, 85, 0.2);
+  color: #888;
+}
+
+.pdx-api-key-status--error {
+  background: rgba(136, 136, 136, 0.2);
+  color: #aaa;
+}
+
+.pdx-api-key-status--site_default {
+  background: rgba(139, 139, 139, 0.15);
+  color: #8b8b8b;
+}
+
+.pdx-api-key-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pdx-api-key-actions input {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.pdx-account-btn {
+  padding: 8px 14px;
+  background: rgba(255, 224, 166, 0.08);
+  border: 1px solid rgba(255, 224, 166, 0.25);
+  border-radius: 6px;
+  color: #ffe0a6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.pdx-account-btn:hover {
+  background: rgba(255, 224, 166, 0.15);
+}
+
+.pdx-account-btn--ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #8b8b8b;
+}
+
+.pdx-account-btn--ghost:hover {
+  color: #fff;
+}
+
+.pdx-license-placeholder {
+  padding: 24px;
+  text-align: center;
+  color: #8b8b8b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pdx-license-placeholder strong {
+  color: #ffe0a6;
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.pdx-auth-gate {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.pdx-auth-gate-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.pdx-auth-gate-desc {
+  font-size: 13px;
+  color: #8b8b8b;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}

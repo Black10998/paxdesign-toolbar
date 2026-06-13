@@ -1,5 +1,23 @@
 ﻿# Changelog
 
+## 9.0.0 — 2026-06-13
+
+**Enterprise authentication, account dashboard, and UI polish**
+
+- Full login/register system with the provided PaxDesign auth UI design (gold/cream gradient forms).
+- Email verification after registration with secure expiring tokens and resend functionality.
+- Forgot password / reset password flow with secure email links.
+- WordPress-integrated session handling (cookie auth + REST nonce CSRF protection).
+- Rate limiting and brute-force protection on auth endpoints.
+- Fixed header login button (top-right) — always visible, gold accent theme (replaces inconsistent blue styling).
+- Account dashboard with profile management, verification status, per-user API keys, integrations status, and license/subscription scaffolding.
+- Access control: protected toolbar modules require login + verified email; free modules (TrustCheck, Development, Workspaces) remain public.
+- Post-login redirect back to the requested module.
+- Per-user API keys override site defaults when logged in.
+- Comprehensive toolbar UI fixes: text wrapping, horizontal alignment, responsive cards/tables/results across TrustCheck and all modules.
+
+**Install:** `releases/paxdesign-toolbar-9.0.0.zip` — tag `v9.0.0`
+
 ## 8.10.6 — 2026-06-07
 
 **Updater reliability hotfix (GitHub API 429 fallback)**
