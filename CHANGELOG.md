@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## 9.0.2 — 2026-06-13
+
+**Root-cause fix: missing frontend navigation/modules**
+
+- Fixed a critical dock visibility failure mode where navigation could disappear entirely when visibility settings and/or module toggles resulted in an empty rendered menu.
+- Added frontend render fail-safe in `PDX_Settings::should_render()` so auth-enabled sites keep the dock visible for login gating instead of silently hiding navigation.
+- Added module fail-safe in frontend config/render pipeline:
+  - `js_config()` now auto-recovers to full module set if all modules are disabled.
+  - `render_dock_items()` now falls back to full registry instead of outputting an empty nav.
+- Hardened dock CSS against theme/plugin collisions that hide dock/button display.
+- Refined desktop dock positioning to a consistent top-left vertical SaaS sidebar behavior.
+- Preserved mobile behavior as under-header horizontal navigation.
+
+**Install:** `releases/paxdesign-toolbar-9.0.2.zip` — tag `v9.0.2`
+
 ## 9.0.1 — 2026-06-13
 
 **Navigation and authentication UI refinement release**

@@ -168,14 +168,31 @@ class PDX_Settings {
 		$hide_out = $this->get( 'hide_for_logged_out' );
 		$hide_in  = $this->get( 'hide_for_logged_in' );
 
-		if ( $hide_out && ! is_user_logged_in() ) return false;
-		if ( $hide_in  &&   is_user_logged_in() ) return false;
+		$blocked = false;
+		if ( $hide_out && ! is_user_logged_in() ) {
+			$blocked = true;
+		}
+		if ( $hide_in  && is_user_logged_in() ) {
+			$blocked = true;
+		}
 
 		$roles = $this->get( 'show_to_roles', [ 'all' ] );
 		if ( ! in_array( 'all', $roles, true ) && is_user_logged_in() ) {
 			$user = wp_get_current_user();
 			$intersect = array_intersect( $roles, (array) $user->roles );
-			if ( empty( $intersect ) ) return false;
+			if ( empty( $intersect ) ) {
+				$blocked = true;
+			}
+		}
+
+		// v9 auth UX requirement: always render frontend dock so protected modules
+		// can trigger login/register gating instead of disappearing entirely.
+		// This prevents misconfigured visibility settings from removing navigation.
+		if ( $blocked ) {
+			if ( ! is_admin() && class_exists( 'PDX_Auth', false ) ) {
+				return true;
+			}
+			return false;
 		}
 
 		return true;

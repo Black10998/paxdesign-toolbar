@@ -83,7 +83,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
 @media (min-width: var(--pdx-mobile-min, 681px)) {
   #pdx-dock {
     /* Reset mobile geometry */
-    top: 50%;
+    top: 12px;
     left: 14px;
     right: auto;
     width: min(230px, calc(100vw - 32px));
@@ -91,7 +91,7 @@ body.pdx-no-scroll { overflow: hidden !important; }
     overflow-y: auto;
     overflow-x: hidden;
     /* Desktop SaaS rail */
-    transform: translateY(-50%);
+    transform: none;
     flex-direction: column;
     justify-content: flex-start;
     flex-wrap: nowrap;
@@ -103,6 +103,16 @@ body.pdx-no-scroll { overflow: hidden !important; }
     scrollbar-width: thin;
     overscroll-behavior: contain;
   }
+}
+
+/* Hardening against theme/plugin CSS collisions */
+#pdx-root #pdx-dock {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1;
+}
+#pdx-root #pdx-dock .pdx-btn {
+  display: flex !important;
 }
 
 /* ─── Dock buttons ───────────────────────────────────────── */

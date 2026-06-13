@@ -191,6 +191,23 @@ class PDX_Frontend {
 			}
 		}
 
+		// Fail-safe: if all modules are disabled by settings, keep navigation visible
+		// instead of rendering an empty dock.
+		if ( empty( $enabled ) ) {
+			foreach ( $modules as $id => $mod ) {
+				$enabled[ $id ] = [
+					'id'       => $id,
+					'label'    => $mod['label'],
+					'icon'     => $mod['icon'],
+					'type'     => $mod['panel_type'],
+					'category' => $mod['category'],
+					'tier'     => $mod['tier'],
+					'price'    => $mod['price'],
+					'currency' => $mod['currency'],
+				];
+			}
+		}
+
 		return [
 			'version'          => PDX_VERSION,
 			'contact'          => $this->settings->contact_url(),
@@ -254,11 +271,21 @@ class PDX_Frontend {
 	}
 
 	private function render_dock_items(): void {
-		$modules  = $this->modules->all();
+		$all_modules = $this->modules->all();
+		$modules     = [];
+		foreach ( $all_modules as $id => $mod ) {
+			if ( $this->settings->module_enabled( $id ) ) {
+				$modules[ $id ] = $mod;
+			}
+		}
+		// Fail-safe: never render an empty dock.
+		if ( empty( $modules ) ) {
+			$modules = $all_modules;
+		}
+
 		$prev_cat = null;
 
 		foreach ( $modules as $id => $mod ) {
-			if ( ! $this->settings->module_enabled( $id ) ) continue;
 
 			// Category separator
 			if ( $prev_cat !== null && $prev_cat !== $mod['category'] ) {
