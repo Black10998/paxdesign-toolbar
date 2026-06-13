@@ -115,9 +115,34 @@
       return bar ? Math.round(bar.getBoundingClientRect().height) : 0;
     }
 
+    function getViewportTopOffset() {
+      var top = getAdminBarH();
+      var headerSelectors = [
+        'header',
+        '[role="banner"]',
+        '#masthead',
+        '.site-header',
+        '.main-header',
+        '[data-sticky-header]'
+      ];
+      headerSelectors.forEach(function (selector) {
+        document.querySelectorAll(selector).forEach(function (el) {
+          if (!el || !el.getBoundingClientRect) return;
+          var cs = window.getComputedStyle(el);
+          if (!cs) return;
+          if (cs.visibility === 'hidden' || cs.display === 'none') return;
+          if (cs.position !== 'fixed' && cs.position !== 'sticky') return;
+          var rect = el.getBoundingClientRect();
+          if (rect.height < 20 || rect.height > 220) return;
+          if (rect.top > top + 4) return;
+          top = Math.max(top, Math.round(rect.bottom));
+        });
+      });
+      return top;
+    }
+
     function stampLayoutVars() {
-      var abH      = getAdminBarH();
-      var dockTop  = abH;
+      var dockTop  = getViewportTopOffset();
       var panelTop = dockTop + dockH;
       var vh       = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--pdx-dock-top',  dockTop  + 'px');
@@ -172,11 +197,78 @@
       team: '#ffffff', connectors: '#8b8b8b', create: '#7e7e7e', workspace: '#555555'
     };
 
+    function navModulesFromConfig() {
+      // Always derive the dock from the full manifest to avoid
+      // missing buttons when enabled-state, cache, or theme rewrites drift.
+      var source = (C.allModules && Object.keys(C.allModules).length)
+        ? C.allModules
+        : (C.modules || {});
+      var list = [];
+      Object.keys(source || {}).forEach(function(id) {
+        var mod = source[id];
+        if (!mod) return;
+        list.push(Object.assign({ id: id }, mod));
+      });
+      list.sort(function(a, b) {
+        var ao = typeof a.order === 'number' ? a.order : 999;
+        var bo = typeof b.order === 'number' ? b.order : 999;
+        if (ao !== bo) return ao - bo;
+        return String(a.label || a.id).localeCompare(String(b.label || b.id));
+      });
+      return list;
+    }
+
+    function moduleSignature(modules) {
+      return (modules || []).map(function (m) {
+        return [m.id, m.category || '', m.label || '', String(m.order || 999)].join(':');
+      }).join('|');
+    }
+
+    function rebuildDockNavigation(force) {
+      if (!dock) return;
+      var modules = navModulesFromConfig();
+      if (!modules.length) return;
+      var expectedSig = moduleSignature(modules);
+      var currentSig = dock.getAttribute('data-pdx-nav-sig') || '';
+
+      if (!force) {
+        var existing = dock.querySelectorAll('.pdx-btn[data-module]').length;
+        if (existing === modules.length && currentSig === expectedSig) return;
+      }
+
+      dock.innerHTML = '';
+      var prevCat = null;
+      modules.forEach(function(mod) {
+        if (prevCat !== null && prevCat !== mod.category) {
+          var sep = document.createElement('span');
+          sep.className = 'pdx-sep';
+          sep.setAttribute('aria-hidden', 'true');
+          dock.appendChild(sep);
+        }
+        prevCat = mod.category;
+
+        var btn = document.createElement('button');
+        btn.className = 'pdx-btn pdx-btn--mod-' + mod.id;
+        btn.setAttribute('data-module', mod.id);
+        btn.setAttribute('data-tip', mod.label || mod.id);
+        btn.setAttribute('data-label', mod.label || mod.id);
+        btn.setAttribute('aria-label', mod.label || mod.id);
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('type', 'button');
+        btn.innerHTML =
+          '<span class="pdx-dock-btn-icon"></span>' +
+          '<span class="pdx-dock-btn-label">' + escHtml(mod.label || mod.id) + '</span>';
+        dock.appendChild(btn);
+      });
+      dock.setAttribute('data-pdx-nav-sig', expectedSig);
+    }
+
     function normalizeModuleId(moduleId) {
       var id = ((moduleId && String(moduleId)) || '').toLowerCase();
       if (PDX_MODULE_ALIASES[id]) id = PDX_MODULE_ALIASES[id];
       if (PDX_KNOWN_MODULES.indexOf(id) >= 0) return id;
       if (C.modules && C.modules[id]) return id;
+      if (C.allModules && C.allModules[id]) return id;
       return 'trust';
     }
 
@@ -220,7 +312,36 @@
       });
     }
 
+    function enforceDockVisibility() {
+      if (!dock) return;
+      dock.style.setProperty('display', 'flex', 'important');
+      dock.style.setProperty('visibility', 'visible', 'important');
+      dock.style.removeProperty('opacity');
+    }
+
+    rebuildDockNavigation(true);
     applyDockModuleIcons();
+    enforceDockVisibility();
+
+    // Guard against theme/plugin DOM rewrites that remove dock items.
+    if (window.MutationObserver) {
+      var dockObserver = new MutationObserver(function () {
+        var expectedModules = navModulesFromConfig();
+        var expectedCount = expectedModules.length;
+        var currentCount = dock.querySelectorAll('.pdx-btn[data-module]').length;
+        var expectedIds = expectedModules.map(function (m) { return m.id; }).join('|');
+        var currentIds = Array.prototype.map.call(
+          dock.querySelectorAll('.pdx-btn[data-module]'),
+          function (el) { return el.getAttribute('data-module') || ''; }
+        ).join('|');
+        if (!currentCount || currentCount !== expectedCount || currentIds !== expectedIds) {
+          rebuildDockNavigation(true);
+          applyDockModuleIcons();
+        }
+        enforceDockVisibility();
+      });
+      dockObserver.observe(dock, { childList: true, attributes: true, attributeFilter: ['class', 'style'] });
+    }
 
     /* ── Notification container ───────────────────────────── */
     var notifContainer = document.createElement('div');
@@ -280,14 +401,18 @@
     function openPanel(moduleId) {
       var mid = normalizeModuleId(moduleId);
 
-      /* Access control — redirect to login/verify gate for protected modules */
-      if (mid !== 'account' && window.PDXAuth) {
-        if (window.PDXAuth.moduleRequiresAuth(mid) && !window.PDXAuth.isLoggedIn()) {
-          window.PDXAuth.openLogin(mid);
+      /* Access control — deterministic fallback even if auth bundle isn't ready */
+      var publicModules = Array.isArray(C.publicModules) ? C.publicModules : ['trust', 'create', 'workspace'];
+      var needsAuth = mid !== 'account' && publicModules.indexOf(mid) < 0;
+      if (needsAuth) {
+        var loggedIn = window.PDXAuth ? window.PDXAuth.isLoggedIn() : !!C.isLoggedIn;
+        if (!loggedIn) {
+          if (window.PDXAuth && window.PDXAuth.openLogin) {
+            window.PDXAuth.openLogin(mid);
+          } else {
+            showNotif('Please log in to access this module.', 'warn');
+          }
           return;
-        }
-        if (window.PDXAuth.moduleRequiresAuth(mid) && window.PDXAuth.isLoggedIn() && !window.PDXAuth.isVerified()) {
-          /* Allow panel open — renderPanel shows verify gate */
         }
       }
 
@@ -646,7 +771,7 @@
         return;
       }
 
-      var mod = (C.modules && C.modules[mid]) || null;
+      var mod = (C.modules && C.modules[mid]) || (C.allModules && C.allModules[mid]) || null;
       if (!mod) { panelInner.innerHTML = '<div class="pdx-empty">Module not found.</div>'; return; }
 
       // access comes from /pay/status — always live, never stale.
@@ -706,8 +831,30 @@
     }
 
     function renderAuthGateIfNeeded(mid, mod) {
-      if (!window.PDXAuth || !window.PDXAuth.moduleRequiresAuth(mid)) return false;
-      if (window.PDXAuth.canAccessModule(mid)) return false;
+      var publicModules = Array.isArray(C.publicModules) ? C.publicModules : ['trust', 'create', 'workspace'];
+      var requiresAuth = publicModules.indexOf(mid) < 0;
+      if (!requiresAuth) return false;
+
+      var loggedIn = window.PDXAuth ? window.PDXAuth.isLoggedIn() : !!C.isLoggedIn;
+      var verified = window.PDXAuth ? window.PDXAuth.isVerified() : (!!C.emailVerified || !!C.isAdmin);
+      if (loggedIn && verified) return false;
+
+      if (!window.PDXAuth) {
+        panelInner.innerHTML =
+          '<div class="pdx-ph pdx-ph--' + mid + '">' +
+            '<div class="pdx-ph-hd">' +
+              '<div class="pdx-ph-title"><span>' + escHtml(mod.label || mid) + '</span></div>' +
+            '</div>' +
+            '<div class="pdx-ph-body">' +
+              '<div class="pdx-auth-gate">' +
+                '<div class="pdx-auth-gate-title">Sign in required</div>' +
+                '<div class="pdx-auth-gate-desc">Please refresh the page and sign in to access this module.</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        return true;
+      }
+
       panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--' + mid + '">' +
           '<div class="pdx-ph-hd">' +
@@ -4078,7 +4225,9 @@
       var root        = document.documentElement;
       var isMobile    = false;
 
-      if (!hideDock) dock.dataset.pdxHideDock = 'false';
+      if (!hideDock || dockPos === 'under-header') {
+        dock.dataset.pdxHideDock = 'false';
+      }
 
       // ── CSS var helpers ──────────────────────────────────
       function setProp(n, v) { root.style.setProperty(n, v); }
@@ -4088,8 +4237,7 @@
       // stampLayoutVars() was already called synchronously in init()
       // for the initial paint. We call it again on resize/orientation.
       function applyLayout() {
-        var abH      = getAdminBarH();
-        var dockTop  = abH;
+        var dockTop  = getViewportTopOffset();
         var panelTop = dockTop + dockHeight;
         var vh       = window.innerHeight * 0.01;
         setProp('--pdx-vh',          vh          + 'px');

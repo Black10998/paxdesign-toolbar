@@ -5,7 +5,6 @@ $nav = [
 		PDX_SLUG              => [ 'label' => 'General', 'icon' => 'M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z' ],
 		PDX_SLUG . '-modules' => [ 'label' => 'Modules', 'icon' => 'M4 6h16M4 12h16M4 18h16' ],
 		PDX_SLUG . '-ui'      => [ 'label' => 'UI & Style', 'icon' => 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5z' ],
-		PDX_SLUG . '-roles'   => [ 'label' => 'Roles', 'icon' => 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2' ],
 	],
 	'Commerce' => [
 		PDX_SLUG . '-pricing'  => [ 'label' => 'Pricing', 'icon' => 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' ],

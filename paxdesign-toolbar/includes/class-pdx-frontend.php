@@ -170,43 +170,58 @@ class PDX_Frontend {
 		if ( $custom ) {
 			wp_add_inline_style( 'pdx-dock', wp_strip_all_tags( $custom ) );
 		}
+
+		// Non-negotiable render guards: keeps navigation usable even when themes
+		// or optimization plugins inject aggressive global button/display rules.
+		wp_add_inline_style(
+			'pdx-dock',
+			'#pdx-root #pdx-dock{display:flex!important;visibility:visible!important;opacity:1!important}' .
+			'#pdx-root #pdx-dock .pdx-btn{display:flex!important}'
+		);
 	}
 
 	private function js_config(): array {
 		$modules = $this->modules->all_with_pricing( $this->settings );
+		uasort( $modules, static function ( array $a, array $b ): int {
+			$ao = (int) ( $a['order'] ?? 999 );
+			$bo = (int) ( $b['order'] ?? 999 );
+			if ( $ao !== $bo ) {
+				return $ao <=> $bo;
+			}
+			return strcmp( (string) ( $a['label'] ?? '' ), (string) ( $b['label'] ?? '' ) );
+		} );
 		$enabled = [];
+		$all     = [];
 
 		foreach ( $modules as $id => $mod ) {
+			$payload = [
+				'id'       => $id,
+				'label'    => $mod['label'],
+				'icon'     => $mod['icon'],
+				'type'     => $mod['panel_type'],
+				'category' => $mod['category'],
+				'order'    => (int) ( $mod['order'] ?? 999 ),
+				'tier'     => $mod['tier'],
+				'price'    => $mod['price'],
+				'currency' => $mod['currency'],
+				'enabled'  => (bool) $this->settings->module_enabled( $id ),
+			];
+			$all[ $id ] = $payload;
+
 			if ( $this->settings->module_enabled( $id ) ) {
-				$enabled[ $id ] = [
-					'id'       => $id,
-					'label'    => $mod['label'],
-					'icon'     => $mod['icon'],
-					'type'     => $mod['panel_type'],
-					'category' => $mod['category'],
-					'tier'     => $mod['tier'],
-					'price'    => $mod['price'],
-					'currency' => $mod['currency'],
-				];
+				$enabled[ $id ] = $payload;
 			}
 		}
 
 		// Fail-safe: if all modules are disabled by settings, keep navigation visible
 		// instead of rendering an empty dock.
 		if ( empty( $enabled ) ) {
-			foreach ( $modules as $id => $mod ) {
-				$enabled[ $id ] = [
-					'id'       => $id,
-					'label'    => $mod['label'],
-					'icon'     => $mod['icon'],
-					'type'     => $mod['panel_type'],
-					'category' => $mod['category'],
-					'tier'     => $mod['tier'],
-					'price'    => $mod['price'],
-					'currency' => $mod['currency'],
-				];
-			}
+			$enabled = $all;
 		}
+
+		// Navigation is always driven by the full manifest so buttons remain
+		// deterministic across auth/cache/theme/plugin states.
+		$nav_modules = $all;
 
 		return [
 			'version'          => PDX_VERSION,
@@ -233,12 +248,15 @@ class PDX_Frontend {
 			'analytics'        => (bool) $this->settings->get( 'analytics_enabled', false ),
 			'aiMemory'         => (bool) $this->settings->get( 'ai_memory_enabled', true ),
 			'workspaceEnabled' => (bool) $this->settings->get( 'workspace_enabled', true ),
-			'modules'          => $enabled,
+			'modules'          => $nav_modules,
+			'enabledModules'   => $enabled,
+			'allModules'       => $all,
 			'restUrl'          => esc_url( rest_url( 'pdx/v1' ) ),
 			'nonce'            => wp_create_nonce( 'wp_rest' ),
 			'userId'           => get_current_user_id(),
 			'isLoggedIn'       => is_user_logged_in(),
 			'emailVerified'    => is_user_logged_in() ? PDX_Auth::is_email_verified( get_current_user_id() ) : false,
+			'isAdmin'          => current_user_can( PDX_CAP ),
 			'userName'         => is_user_logged_in() ? wp_get_current_user()->display_name : '',
 			'userEmail'        => is_user_logged_in() ? wp_get_current_user()->user_email : '',
 			'publicModules'    => PDX_Auth::public_modules(),
@@ -258,6 +276,7 @@ class PDX_Frontend {
 			 data-theme="<?php echo $theme; ?>"
 			 data-size="<?php echo $size; ?>"
 			 data-mobile-dock="<?php echo $mobile_dock; ?>"
+			 data-dock-layout="stable-v3"
 			 data-pdx-version="<?php echo esc_attr( PDX_VERSION ); ?>"
 			 aria-label="PaxDesign Utility Dock"
 			 role="complementary">
@@ -272,16 +291,15 @@ class PDX_Frontend {
 
 	private function render_dock_items(): void {
 		$all_modules = $this->modules->all();
-		$modules     = [];
-		foreach ( $all_modules as $id => $mod ) {
-			if ( $this->settings->module_enabled( $id ) ) {
-				$modules[ $id ] = $mod;
+		uasort( $all_modules, static function ( array $a, array $b ): int {
+			$ao = (int) ( $a['order'] ?? 999 );
+			$bo = (int) ( $b['order'] ?? 999 );
+			if ( $ao !== $bo ) {
+				return $ao <=> $bo;
 			}
-		}
-		// Fail-safe: never render an empty dock.
-		if ( empty( $modules ) ) {
-			$modules = $all_modules;
-		}
+			return strcmp( (string) ( $a['label'] ?? '' ), (string) ( $b['label'] ?? '' ) );
+		} );
+		$modules = $all_modules;
 
 		$prev_cat = null;
 

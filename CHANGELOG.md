@@ -1,5 +1,55 @@
 ﻿# Changelog
 
+## 9.1.1 — 2026-06-13
+
+**Dock button rendering stabilization (desktop/mobile)**
+
+- Fixed root render pipeline issues that could still cause missing/clipped dock buttons:
+  - Dock now always builds from the full module manifest (`allModules`) for deterministic button output.
+  - Added stronger dock mutation recovery (count + order/signature validation) to auto-rebuild when DOM is altered by theme/optimization layers.
+  - Server-rendered dock buttons now always include the full ordered module set.
+- Updated desktop dock layout to match requested compact visual direction:
+  - Vertical left dock
+  - Vertically centered
+  - Compact icon-only rail with stable overflow handling
+- Updated mobile dock layout for consistent under-header behavior:
+  - Compact horizontal dock directly below header/admin bar offset
+  - Scroll-safe row (no clipping/collapse)
+  - Reliable button sizing to keep all modules accessible
+- Added improved top-offset computation in JS to account for sticky/fixed theme headers plus WP admin bar.
+- Prevented dock-hiding behavior in under-header mode so buttons remain available and discoverable.
+- Added a stable panel geometry layer for desktop/mobile to avoid viewport/footer overlap artifacts and layout drift.
+
+**Install:** `releases/paxdesign-toolbar-9.1.1.zip` — tag `v9.1.1`
+
+## 9.1.0 — 2026-06-13
+
+**Navigation architecture redesign + auth UX + settings cleanup**
+
+- Rebuilt dock navigation rendering to be deterministic and self-healing:
+  - `PDX_CONFIG` now ships both `modules` and `allModules` manifests with stable ordering metadata.
+  - Frontend dock JS now rebuilds navigation from config, not just static server HTML.
+  - Added mutation-based recovery when themes/plugins remove or rewrite dock buttons.
+- Eliminated brittle visibility toggles as a source of disappearing navigation:
+  - Frontend dock rendering is now deterministic (`PDX_Settings::should_render()` always renders on frontend unless explicitly filtered off).
+  - Legacy role/login visibility toggles are deprecated and no longer allowed to silently hide the dock.
+- Enforced stable responsive docking behavior:
+  - Desktop: compact vertical left rail with consistent spacing/alignment.
+  - Mobile: fixed under-header horizontal bar with smooth horizontal scrolling.
+- Hardened compatibility with theme/optimization collisions:
+  - Added nav guard styles and scoped button resets to neutralize global button/display overrides.
+  - Added runtime `display/visibility` enforcement and module fallback safeguards.
+- Fixed registration UX mismatch:
+  - Register form now visibly includes **Full Name**, **Email Address**, **Password**, **Confirm Password**.
+  - Added client + REST validation to ensure password confirmation and visible fields stay in sync.
+- Refined login/account entry button:
+  - Smaller, lighter, and better integrated visual style for a cleaner SaaS header feel.
+- Simplified and reorganized settings UI:
+  - Streamlined UI tab to essential controls (appearance + responsive essentials).
+  - Removed/highly reduced high-risk duplicate controls that previously introduced unstable layout states.
+
+**Install:** `releases/paxdesign-toolbar-9.1.0.zip` — tag `v9.1.0`
+
 ## 9.0.2 — 2026-06-13
 
 **Root-cause fix: missing frontend navigation/modules**

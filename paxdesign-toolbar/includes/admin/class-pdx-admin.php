@@ -219,7 +219,6 @@ class PDX_Admin {
 
 			case 'general':
 				return [
-					'enabled'     => isset( $post['enabled'] ),
 					'contact_url' => esc_url_raw( $post['contact_url'] ?? '' ),
 					'cta_primary_label'   => sanitize_text_field( $post['cta_primary_label']   ?? 'Start a project' ),
 					'cta_secondary_label' => sanitize_text_field( $post['cta_secondary_label'] ?? 'Learn more' ),
@@ -249,24 +248,25 @@ class PDX_Admin {
 
 			case 'ui':
 				return [
-					'dock_position'  => in_array( $post['dock_position'] ?? '', [ 'left', 'right' ] ) ? $post['dock_position'] : 'left',
+					'dock_position'  => 'left',
 					'dock_theme'     => in_array( $post['dock_theme']    ?? '', [ 'dark', 'light', 'auto' ] ) ? $post['dock_theme'] : 'dark',
 					'dock_size'      => in_array( $post['dock_size']     ?? '', [ 'compact', 'default', 'large' ] ) ? $post['dock_size'] : 'default',
 					'accent_color'   => sanitize_hex_color( $post['accent_color'] ?? '#ffffff' ) ?: '#ffffff',
 					'custom_css'     => wp_strip_all_tags( $post['custom_css'] ?? '' ),
-					// Mobile
+
+					// Mobile (streamlined controls only)
 					'mobile_enabled'       => isset( $post['mobile_enabled'] ),
 					'mobile_breakpoint'    => min( 1280, max( 320, absint( $post['mobile_breakpoint'] ?? 680 ) ) ),
-					'mobile_dock_position' => in_array( $post['mobile_dock_position'] ?? '', [ 'under-header', 'bottom-center', 'bottom-left', 'bottom-right' ] ) ? $post['mobile_dock_position'] : 'under-header',
+					'mobile_dock_position' => 'under-header',
 					'mobile_dock_height'   => min( 72, max( 36, absint( $post['mobile_dock_height'] ?? 48 ) ) ),
 					'mobile_panel_height'  => min( 96, max( 50, absint( $post['mobile_panel_height'] ?? 90 ) ) ),
-					'mobile_icon_size'     => min( 28, max( 0, absint( $post['mobile_icon_size'] ?? 0 ) ) ),
-					'mobile_btn_size'      => min( 60, max( 0, absint( $post['mobile_btn_size'] ?? 0 ) ) ),
-					'mobile_spacing'       => in_array( $post['mobile_spacing'] ?? '', [ 'default', 'compact', 'relaxed' ] ) ? $post['mobile_spacing'] : 'default',
-					'mobile_scale'         => in_array( $post['mobile_scale'] ?? '', [ 'auto', 'fixed', 'fluid' ] ) ? $post['mobile_scale'] : 'auto',
-					'mobile_compact'       => isset( $post['mobile_compact'] ),
-					'mobile_safe_area'     => isset( $post['mobile_safe_area'] ),
-					'mobile_swipe_close'   => isset( $post['mobile_swipe_close'] ),
+					'mobile_icon_size'     => 0,
+					'mobile_btn_size'      => 0,
+					'mobile_spacing'       => 'default',
+					'mobile_scale'         => 'auto',
+					'mobile_compact'       => false,
+					'mobile_safe_area'     => true,
+					'mobile_swipe_close'   => true,
 					'mobile_hide_dock'     => isset( $post['mobile_hide_dock'] ),
 				];
 
@@ -279,20 +279,11 @@ class PDX_Admin {
 				];
 
 			case 'roles':
-				$roles = get_editable_roles();
-				$selected = [];
-				if ( isset( $post['show_to_roles'] ) && is_array( $post['show_to_roles'] ) ) {
-					foreach ( $post['show_to_roles'] as $r ) {
-						$r = sanitize_key( $r );
-						if ( $r === 'all' || isset( $roles[ $r ] ) ) {
-							$selected[] = $r;
-						}
-					}
-				}
 				return [
-					'show_to_roles'       => $selected ?: [ 'all' ],
-					'hide_for_logged_out' => isset( $post['hide_for_logged_out'] ),
-					'hide_for_logged_in'  => isset( $post['hide_for_logged_in'] ),
+					// Deprecated in v9.1: visibility is always on; access handled by auth/module gating.
+					'show_to_roles'       => [ 'all' ],
+					'hide_for_logged_out' => false,
+					'hide_for_logged_in'  => false,
 				];
 
 			case 'billing':
