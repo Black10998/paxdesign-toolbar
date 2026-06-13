@@ -86,6 +86,9 @@ async function collectLayoutMetrics(page) {
       panelRect.bottom <= viewportH + 1 &&
       panelRect.right <= viewportW + 1;
 
+    const root = document.getElementById('pdx-root');
+    const rootRect = root ? root.getBoundingClientRect() : null;
+
     if (buttons[0]) buttons[0].click();
 
     return {
@@ -96,6 +99,9 @@ async function collectLayoutMetrics(page) {
       panelInViewport,
       dockOverflowX: dock ? getComputedStyle(dock).overflowX : '',
       dockFlexDirection: direction,
+      rootHeight: rootRect ? rootRect.height : null,
+      rootWidth: rootRect ? rootRect.width : null,
+      pageOverflowX: document.documentElement.scrollWidth > viewportW + 1,
     };
   });
 }
@@ -119,6 +125,9 @@ async function collectLayoutMetrics(page) {
     expect(metrics.panelOpen).toBeTruthy();
     expect(metrics.panelInViewport).toBeTruthy();
     expect(metrics.dockFlexDirection).toBe(viewport.expectedDirection);
+    expect(metrics.rootHeight).toBe(0);
+    expect(metrics.rootWidth).toBe(0);
+    expect(metrics.pageOverflowX).toBeFalsy();
     if (viewport.expectedDirection === 'row') {
       expect(['auto', 'scroll']).toContain(metrics.dockOverflowX);
     }
