@@ -100,6 +100,7 @@
 
     var dock = document.getElementById('pdx-dock');
     if (!dock) return;
+    dock.setAttribute('data-pdx-layout', 'shell-v2');
 
     /* ── Stamp mobile layout immediately — before any async work ── */
     // The base CSS already handles mobile layout without JS.
@@ -107,6 +108,9 @@
     // --pdx-panel-top are correct from the very first paint.
     // This runs synchronously so there is zero flash of wrong layout.
     var pdxRoot = document.getElementById('pdx-root');
+    if (pdxRoot) {
+      pdxRoot.setAttribute('data-shell-layout', 'v2');
+    }
     var bp      = C.mobileBreakpoint || 680;
     var dockH   = Math.min(72, Math.max(36, parseInt(C.mobileDockHeight, 10) || 48));
 
@@ -115,38 +119,109 @@
       return bar ? Math.round(bar.getBoundingClientRect().height) : 0;
     }
 
+    function getViewportH() {
+      if (window.visualViewport && window.visualViewport.height) {
+        return Math.max(320, Math.round(window.visualViewport.height));
+      }
+      return Math.max(320, Math.round(window.innerHeight || 0));
+    }
+
+    function isRenderableHeader(el) {
+      if (!el || el.id === 'pdx-root' || el.id === 'pdx-dock' || el.id === 'pdx-panel') return false;
+      var style = window.getComputedStyle(el);
+      if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+      var rect = el.getBoundingClientRect();
+      if (!rect || rect.height < 20 || rect.bottom <= 0 || rect.top > 180) return false;
+      if (style.position !== 'fixed' && style.position !== 'sticky') return false;
+      return true;
+    }
+
+    function getHeaderOffset() {
+      var offset = getAdminBarH();
+      var selectors = [
+        'header',
+        '[role="banner"]',
+        '#masthead',
+        '#site-header',
+        '.site-header',
+        '.main-header',
+        '.header',
+        '.sticky-header'
+      ];
+      var seen = [];
+      selectors.forEach(function (sel) {
+        document.querySelectorAll(sel).forEach(function (el) {
+          if (seen.indexOf(el) >= 0) return;
+          seen.push(el);
+          if (!isRenderableHeader(el)) return;
+          var rect = el.getBoundingClientRect();
+          offset = Math.max(offset, Math.round(rect.bottom));
+        });
+      });
+      return Math.max(0, offset);
+    }
+
     function stampLayoutVars() {
-      var abH      = getAdminBarH();
-      var dockTop  = abH;
+      var topInset = getHeaderOffset();
+      var dockTop  = topInset;
       var panelTop = dockTop + dockH;
-      var vh       = window.innerHeight * 0.01;
+      var vhRaw    = getViewportH();
+      var vh       = vhRaw * 0.01;
+      var panelMax = Math.max(160, vhRaw - panelTop);
+      document.documentElement.style.setProperty('--pdx-shell-top', dockTop + 'px');
       document.documentElement.style.setProperty('--pdx-dock-top',  dockTop  + 'px');
       document.documentElement.style.setProperty('--pdx-dock-h',    dockH    + 'px');
       document.documentElement.style.setProperty('--pdx-panel-top', panelTop + 'px');
+      document.documentElement.style.setProperty('--pdx-panel-max-h', panelMax + 'px');
       document.documentElement.style.setProperty('--pdx-vh',        vh       + 'px');
     }
 
-    // Run immediately — synchronous, no RAF needed here.
-    if (window.innerWidth <= bp) {
+    function syncShellVars() {
       stampLayoutVars();
-      // Stamp data-mobile-dock so Mode B CSS fires if configured.
-      var dockPos = C.mobileDockPosition || 'under-header';
-      if (pdxRoot) pdxRoot.dataset.mobileDock = dockPos;
+    }
+
+    var shellSyncRaf = 0;
+    function scheduleShellVarSync() {
+      if (shellSyncRaf) cancelAnimationFrame(shellSyncRaf);
+      shellSyncRaf = requestAnimationFrame(syncShellVars);
+    }
+
+    // Run immediately so desktop + mobile share one geometry source.
+    syncShellVars();
+    if (window.innerWidth <= bp && pdxRoot) {
+      pdxRoot.dataset.mobileDock = 'under-header';
+      dock.classList.add('pdx-dock--mobile');
+    }
+    window.addEventListener('resize', scheduleShellVarSync);
+    window.addEventListener('orientationchange', function () {
+      setTimeout(scheduleShellVarSync, 220);
+    });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', scheduleShellVarSync);
     }
 
     /* ── Panel + backdrop ─────────────────────────────────── */
     var backdrop = document.createElement('div');
     backdrop.id = 'pdx-backdrop';
+    backdrop.setAttribute('data-pdx-layout', 'shell-v2');
+    if (window.innerWidth <= bp) {
+      backdrop.classList.add('pdx-backdrop--mobile');
+    }
     document.body.appendChild(backdrop);
 
     var panel = document.createElement('aside');
     panel.id = 'pdx-panel';
+    panel.setAttribute('data-pdx-layout', 'shell-v2');
+    if (window.innerWidth <= bp) {
+      panel.classList.add('pdx-panel--mobile');
+    }
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-label', 'Tool panel');
     panel.setAttribute('aria-hidden', 'true');
     var panelInner = document.createElement('div');
     panelInner.id = 'pdx-panel-inner';
+    panelInner.setAttribute('data-pdx-layout', 'shell-v2');
     panel.appendChild(panelInner);
     document.body.appendChild(panel);
 
@@ -574,14 +649,14 @@
       // Always remove any existing close button first — renderPanel replaces
       // panelInner.innerHTML so any previously appended button is already gone,
       // but guard against double-injection on rapid calls.
-      var existing = panelInner.querySelector('.pdx-mobile-close');
+      var existing = panelInner.querySelector('.pdx-mobile-close, .pdx-panel-close');
       if (existing) existing.remove();
 
       // Only inject when a panel module is rendered (.pdx-ph exists).
       if (!panelInner.querySelector('.pdx-ph')) return;
 
       var btn = document.createElement('button');
-      btn.className = 'pdx-panel-close';
+      btn.className = 'pdx-panel-close pdx-mobile-close';
       btn.type = 'button';
       btn.setAttribute('aria-label', 'Close panel');
       btn.innerHTML = _closeSvg;
@@ -4064,7 +4139,7 @@
     /* ── Mobile ───────────────────────────────────────────── */
     function setupMobile(C, panel, dock) {
       var bp          = C.mobileBreakpoint   || 680;
-      var dockPos     = C.mobileDockPosition || 'under-header';
+      var dockPos     = 'under-header';
       var swipeClose  = C.mobileSwipeClose   !== false;
       var hideDock    = C.mobileHideDock     !== false;
       var safeArea    = C.mobileSafeArea     !== false;
@@ -4088,22 +4163,23 @@
       // stampLayoutVars() was already called synchronously in init()
       // for the initial paint. We call it again on resize/orientation.
       function applyLayout() {
-        var abH      = getAdminBarH();
-        var dockTop  = abH;
+        var dockTop  = getHeaderOffset();
         var panelTop = dockTop + dockHeight;
-        var vh       = window.innerHeight * 0.01;
+        var vhRaw    = getViewportH();
+        var vh       = vhRaw * 0.01;
+        var panelMax = Math.max(160, vhRaw - panelTop);
         setProp('--pdx-vh',          vh          + 'px');
         setProp('--pdx-dock-top',    dockTop     + 'px');
         setProp('--pdx-dock-h',      dockHeight  + 'px');
         setProp('--pdx-panel-top',   panelTop    + 'px');
+        setProp('--pdx-panel-max-h', panelMax    + 'px');
         setProp('--pdx-panel-h-pct', panelHPct   + '');
         if (iconSize > 0) setProp('--pdx-icon', iconSize + 'px');
         if (btnSize  > 0) setProp('--pdx-btn',  btnSize  + 'px');
       }
 
       function clearLayout() {
-        ['--pdx-vh','--pdx-dock-top','--pdx-dock-h','--pdx-panel-top',
-         '--pdx-panel-h-pct','--pdx-icon','--pdx-btn'
+        ['--pdx-panel-h-pct','--pdx-icon','--pdx-btn'
         ].forEach(removeProp);
       }
 
@@ -4114,6 +4190,7 @@
         isMobile = true;
         panel.classList.add('pdx-panel--mobile');
         dock.classList.add('pdx-dock--mobile');
+        backdrop.classList.add('pdx-backdrop--mobile');
 
         if (pdxRoot) {
           pdxRoot.dataset.mobileDock    = dockPos;
@@ -4138,6 +4215,7 @@
         isMobile = false;
         panel.classList.remove('pdx-panel--mobile');
         dock.classList.remove('pdx-dock--mobile');
+        backdrop.classList.remove('pdx-backdrop--mobile');
 
         if (pdxRoot) {
           delete pdxRoot.dataset.mobileDock;
@@ -4148,6 +4226,7 @@
         }
 
         clearLayout();
+        syncShellVars();
         dock.style.removeProperty('transform');
         dock.style.removeProperty('opacity');
       }
@@ -4172,6 +4251,13 @@
       window.addEventListener('orientationchange', function() {
         setTimeout(function() { applyLayout(); check(); }, 400);
       });
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', function () {
+          applyLayout();
+          check();
+        });
+      }
 
       // ── Swipe to close (header/handle only — never steal content scroll) ──
       if (!swipeClose) return;

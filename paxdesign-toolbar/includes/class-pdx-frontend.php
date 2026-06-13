@@ -51,23 +51,16 @@ class PDX_Frontend {
 		);
 
 		wp_enqueue_style(
-			'pdx-dock-ui',
-			PDX_URL . 'assets/css/pdx-dock-ui.css',
-			[ 'pdx-dock', 'pdx-tokens' ],
-			$this->asset_version( 'assets/css/pdx-dock-ui.css' )
-		);
-
-		wp_enqueue_style(
 			'pdx-panel-scroll',
 			PDX_URL . 'assets/css/pdx-panel-scroll.css',
-			[ 'pdx-dock-ui' ],
+			[ 'pdx-dock' ],
 			$this->asset_version( 'assets/css/pdx-panel-scroll.css' )
 		);
 
 		wp_enqueue_style(
 			'pdx-intel-activity',
 			PDX_URL . 'assets/css/pdx-intel-activity.css',
-			[ 'pdx-dock-ui' ],
+			[ 'pdx-dock' ],
 			$this->asset_version( 'assets/css/pdx-intel-activity.css' )
 		);
 
@@ -93,17 +86,17 @@ class PDX_Frontend {
 		);
 
 		wp_enqueue_style(
-			'pdx-unified-ui',
-			PDX_URL . 'assets/css/pdx-unified-ui.css',
-			[ 'pdx-module-chrome', 'pdx-tokens' ],
-			$this->asset_version( 'assets/css/pdx-unified-ui.css' )
+			'pdx-auth',
+			PDX_URL . 'assets/css/pdx-auth.css',
+			[ 'pdx-module-chrome' ],
+			$this->asset_version( 'assets/css/pdx-auth.css' )
 		);
 
 		wp_enqueue_style(
-			'pdx-auth',
-			PDX_URL . 'assets/css/pdx-auth.css',
-			[ 'pdx-unified-ui' ],
-			$this->asset_version( 'assets/css/pdx-auth.css' )
+			'pdx-shell-layout',
+			PDX_URL . 'assets/css/pdx-shell-layout.css',
+			[ 'pdx-auth', 'pdx-panel-scroll' ],
+			$this->asset_version( 'assets/css/pdx-shell-layout.css' )
 		);
 
 		// Use defer strategy (WP 6.3+) so the script always runs after the DOM is ready.
@@ -229,7 +222,7 @@ class PDX_Frontend {
 			'mobileCompact'      => (bool)   $this->settings->get( 'mobile_compact',       false ),
 			'mobileSafeArea'     => (bool)   $this->settings->get( 'mobile_safe_area',     true ),
 			'mobileSwipeClose'   => (bool)   $this->settings->get( 'mobile_swipe_close',   true ),
-			'mobileHideDock'     => (bool)   $this->settings->get( 'mobile_hide_dock',     true ),
+			'mobileHideDock'     => false,
 			'analytics'        => (bool) $this->settings->get( 'analytics_enabled', false ),
 			'aiMemory'         => (bool) $this->settings->get( 'ai_memory_enabled', true ),
 			'workspaceEnabled' => (bool) $this->settings->get( 'workspace_enabled', true ),
@@ -258,6 +251,7 @@ class PDX_Frontend {
 			 data-theme="<?php echo $theme; ?>"
 			 data-size="<?php echo $size; ?>"
 			 data-mobile-dock="<?php echo $mobile_dock; ?>"
+			 data-shell-layout="v2"
 			 data-pdx-version="<?php echo esc_attr( PDX_VERSION ); ?>"
 			 aria-label="PaxDesign Utility Dock"
 			 role="complementary">
