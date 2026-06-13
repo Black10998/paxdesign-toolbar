@@ -34,25 +34,15 @@
     return d.innerHTML;
   }
 
-  /** Server-driven verified badge — only rendered when verified === true from API. */
+  /** Server-driven PAXDesign verified badge — only when verified === true from API. */
   function verifiedBadgeHtml(verified, opts) {
-    opts = opts || {};
-    if (!verified) return '';
-    var title = opts.title || 'Verified email';
-    var size = opts.size || 14;
-    return '<span class="pdx-verified-badge' + (opts.inline ? ' pdx-verified-badge--inline' : '') + '" role="img" aria-label="' + escHtml(title) + '" title="' + escHtml(title) + '">' +
-      '<svg class="pdx-verified-badge__icon" width="' + size + '" height="' + size + '" viewBox="0 0 22 22" aria-hidden="true" focusable="false">' +
-        '<path fill="#1D9BF0" d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246-.223-.12-.482-.195-.752-.219a3.64 3.64 0 0 0-.829.083 2.58 2.58 0 0 0 .019-1.006 3.64 3.64 0 0 0-.564-1.037 3.548 3.548 0 0 0-1.012-1.017 3.64 3.64 0 0 0-1.041-.565 2.605 2.605 0 0 0-1.006.017 3.632 3.632 0 0 0-1.033-.562 3.547 3.547 0 0 0-1.247-1.438 3.628 3.628 0 0 0-1.816-.57 3.632 3.632 0 0 0-1.816.57 3.552 3.552 0 0 0-1.247 1.438 3.607 3.607 0 0 0-.562 1.033 2.605 2.605 0 0 0 .017 1.006 3.627 3.627 0 0 0-.565 1.041 3.543 3.543 0 0 0-1.017 1.012 3.632 3.632 0 0 0-.564 1.037 2.62 2.62 0 0 0 .019 1.006 3.627 3.627 0 0 0-.219.753 3.632 3.632 0 0 0-1.246 1.438 3.608 3.608 0 0 0-.57 1.816 3.607 3.607 0 0 0 .57 1.816c.354.541.852.973 1.438 1.247.223.12.482.195.752.219a3.632 3.632 0 0 0 .829-.083 2.603 2.603 0 0 0-.019 1.006 3.632 3.632 0 0 0 .564 1.037 3.543 3.543 0 0 0 1.012 1.017 3.632 3.632 0 0 0 1.041.565 2.62 2.62 0 0 0-.017 1.006 3.627 3.627 0 0 0 .562 1.033 3.543 3.543 0 0 0 1.438 1.247 3.627 3.627 0 0 0 1.816.57 3.632 3.632 0 0 0 1.816-.57 3.608 3.608 0 0 0 1.247-1.438 3.632 3.632 0 0 0 .565-1.041 2.605 2.605 0 0 0-.017-1.006 3.627 3.627 0 0 0 .219-.753 3.632 3.632 0 0 0 1.246-1.438 3.608 3.608 0 0 0 .57-1.816Z"/>' +
-        '<path fill="#fff" d="M9.609 14.763 6.083 11.237l1.414-1.414 2.112 2.112 4.378-4.378 1.414 1.414-5.792 5.792Z"/>' +
-      '</svg>' +
-    '</span>';
+    if (window.PDXVerifiedBadge) return window.PDXVerifiedBadge.render(verified, opts);
+    return '';
   }
 
   function nameWithBadge(name, verified, opts) {
-    return '<span class="pdx-name-with-badge">' +
-      escHtml(name || 'Account') +
-      verifiedBadgeHtml(verified, opts) +
-    '</span>';
+    if (window.PDXVerifiedBadge) return window.PDXVerifiedBadge.nameWithBadge(name, verified, opts);
+    return escHtml(name || 'Account');
   }
 
   function isRestNonceError(data) {
@@ -231,7 +221,7 @@
 
     if (labelEl) {
       if (user.logged_in) {
-        labelEl.innerHTML = nameWithBadge(label, user.verified, { size: 13, inline: true });
+        labelEl.innerHTML = nameWithBadge(label, user.verified, { size: 14, inline: true, context: 'account' });
       } else {
         labelEl.textContent = label;
       }
@@ -242,11 +232,11 @@
 
     if (user.logged_in && head) {
       head.innerHTML =
-        '<div class="pdx-auth-menu-name">' + nameWithBadge(user.display_name || 'Account', user.verified) + '</div>' +
+        '<div class="pdx-auth-menu-name">' + nameWithBadge(user.display_name || 'Account', user.verified, { size: 15, context: 'account' }) + '</div>' +
         '<div class="pdx-auth-menu-email">' + escHtml(user.email || '') + '</div>' +
         '<div class="pdx-auth-menu-status">' +
           escHtml(accountStatusLabel()) +
-          verifiedBadgeHtml(user.verified, { size: 13, inline: true }) +
+          verifiedBadgeHtml(user.verified, { size: 13, inline: true, context: 'email' }) +
         '</div>';
       authMenu.removeAttribute('hidden');
     } else {
@@ -319,9 +309,9 @@
     }
     var body = profileOverlay.querySelector('.pdx-profile-card-body');
     body.innerHTML =
-      '<div class="pdx-profile-row"><span class="pdx-profile-label">Full Name</span><span class="pdx-profile-value">' + nameWithBadge(user.display_name || '—', user.verified) + '</span></div>' +
+      '<div class="pdx-profile-row"><span class="pdx-profile-label">Full Name</span><span class="pdx-profile-value">' + nameWithBadge(user.display_name || '—', user.verified, { size: 15, context: 'account' }) + '</span></div>' +
       '<div class="pdx-profile-row"><span class="pdx-profile-label">Email</span><span class="pdx-profile-value">' + escHtml(user.email || '—') + '</span></div>' +
-      '<div class="pdx-profile-row"><span class="pdx-profile-label">Account Status</span><span class="pdx-profile-value pdx-profile-value--status">' + escHtml(accountStatusLabel()) + verifiedBadgeHtml(user.verified, { size: 14, inline: true }) + '</span></div>' +
+      '<div class="pdx-profile-row"><span class="pdx-profile-label">Account Status</span><span class="pdx-profile-value pdx-profile-value--status">' + escHtml(accountStatusLabel()) + verifiedBadgeHtml(user.verified, { size: 14, inline: true, context: user.verified ? 'email' : 'account' }) + '</span></div>' +
       '<div class="pdx-profile-row"><span class="pdx-profile-label">Login Status</span><span class="pdx-profile-value">' + (user.logged_in ? 'Signed in' : 'Signed out') + '</span></div>';
     profileOverlay.classList.add('is-open');
     document.body.classList.add('pdx-no-scroll');
@@ -758,13 +748,14 @@
     return '<div id="pdx-acc-profile" class="pdx-account-section is-active">' +
       '<div class="pdx-account-card">' +
         '<div class="pdx-account-card-title">Account</div>' +
+        '<div class="pdx-account-profile-head">' + nameWithBadge(p.display_name || 'Account', p.verified, { size: 16, context: 'account' }) + '</div>' +
         '<div class="pdx-account-status-row">' +
-          '<span class="pdx-account-status pdx-account-status--' + statusCls + '">' + statusLabel + verifiedBadgeHtml(p.verified, { size: 13, inline: true }) + '</span>' +
+          '<span class="pdx-account-status pdx-account-status--' + statusCls + '">' + statusLabel + verifiedBadgeHtml(p.verified, { size: 13, inline: true, context: 'email' }) + '</span>' +
           (!p.verified ? '<button type="button" class="pdx-account-btn pdx-resend-verify">Resend email</button>' : '') +
         '</div>' +
       '</div>' +
       '<div class="pdx-account-card">' +
-        '<div class="pdx-account-card-title">Profile' + verifiedBadgeHtml(p.verified, { size: 14, inline: true }) + '</div>' +
+        '<div class="pdx-account-card-title">Profile</div>' +
         '<form id="pdx-profile-form">' +
           field('display_name', 'Display name', p.display_name) +
           field('email', 'Email', p.email, 'email') +

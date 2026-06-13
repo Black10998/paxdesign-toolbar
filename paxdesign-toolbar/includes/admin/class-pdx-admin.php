@@ -81,9 +81,16 @@ class PDX_Admin {
 		);
 
 		wp_enqueue_style(
+			'pdx-verified-badge',
+			PDX_URL . 'assets/css/pdx-verified-badge.css',
+			[ 'pdx-tokens' ],
+			PDX_VERSION
+		);
+
+		wp_enqueue_style(
 			'pdx-admin',
 			PDX_URL . 'assets/css/admin.css',
-			[ 'pdx-tokens' ],
+			[ 'pdx-tokens', 'pdx-verified-badge' ],
 			PDX_VERSION
 		);
 

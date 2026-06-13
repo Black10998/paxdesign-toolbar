@@ -100,9 +100,16 @@ class PDX_Frontend {
 		);
 
 		wp_enqueue_style(
+			'pdx-verified-badge',
+			PDX_URL . 'assets/css/pdx-verified-badge.css',
+			[ 'pdx-unified-ui' ],
+			$this->asset_version( 'assets/css/pdx-verified-badge.css' )
+		);
+
+		wp_enqueue_style(
 			'pdx-auth',
 			PDX_URL . 'assets/css/pdx-auth.css',
-			[ 'pdx-unified-ui' ],
+			[ 'pdx-unified-ui', 'pdx-verified-badge' ],
 			$this->asset_version( 'assets/css/pdx-auth.css' )
 		);
 
@@ -142,9 +149,17 @@ class PDX_Frontend {
 		);
 
 		wp_enqueue_script(
+			'pdx-verified-badge',
+			PDX_URL . 'assets/js/pdx-verified-badge.js',
+			[],
+			$this->asset_version( 'assets/js/pdx-verified-badge.js' ),
+			$script_args
+		);
+
+		wp_enqueue_script(
 			'pdx-auth',
 			PDX_URL . 'assets/js/pdx-auth.js',
-			[ 'pdx-dock' ],
+			[ 'pdx-dock', 'pdx-verified-badge' ],
 			$this->asset_version( 'assets/js/pdx-auth.js' ),
 			$script_args
 		);

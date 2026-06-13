@@ -83,45 +83,8 @@ body.admin-bar #pdx-auth-bar:not(.pdx-auth-bar--header) {
   max-width: 110px;
 }
 
-.pdx-name-with-badge,
-.pdx-profile-value--status,
-.pdx-account-status-row,
-.pdx-auth-menu-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pdx-account-status-row {
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.pdx-verified-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  line-height: 0;
-  vertical-align: middle;
-}
-
-.pdx-verified-badge--inline {
-  margin-left: 2px;
-}
-
-.pdx-verified-badge__icon {
-  display: block;
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.35));
-}
-
 .pdx-auth-menu-status {
   flex-wrap: wrap;
-}
-
-.pdx-account-card-title .pdx-verified-badge {
-  margin-left: 4px;
-  vertical-align: middle;
 }
 
 .pdx-auth-menu {
@@ -717,6 +680,13 @@ body.admin-bar #pdx-auth-bar:not(.pdx-auth-bar--header) {
   color: #fff;
   margin-bottom: 12px;
   letter-spacing: 0.02em;
+}
+
+.pdx-account-profile-head {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 10px;
 }
 
 .pdx-account-field {

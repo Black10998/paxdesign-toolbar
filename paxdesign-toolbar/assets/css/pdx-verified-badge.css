@@ -1,0 +1,160 @@
+/**
+ * PAXDesign Verified Badge — premium blue circle + white check (original identity asset).
+ */
+
+:root {
+  --pdx-vb-fill: #228be6;
+  --pdx-vb-fill-deep: #1c6fcc;
+  --pdx-vb-shine: rgba(255, 255, 255, 0.22);
+  --pdx-vb-check: #ffffff;
+  --pdx-vb-glow: rgba(34, 139, 230, 0.42);
+  --pdx-vb-tip-bg: rgba(12, 14, 18, 0.94);
+  --pdx-vb-tip-text: #f4f6f8;
+  --pdx-vb-tip-border: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --pdx-vb-fill: #1a73e8;
+    --pdx-vb-fill-deep: #1558b0;
+    --pdx-vb-glow: rgba(26, 115, 232, 0.38);
+    --pdx-vb-tip-bg: rgba(255, 255, 255, 0.98);
+    --pdx-vb-tip-text: #1a1d21;
+    --pdx-vb-tip-border: rgba(0, 0, 0, 0.08);
+  }
+}
+
+.pdx-name-with-badge,
+.pdx-profile-value--status,
+.pdx-account-status-row,
+.pdx-auth-menu-status,
+.pdx-account-profile-head,
+.pdx-admin-name-with-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+}
+
+.pdx-account-status-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pdx-verified-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
+  vertical-align: middle;
+  top: -0.5px;
+  cursor: help;
+  outline: none;
+}
+
+.pdx-verified-badge--inline {
+  margin-left: 1px;
+}
+
+.pdx-vb {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 1px 2px var(--pdx-vb-glow));
+}
+
+.pdx-vb__bg {
+  fill: var(--pdx-vb-fill);
+}
+
+.pdx-vb__shine {
+  fill: var(--pdx-vb-shine);
+}
+
+.pdx-vb__check {
+  fill: none;
+  stroke: var(--pdx-vb-check);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.pdx-verified-badge:focus-visible .pdx-vb {
+  filter: drop-shadow(0 0 0 2px rgba(34, 139, 230, 0.45)) drop-shadow(0 1px 2px var(--pdx-vb-glow));
+}
+
+.pdx-verified-badge[data-pdx-tip]::after {
+  content: attr(data-pdx-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 7px);
+  transform: translateX(-50%) translateY(4px);
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: var(--pdx-vb-tip-bg);
+  color: var(--pdx-vb-tip-text);
+  border: 1px solid var(--pdx-vb-tip-border);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  z-index: 20;
+}
+
+.pdx-verified-badge[data-pdx-tip]::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--pdx-vb-tip-bg);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  pointer-events: none;
+  z-index: 19;
+}
+
+.pdx-verified-badge:hover::after,
+.pdx-verified-badge:focus-visible::after,
+.pdx-verified-badge:hover::before,
+.pdx-verified-badge:focus-visible::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+.pdx-verified-badge:hover::after,
+.pdx-verified-badge:focus-visible::after {
+  transform: translateX(-50%) translateY(0);
+}
+
+.pdx-auth-trigger-label .pdx-verified-badge {
+  top: 0;
+}
+
+.pdx-account-card-title .pdx-verified-badge {
+  margin-left: 3px;
+}
+
+.pdx-admin-wrap .pdx-verified-badge[data-pdx-tip]::after {
+  z-index: 100050;
+}
+
+.pdx-admin-wrap .pdx-verified-badge[data-pdx-tip]::before {
+  z-index: 100049;
+}
+
+.pdx-admin-verified-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

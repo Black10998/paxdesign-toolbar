@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## 9.0.8 — 2026-06-13
+
+**PAXDesign Premium Verified Badge (original identity asset)**
+
+- Replaced generic badge with original PAXDesign SVG: blue circle, white check, soft highlight, vector quality.
+- Shared component (`PDX_Verified_Badge`) used in frontend JS, account UI, and administrator Customers page.
+- Hover/focus tooltip: **Verified Account** (next to name) or **Email Verified** (verification status).
+- Dark Mode and Light Mode support via CSS variables; crisp alignment with user names at 14–16px sizes.
+- Still server-gated only — badge renders when `verified === true` from account data.
+
+**Install:** `releases/paxdesign-toolbar-9.0.8.zip` — tag `v9.0.8`
+
 ## 9.0.7 — 2026-06-13
 
 **Verified badge and administrator customer management**

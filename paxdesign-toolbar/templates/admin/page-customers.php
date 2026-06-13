@@ -34,11 +34,18 @@ include __DIR__ . '/partials/header.php';
 
 <?php if ( ! empty( $detail ) ) : ?>
 <div class="pdx-card" style="margin-bottom:16px">
-  <div class="pdx-card__header"><h2><?php echo esc_html( $detail['display_name'] ); ?></h2></div>
+  <div class="pdx-card__header"><h2 class="pdx-admin-name-with-badge"><?php echo PDX_Verified_Badge::name_with_badge( $detail['display_name'], (bool) $detail['verified'], [ 'size' => 18 ] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></h2></div>
   <div class="pdx-card__body">
     <div class="pdx-stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
       <div class="pdx-stat-card"><span class="pdx-stat-card__label">Email</span><span class="pdx-stat-card__value" style="font-size:13px"><?php echo esc_html( $detail['email'] ); ?></span></div>
-      <div class="pdx-stat-card"><span class="pdx-stat-card__label">Email Status</span><span class="pdx-stat-card__value" style="font-size:13px"><?php echo $detail['verified'] ? 'Verified' : 'Not Verified'; ?></span></div>
+      <div class="pdx-stat-card"><span class="pdx-stat-card__label">Email Status</span><span class="pdx-stat-card__value pdx-admin-verified-cell" style="font-size:13px"><?php
+        if ( $detail['verified'] ) {
+          echo PDX_Verified_Badge::render( true, [ 'size' => 14, 'context' => PDX_Verified_Badge::CONTEXT_EMAIL, 'inline' => true ] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+          echo ' Verified';
+        } else {
+          echo 'Not Verified';
+        }
+      ?></span></div>
       <div class="pdx-stat-card"><span class="pdx-stat-card__label">Account</span><span class="pdx-stat-card__value" style="font-size:13px"><?php echo esc_html( ucfirst( $detail['account_status'] ) ); ?></span></div>
       <div class="pdx-stat-card"><span class="pdx-stat-card__label">Payment</span><span class="pdx-stat-card__value" style="font-size:13px"><?php echo esc_html( $detail['payment_summary']['label'] ?? 'Free' ); ?></span></div>
     </div>
@@ -142,9 +149,17 @@ include __DIR__ . '/partials/header.php';
           $row = PDX_Customers::customer_row( $c->ID );
         ?>
         <tr>
-          <td><?php echo esc_html( $row['display_name'] ); ?></td>
+          <td><?php echo PDX_Verified_Badge::name_with_badge( $row['display_name'], (bool) $row['verified'], [ 'size' => 14 ] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></td>
           <td style="font-size:11px"><?php echo esc_html( $row['email'] ); ?></td>
-          <td><?php echo $row['verified'] ? '<span style="color:#1D9BF0">Verified</span>' : 'Not Verified'; ?></td>
+          <td><?php
+            if ( $row['verified'] ) {
+              echo '<span class="pdx-admin-verified-cell">';
+              echo PDX_Verified_Badge::render( true, [ 'size' => 14, 'context' => PDX_Verified_Badge::CONTEXT_EMAIL, 'inline' => true ] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+              echo ' Verified</span>';
+            } else {
+              echo 'Not Verified';
+            }
+          ?></td>
           <td><?php echo esc_html( ucfirst( $row['account_status'] ) ); ?></td>
           <td><?php echo esc_html( $row['payment_summary']['label'] ?? 'Free' ); ?></td>
           <td><?php echo esc_html( mysql2date( 'Y-m-d', $row['registered'] ) ); ?></td>
