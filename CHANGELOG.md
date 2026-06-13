@@ -1,5 +1,21 @@
 ﻿# Changelog
 
+## 9.0.7 — 2026-06-13
+
+**Verified badge and administrator customer management**
+
+- Added server-driven blue verified badge (shown only when email is confirmed via `pdx_email_verified`).
+- Badge appears next to the user name in the account dropdown, profile overlay, and account dashboard status.
+- Badge is removed automatically when email changes or verification is revoked.
+- New **PAXDesign Customer Accounts** admin page under Commerce → Customers (`manage_options` only).
+- Administrators can search customers, view verification/account/payment status, orders, purchases, and subscription details.
+- PaxDesign-only admin actions: suspend/activate account, grant/revoke module access, extend subscription, resend verification, internal notes.
+- All admin customer actions are nonce-protected and logged to the audit trail.
+- New registrations start as `pending` account status; verified email activates the account.
+- Suspended customers cannot log in.
+
+**Install:** `releases/paxdesign-toolbar-9.0.7.zip` — tag `v9.0.7`
+
 ## 9.0.6 — 2026-06-13
 
 **Critical: customer account panel permissions and billing UI**

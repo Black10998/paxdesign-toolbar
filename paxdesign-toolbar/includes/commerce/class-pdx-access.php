@@ -127,6 +127,81 @@ class PDX_Access {
 		return $rows > 0;
 	}
 
+	/**
+	 * Administrator grant — active module access for a user.
+	 */
+	public static function grant_user_access( int $user_id, string $module_id, ?string $expires_at = null ): bool {
+		global $wpdb;
+		$user = get_userdata( $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+
+		$table = $wpdb->prefix . self::TABLE;
+		$now   = current_time( 'mysql' );
+		$row   = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT id FROM {$table} WHERE user_id = %d AND module_id = %s ORDER BY id DESC LIMIT 1",
+				$user_id,
+				sanitize_key( $module_id )
+			),
+			ARRAY_A
+		);
+
+		$data = [
+			'status'     => 'active',
+			'updated_at' => $now,
+			'expires_at' => $expires_at,
+		];
+
+		if ( $row ) {
+			$wpdb->update( $table, $data, [ 'id' => (int) $row['id'] ], [ '%s', '%s', '%s' ], [ '%d' ] );
+			return true;
+		}
+
+		$wpdb->insert(
+			$table,
+			[
+				'user_id'      => $user_id,
+				'email'        => sanitize_email( $user->user_email ),
+				'module_id'    => sanitize_key( $module_id ),
+				'tier'         => 'paid',
+				'status'       => 'active',
+				'paypal_order' => 'admin-grant-' . wp_generate_password( 8, false ),
+				'amount'       => 0,
+				'currency'     => 'USD',
+				'expires_at'   => $expires_at,
+				'created_at'   => $now,
+				'updated_at'   => $now,
+			],
+			[ '%d', '%s', '%s', '%s', '%s', '%s', '%f', '%s', '%s', '%s', '%s' ]
+		);
+
+		return (bool) $wpdb->insert_id;
+	}
+
+	/** Revoke (expire) module access for a user. */
+	public static function revoke_user_access( int $user_id, string $module_id ): bool {
+		global $wpdb;
+		$table = $wpdb->prefix . self::TABLE;
+		$rows  = $wpdb->update(
+			$table,
+			[
+				'status'     => 'expired',
+				'updated_at' => current_time( 'mysql' ),
+			],
+			[
+				'user_id'   => $user_id,
+				'module_id' => sanitize_key( $module_id ),
+				'status'    => 'active',
+			],
+			[ '%s', '%s' ],
+			[ '%d', '%s', '%s' ]
+		);
+
+		return $rows > 0;
+	}
+
 	/* ── Read ───────────────────────────────────────────── */
 
 	/**

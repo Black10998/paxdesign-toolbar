@@ -39,6 +39,7 @@ class PDX_Admin {
 		add_submenu_page( $hidden, __( 'Pricing',    'paxdesign-toolbar' ), __( 'Pricing',    'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-pricing',       [ $this, 'render_page' ] );
 		add_submenu_page( $hidden, __( 'PayPal',     'paxdesign-toolbar' ), __( 'PayPal',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-payments',      [ $this, 'render_page' ] );
 		add_submenu_page( $hidden, __( 'Orders',     'paxdesign-toolbar' ), __( 'Orders',     'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-orders',        [ $this, 'render_page' ] );
+		add_submenu_page( $hidden, __( 'Customers',  'paxdesign-toolbar' ), __( 'Customers',  'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-customers',     [ $this, 'render_page' ] );
 		add_submenu_page( $hidden, __( 'API Keys',   'paxdesign-toolbar' ), __( 'API Keys',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-api',           [ $this, 'render_page' ] );
 		add_submenu_page( $hidden, __( 'UI & Style', 'paxdesign-toolbar' ), __( 'UI & Style', 'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-ui',            [ $this, 'render_page' ] );
 		add_submenu_page( $hidden, __( 'Webhooks',   'paxdesign-toolbar' ), __( 'Webhooks',   'paxdesign-toolbar' ), PDX_CAP, PDX_SLUG . '-webhooks',      [ $this, 'render_page' ] );
@@ -58,7 +59,7 @@ class PDX_Admin {
 
 		// Webhook form handlers
 		add_action( 'admin_post_pdx_webhook_create', [ $this, 'handle_webhook_create' ] );
-		add_action( 'admin_post_pdx_webhook_delete', [ $this, 'handle_webhook_delete' ] );
+		add_action( 'admin_post_pdx_customer_action', [ $this, 'handle_customer_action' ] );
 	}
 
 	public function admin_body_class( string $classes ): string {
@@ -141,6 +142,7 @@ class PDX_Admin {
 			PDX_SLUG . '-pricing'    => 'pricing',
 			PDX_SLUG . '-payments'   => 'payments',
 			PDX_SLUG . '-orders'     => 'orders',
+			PDX_SLUG . '-customers'  => 'customers',
 			PDX_SLUG . '-api'        => 'api',
 			PDX_SLUG . '-ui'         => 'ui',
 			PDX_SLUG . '-webhooks'   => 'webhooks',
@@ -412,6 +414,52 @@ class PDX_Admin {
 		PDX_Audit::log( 'webhooks', 'webhook_deleted', [ 'id' => $id ] );
 
 		wp_safe_redirect( add_query_arg( [ 'page' => PDX_SLUG . '-webhooks', 'updated' => '1' ], admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	public function handle_customer_action(): void {
+		if ( ! current_user_can( PDX_CAP ) ) {
+			wp_die( 'Unauthorized', 403 );
+		}
+		check_admin_referer( 'pdx_customer_action', 'pdx_nonce' );
+
+		$user_id = (int) ( $_POST['user_id'] ?? 0 );
+		$action  = sanitize_key( $_POST['customer_action'] ?? '' );
+		$redirect = add_query_arg(
+			[ 'page' => PDX_SLUG . '-customers', 'customer_id' => $user_id, 'updated' => '1' ],
+			admin_url( 'admin.php' )
+		);
+
+		if ( ! $user_id || ! PDX_Customers::is_customer( $user_id ) ) {
+			wp_safe_redirect( add_query_arg( [ 'page' => PDX_SLUG . '-customers', 'error' => 'invalid' ], admin_url( 'admin.php' ) ) );
+			exit;
+		}
+
+		switch ( $action ) {
+			case 'suspend':
+				PDX_Customers::suspend( $user_id );
+				break;
+			case 'activate':
+				PDX_Customers::activate( $user_id );
+				break;
+			case 'resend_verification':
+				PDX_Customers::resend_verification( $user_id );
+				break;
+			case 'grant_module':
+				PDX_Customers::grant_module( $user_id, sanitize_key( (string) ( $_POST['module_id'] ?? '' ) ), max( 0, (int) ( $_POST['grant_days'] ?? 0 ) ) );
+				break;
+			case 'revoke_module':
+				PDX_Customers::revoke_module( $user_id, sanitize_key( (string) ( $_POST['module_id'] ?? '' ) ) );
+				break;
+			case 'extend_subscription':
+				PDX_Customers::extend_subscription( $user_id, max( 1, (int) ( $_POST['extend_days'] ?? 30 ) ) );
+				break;
+			case 'save_notes':
+				PDX_Customers::save_notes( $user_id, (string) ( $_POST['admin_notes'] ?? '' ) );
+				break;
+		}
+
+		wp_safe_redirect( $redirect );
 		exit;
 	}
 }

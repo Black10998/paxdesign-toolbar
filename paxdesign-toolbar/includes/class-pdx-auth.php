@@ -235,6 +235,7 @@ class PDX_Auth {
 
 		self::assign_customer_role( $user_id );
 
+		update_user_meta( $user_id, PDX_Customers::META_ACCOUNT_STATUS, PDX_Customers::STATUS_PENDING );
 		update_user_meta( $user_id, self::META_VERIFIED, 0 );
 		self::send_verification_email( $user_id );
 
@@ -282,6 +283,14 @@ class PDX_Auth {
 			];
 		}
 
+		if ( ! PDX_Customers::is_login_allowed( $user->ID ) ) {
+			return [
+				'success' => false,
+				'error'   => 'suspended',
+				'message' => 'Your account has been suspended. Please contact support.',
+			];
+		}
+
 		$signed = wp_signon( [
 			'user_login'    => $user->user_login,
 			'user_password' => $password,
@@ -297,6 +306,7 @@ class PDX_Auth {
 		wp_set_current_user( $signed->ID );
 		wp_set_auth_cookie( $signed->ID, $remember, is_ssl() );
 		self::assign_customer_role( $signed->ID );
+		PDX_Customers::record_login( $signed->ID );
 
 		PDX_Audit::log( 'auth', 'user_login', [ 'user_id' => $signed->ID ] );
 
@@ -419,6 +429,10 @@ class PDX_Auth {
 		update_user_meta( $user_id, self::META_VERIFIED, 1 );
 		delete_user_meta( $user_id, self::META_VERIFY_TOKEN );
 		delete_user_meta( $user_id, self::META_VERIFY_EXPIRES );
+
+		if ( PDX_Customers::STATUS_PENDING === PDX_Customers::account_status( $user_id ) ) {
+			PDX_Customers::set_account_status( $user_id, PDX_Customers::STATUS_ACTIVE );
+		}
 
 		PDX_Audit::log( 'auth', 'email_verified', [ 'user_id' => $user_id ] );
 

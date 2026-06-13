@@ -11,6 +11,7 @@ $nav = [
 		PDX_SLUG . '-pricing'  => [ 'label' => 'Pricing', 'icon' => 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' ],
 		PDX_SLUG . '-payments' => [ 'label' => 'PayPal', 'icon' => 'M7 11C7 11 6 17 10 17H15C18 17 20 15 20 12' ],
 		PDX_SLUG . '-orders'   => [ 'label' => 'Orders', 'icon' => 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7' ],
+		PDX_SLUG . '-customers'=> [ 'label' => 'Customers', 'icon' => 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' ],
 		PDX_SLUG . '-billing'  => [ 'label' => 'Billing', 'icon' => 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 0 0 3-3V8' ],
 	],
 	'Platform' => [
