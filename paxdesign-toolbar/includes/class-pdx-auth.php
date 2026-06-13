@@ -28,6 +28,22 @@ class PDX_Auth {
 	public static function register_hooks(): void {
 		add_action( 'init', [ self::class, 'handle_email_verify_link' ] );
 		add_filter( 'authenticate', [ self::class, 'block_unverified_login' ], 30, 3 );
+		add_action( 'wp_ajax_pdx_rest_nonce', [ self::class, 'ajax_rest_nonce' ] );
+		add_action( 'wp_ajax_nopriv_pdx_rest_nonce', [ self::class, 'ajax_rest_nonce' ] );
+	}
+
+	/** Fresh wp_rest nonce for the current cookie session (no REST nonce required). */
+	public static function ajax_rest_nonce(): void {
+		nocache_headers();
+		wp_send_json_success( self::session_payload() );
+	}
+
+	/** @return array{nonce:string,user:array} */
+	public static function session_payload(): array {
+		return [
+			'nonce' => wp_create_nonce( 'wp_rest' ),
+			'user'  => self::user_payload(),
+		];
 	}
 
 	public static function is_email_verified( int $user_id ): bool {
@@ -174,11 +190,14 @@ class PDX_Auth {
 
 		PDX_Audit::log( 'auth', 'user_login', [ 'user_id' => $signed->ID ] );
 
-		return [
-			'success' => true,
-			'message' => 'Logged in successfully.',
-			'user'    => self::user_payload( $signed->ID ),
-		];
+		return array_merge(
+			[
+				'success' => true,
+				'message' => 'Logged in successfully.',
+				'user'    => self::user_payload( $signed->ID ),
+			],
+			self::session_payload()
+		);
 	}
 
 	public static function logout(): array {
@@ -187,7 +206,10 @@ class PDX_Auth {
 		if ( $user_id ) {
 			PDX_Audit::log( 'auth', 'user_logout', [ 'user_id' => $user_id ] );
 		}
-		return [ 'success' => true, 'message' => 'Logged out.' ];
+		return array_merge(
+			[ 'success' => true, 'message' => 'Logged out.' ],
+			self::session_payload()
+		);
 	}
 
 	/**

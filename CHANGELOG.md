@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## 9.0.4 — 2026-06-13
+
+**Auth session, account menu, and premium access hardening**
+
+- Fixed REST cookie/nonce failures after login (root cause of "Correlation failed / Cookie-Prüfung fehlgeschlagen") via automatic nonce refresh and session sync.
+- Added `admin-ajax.php` nonce refresh endpoint and retry logic in auth and dock API clients.
+- Redesigned header Login/Account control: compact icon on mobile, subtle desktop button, account dropdown with My Profile, My Account, and Logout.
+- Added My Profile overlay showing full name, email, account status, and login status.
+- Fixed register form field overlap (labels/inputs clickable area, texture layering).
+- Hardened premium access: clearer paywall messaging; correlation endpoints gate on `investigation` module; payment errors no longer show as generic correlation failures.
+- Login no longer implies premium access; server-side payment/subscription checks unchanged and enforced.
+
+**Install:** `releases/paxdesign-toolbar-9.0.4.zip` — tag `v9.0.4`
+
 ## 9.0.3 — 2026-06-13
 
 **Root fix: login/register auth UI**

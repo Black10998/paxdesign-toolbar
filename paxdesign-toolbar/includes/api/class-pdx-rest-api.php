@@ -76,6 +76,7 @@ class PDX_REST_API {
 			return new WP_REST_Response(
 				[
 					'error'     => 'subscription_required',
+					'message'   => 'This feature requires purchase or subscription activation.',
 					'module_id' => $module_id,
 					'plans'     => rest_url( 'pdx/v1/billing/plans' ),
 				],
@@ -95,6 +96,7 @@ class PDX_REST_API {
 		return new WP_REST_Response(
 			[
 				'error'        => 'payment_required',
+				'message'      => 'This feature requires purchase or subscription activation.',
 				'preview_used' => $used,
 				'preview_max'  => $preview_limit,
 				'module_id'    => $module_id,
@@ -1252,7 +1254,7 @@ class PDX_REST_API {
 		$rl = $this->rate_limit_check( 'intel' );
 		if ( $rl ) return $rl;
 
-		$denied = $this->check_module_access( 'threat' );
+		$denied = $this->check_module_access( 'investigation' );
 		if ( $denied ) {
 			return $denied;
 		}
@@ -1281,7 +1283,7 @@ class PDX_REST_API {
 	}
 
 	public function intel_timeline( WP_REST_Request $req ): WP_REST_Response {
-		$denied = $this->check_module_access( 'threat' );
+		$denied = $this->check_module_access( 'investigation' );
 		if ( $denied ) {
 			return $denied;
 		}
@@ -1303,7 +1305,7 @@ class PDX_REST_API {
 	}
 
 	public function intel_clusters(): WP_REST_Response {
-		$denied = $this->check_module_access( 'threat' );
+		$denied = $this->check_module_access( 'investigation' );
 		if ( $denied ) {
 			return $denied;
 		}
@@ -1311,7 +1313,7 @@ class PDX_REST_API {
 	}
 
 	public function intel_search( WP_REST_Request $req ): WP_REST_Response {
-		$denied = $this->check_module_access( 'threat' );
+		$denied = $this->check_module_access( 'investigation' );
 		if ( $denied ) {
 			return $denied;
 		}
@@ -1897,7 +1899,10 @@ class PDX_REST_API {
 	}
 
 	public function auth_me(): WP_REST_Response {
-		return new WP_REST_Response( PDX_Auth::user_payload(), 200 );
+		return new WP_REST_Response(
+			array_merge( PDX_Auth::user_payload(), [ 'nonce' => wp_create_nonce( 'wp_rest' ) ] ),
+			200
+		);
 	}
 
 	public function auth_forgot_password( WP_REST_Request $req ): WP_REST_Response {

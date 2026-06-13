@@ -2912,8 +2912,9 @@
           '<div class="pdx-ph-body">' +
             '<div class="pdx-paywall">' +
               '<div class="pdx-paywall-icon">' + svgIcon('lock-paywall') + '</div>' +
-              '<div class="pdx-paywall-title">Premium Access</div>' +
-              '<div class="pdx-paywall-desc">' + escHtml(desc) + '</div>' +
+              '<div class="pdx-paywall-title">Premium Access Required</div>' +
+              '<div class="pdx-paywall-desc">This feature requires purchase or subscription activation.</div>' +
+              (desc ? '<div class="pdx-paywall-subdesc">' + escHtml(desc) + '</div>' : '') +
               '<div class="pdx-paywall-price">' +
                 '<span class="pdx-paywall-currency">' + escHtml(currency) + '</span>' +
                 '<span class="pdx-paywall-amount">' + priceFormatted + '</span>' +
@@ -3086,20 +3087,26 @@
           win.pdxStopAiStageRotator('#' + cfg.id);
         }
         setBtnBusy(btn, false);
+        if (apiData && isPaymentError(apiData)) {
+          if (cfg.onPayment) cfg.onPayment(resultEl, apiData);
+          else resultEl.innerHTML = premiumErrorHtml(apiData);
+          return;
+        }
         if (!apiData || apiData.error || apiData._ok === false) {
           if (cfg.onError) cfg.onError(resultEl, apiData);
           else {
-            var errDetail = (apiData && (apiData.error || apiData.message)) ? ': ' + (apiData.error || apiData.message) : '';
+            var errDetail = '';
+            if (apiData && !isRestNonceError(apiData)) {
+              errDetail = (apiData.error || apiData.message) ? ': ' + (apiData.error || apiData.message) : '';
+            } else if (apiData && isRestNonceError(apiData)) {
+              errDetail = ': Session expired. Please reload the page.';
+            }
             resultEl.innerHTML =
               '<div class="pdx-error">' +
               escHtml(cfg.errorMsg || 'Operation failed. Please try again.') +
               escHtml(errDetail) +
               '</div>';
           }
-          return;
-        }
-        if (apiData.error === 'payment_required' && cfg.onPayment) {
-          cfg.onPayment(resultEl, apiData);
           return;
         }
         if (cfg.onSuccess) cfg.onSuccess(resultEl, apiData);
@@ -3479,7 +3486,24 @@
     }
 
     /* ── API helper ───────────────────────────────────────── */
-    function apiFetch(method, path, body) {
+    function isRestNonceError(data) {
+      if (!data) return false;
+      var code = data.code || data.error || '';
+      return code === 'rest_cookie_invalid_nonce' || code === 'rest_invalid_nonce';
+    }
+
+    function isPaymentError(data) {
+      if (!data) return false;
+      var err = data.error || data.code || '';
+      return err === 'payment_required' || err === 'subscription_required';
+    }
+
+    function premiumErrorHtml(data) {
+      var msg = (data && data.message) ? data.message : 'This feature requires purchase or subscription activation.';
+      return '<div class="pdx-error pdx-error--premium">' + escHtml(msg) + '</div>';
+    }
+
+    function apiFetch(method, path, body, retried) {
       if (!C.restUrl) return Promise.resolve(null);
       var opts = {
         method: method,
@@ -3493,6 +3517,16 @@
             if (!data || typeof data !== 'object') data = {};
             data._httpStatus = r.status;
             data._ok = r.ok;
+            if (!retried && isRestNonceError(data) && window.PDXAuth && window.PDXAuth.refreshSessionNonce) {
+              return window.PDXAuth.refreshSessionNonce().then(function(ok) {
+                if (ok) {
+                  C.nonce = window.PDXAuth.getNonce();
+                  return apiFetch(method, path, body, true);
+                }
+                data.message = 'Session expired. Please reload the page and try again.';
+                return data;
+              });
+            }
             return data;
           });
         })

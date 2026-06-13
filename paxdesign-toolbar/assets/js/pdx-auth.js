@@ -21,9 +21,11 @@
   var SVG_GRADIENT = '<defs><linearGradient id="pdx-gradient-stroke" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="black"></stop><stop offset="100%" stop-color="white"></stop></linearGradient></defs>';
   var SVG_EMAIL = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' + SVG_GRADIENT + '<g stroke="url(#pdx-gradient-stroke)" fill="none" stroke-width="1"><path d="M21.6365 5H3L12.2275 12.3636L21.6365 5Z"></path><path d="M16.5 11.5L22.5 6.5V17L16.5 11.5Z"></path><path d="M8 11.5L2 6.5V17L8 11.5Z"></path><path d="M9.5 12.5L2.81805 18.5002H21.6362L15 12.5L12 15L9.5 12.5Z"></path></g></svg>';
   var SVG_LOCK = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' + SVG_GRADIENT + '<g stroke="url(#pdx-gradient-stroke)" fill="none" stroke-width="1"><path d="M3.5 15.5503L9.20029 9.85L12.3503 13L11.6 13.7503H10.25L9.8 15.1003L8 16.0003L7.55 18.2503L5.5 19.6003H3.5V15.5503Z"></path><path d="M16 3.5H11L8.5 6L16 13.5L21 8.5L16 3.5Z"></path><path d="M16 10.5L18 8.5L15 5.5H13L12 6.5L16 10.5Z"></path></g></svg>';
-  var SVG_USER = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g><path d="m15.626 11.769a6 6 0 1 0 -7.252 0 9.008 9.008 0 0 0 -5.374 8.231 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 9.008 9.008 0 0 0 -5.374-8.231zm-7.626-4.769a4 4 0 1 1 4 4 4 4 0 0 1 -4-4zm10 14h-12a1 1 0 0 1 -1-1 7 7 0 0 1 14 0 1 1 0 0 1 -1 1z"></path></g></svg>';
+  var SVG_USER = '<svg aria-hidden="true" width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="m15.626 11.769a6 6 0 1 0 -7.252 0 9.008 9.008 0 0 0 -5.374 8.231 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 9.008 9.008 0 0 0 -5.374-8.231zm-7.626-4.769a4 4 0 1 1 4 4 4 4 0 0 1 -4-4zm10 14h-12a1 1 0 0 1 -1-1 7 7 0 0 1 14 0 1 1 0 0 1 -1 1z"></path></svg>';
 
   var publicModules = C.publicModules || ['trust', 'create', 'workspace'];
+  var authMenuOpen = false;
+  var profileOverlay = null;
 
   function escHtml(s) {
     if (!s) return '';
@@ -32,19 +34,62 @@
     return d.innerHTML;
   }
 
-  function apiFetch(method, path, body) {
+  function isRestNonceError(data) {
+    if (!data) return false;
+    var code = data.code || data.error || '';
+    return code === 'rest_cookie_invalid_nonce' || code === 'rest_invalid_nonce';
+  }
+
+  function applySession(data) {
+    if (!data) return;
+    if (data.nonce) C.nonce = data.nonce;
+    var u = data.user || data;
+    if (u.logged_in !== undefined) {
+      user = u;
+      C.isLoggedIn = !!u.logged_in;
+      C.emailVerified = !!u.verified;
+      C.userId = u.id || 0;
+      C.userName = u.display_name || '';
+      C.userEmail = u.email || '';
+    }
+    updateAuthBar();
+  }
+
+  function refreshSessionNonce() {
+    var url = (C.ajaxUrl || '/wp-admin/admin-ajax.php') + '?action=pdx_rest_nonce&_=' + Date.now();
+    return fetch(url, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        if (payload && payload.success && payload.data) {
+          applySession(payload.data);
+          return true;
+        }
+        return false;
+      })
+      .catch(function () { return false; });
+  }
+
+  function apiFetch(method, path, body, retried) {
     var opts = {
       method: method,
       credentials: 'same-origin',
       headers: {
         'Content-Type': 'application/json',
-        'X-WP-Nonce': C.nonce,
+        'X-WP-Nonce': C.nonce || '',
       },
     };
-    if (body) opts.body = JSON.stringify(body);
+    if (body && method !== 'GET') opts.body = JSON.stringify(body);
     return fetch(C.restUrl + path, opts).then(function (r) {
       return r.json().then(function (data) {
         data._status = r.status;
+        data._ok = r.ok;
+        if (!retried && isRestNonceError(data)) {
+          return refreshSessionNonce().then(function (ok) {
+            if (ok) return apiFetch(method, path, body, true);
+            data.message = 'Session expired. Please reload the page and try again.';
+            return data;
+          });
+        }
         return data;
       });
     }).catch(function () {
@@ -54,15 +99,7 @@
 
   function refreshUser() {
     return apiFetch('GET', '/auth/me').then(function (data) {
-      if (data.logged_in !== undefined) {
-        user = data;
-        C.isLoggedIn = !!data.logged_in;
-        C.emailVerified = !!data.verified;
-        C.userId = data.id || 0;
-        C.userName = data.display_name || '';
-        C.userEmail = data.email || '';
-        updateAuthBar();
-      }
+      applySession(data);
       return user;
     });
   }
@@ -81,40 +118,206 @@
   /* ─── Auth bar ─────────────────────────────────────────── */
   var authBar = null;
   var authBtn = null;
+  var authMenu = null;
+
+  function findHeaderMount() {
+    var selectors = [
+      'header .header-inner',
+      'header .inside-header',
+      'header .site-header-main',
+      'header .elementor-container',
+      '#masthead .inside-header',
+      '#masthead',
+      'header',
+      '.site-header'
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var el = document.querySelector(selectors[i]);
+      if (el) return el;
+    }
+    return null;
+  }
 
   function createAuthBar() {
     authBar = document.createElement('div');
     authBar.id = 'pdx-auth-bar';
-    authBtn = document.createElement('button');
-    authBtn.type = 'button';
-    authBtn.className = 'pdx-user-profile';
-    authBtn.setAttribute('aria-label', 'User Login Button');
-    authBtn.innerHTML = '<div class="pdx-user-profile-inner">' + SVG_USER + '<p>Log In</p></div>';
+    authBar.innerHTML =
+      '<div class="pdx-auth-bar-inner">' +
+        '<button type="button" class="pdx-auth-trigger" aria-haspopup="true" aria-expanded="false">' +
+          '<span class="pdx-auth-trigger-icon">' + SVG_USER + '</span>' +
+          '<span class="pdx-auth-trigger-label">Log In</span>' +
+        '</button>' +
+        '<div class="pdx-auth-menu" hidden>' +
+          '<div class="pdx-auth-menu-head"></div>' +
+          '<div class="pdx-auth-menu-actions">' +
+            '<button type="button" class="pdx-auth-menu-item" data-action="profile">My Profile</button>' +
+            '<button type="button" class="pdx-auth-menu-item" data-action="account">My Account</button>' +
+            '<button type="button" class="pdx-auth-menu-item pdx-auth-menu-item--logout" data-action="logout">Logout</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    authBtn = authBar.querySelector('.pdx-auth-trigger');
+    authMenu = authBar.querySelector('.pdx-auth-menu');
+
     authBtn.addEventListener('click', onAuthBarClick);
     authBtn.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onAuthBarClick(); }
     });
-    authBar.appendChild(authBtn);
-    document.body.appendChild(authBar);
+
+    authMenu.querySelectorAll('.pdx-auth-menu-item').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var action = btn.dataset.action;
+        closeAuthMenu();
+        if (action === 'profile') openProfileOverlay();
+        else if (action === 'account') openAccountPanel();
+        else if (action === 'logout') doLogout();
+      });
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!authBar || !authMenuOpen) return;
+      if (!authBar.contains(e.target)) closeAuthMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeAuthMenu();
+    });
+
+    var mount = findHeaderMount();
+    if (mount) {
+      if (window.getComputedStyle(mount).position === 'static') {
+        mount.style.position = 'relative';
+      }
+      authBar.classList.add('pdx-auth-bar--header');
+      mount.appendChild(authBar);
+    } else {
+      document.body.appendChild(authBar);
+    }
     updateAuthBar();
   }
 
+  function accountStatusLabel() {
+    if (!user.logged_in) return 'Guest';
+    if (user.is_admin) return 'Administrator';
+    return user.verified ? 'Verified' : 'Pending verification';
+  }
+
   function updateAuthBar() {
-    if (!authBtn) return;
+    if (!authBtn || !authMenu) return;
+    var labelEl = authBtn.querySelector('.pdx-auth-trigger-label');
+    var head = authMenu.querySelector('.pdx-auth-menu-head');
     var label = user.logged_in ? (user.display_name || 'Account') : 'Log In';
-    authBtn.innerHTML = '<div class="pdx-user-profile-inner">' + SVG_USER + '<p>' + escHtml(label) + '</p></div>';
-    authBtn.classList.toggle('pdx-user-profile--verified', user.logged_in && user.verified);
-    authBtn.setAttribute('aria-label', user.logged_in ? 'Open account dashboard' : 'Log in');
+
+    if (labelEl) labelEl.textContent = label;
+    authBtn.classList.toggle('pdx-auth-trigger--logged-in', user.logged_in);
+    authBtn.classList.toggle('pdx-auth-trigger--verified', user.logged_in && user.verified);
+    authBtn.setAttribute('aria-label', user.logged_in ? 'Account menu' : 'Log in');
+
+    if (user.logged_in && head) {
+      head.innerHTML =
+        '<div class="pdx-auth-menu-name">' + escHtml(user.display_name || 'Account') + '</div>' +
+        '<div class="pdx-auth-menu-email">' + escHtml(user.email || '') + '</div>' +
+        '<div class="pdx-auth-menu-status">' + escHtml(accountStatusLabel()) + '</div>';
+      authMenu.removeAttribute('hidden');
+    } else {
+      if (head) head.innerHTML = '';
+      closeAuthMenu();
+      authMenu.setAttribute('hidden', 'hidden');
+    }
+  }
+
+  function openAuthMenu() {
+    if (!user.logged_in || !authMenu) return;
+    authMenu.hidden = false;
+    authMenu.classList.add('is-open');
+    authBtn.setAttribute('aria-expanded', 'true');
+    authMenuOpen = true;
+  }
+
+  function closeAuthMenu() {
+    if (!authMenu) return;
+    authMenu.classList.remove('is-open');
+    authBtn.setAttribute('aria-expanded', 'false');
+    authMenuOpen = false;
   }
 
   function onAuthBarClick() {
     if (user.logged_in) {
-      if (window.PDXDock && window.PDXDock.openPanel) {
-        window.PDXDock.openPanel('account');
-      }
+      if (authMenuOpen) closeAuthMenu();
+      else openAuthMenu();
     } else {
       openOverlay('login');
     }
+  }
+
+  function openAccountPanel() {
+    if (window.PDXDock && window.PDXDock.openPanel) {
+      window.PDXDock.openPanel('account');
+    }
+  }
+
+  function openProfileOverlay() {
+    if (!profileOverlay) {
+      profileOverlay = document.createElement('div');
+      profileOverlay.id = 'pdx-profile-overlay';
+      profileOverlay.setAttribute('role', 'dialog');
+      profileOverlay.setAttribute('aria-modal', 'true');
+      profileOverlay.setAttribute('aria-label', 'My Profile');
+      profileOverlay.innerHTML =
+        '<div class="pdx-profile-card">' +
+          '<button type="button" class="pdx-auth-close" aria-label="Close">&times;</button>' +
+          '<div class="pdx-profile-card-title">My Profile</div>' +
+          '<div class="pdx-profile-card-body"></div>' +
+          '<div class="pdx-profile-card-actions">' +
+            '<button type="button" class="pdx-account-btn pdx-profile-open-account">My Account</button>' +
+            '<button type="button" class="pdx-account-btn pdx-account-btn--ghost pdx-profile-logout">Logout</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(profileOverlay);
+      profileOverlay.querySelector('.pdx-auth-close').addEventListener('click', closeProfileOverlay);
+      profileOverlay.addEventListener('click', function (e) {
+        if (e.target === profileOverlay) closeProfileOverlay();
+      });
+      profileOverlay.querySelector('.pdx-profile-open-account').addEventListener('click', function () {
+        closeProfileOverlay();
+        openAccountPanel();
+      });
+      profileOverlay.querySelector('.pdx-profile-logout').addEventListener('click', function () {
+        closeProfileOverlay();
+        doLogout();
+      });
+    }
+    var body = profileOverlay.querySelector('.pdx-profile-card-body');
+    body.innerHTML =
+      '<div class="pdx-profile-row"><span class="pdx-profile-label">Full Name</span><span class="pdx-profile-value">' + escHtml(user.display_name || '—') + '</span></div>' +
+      '<div class="pdx-profile-row"><span class="pdx-profile-label">Email</span><span class="pdx-profile-value">' + escHtml(user.email || '—') + '</span></div>' +
+      '<div class="pdx-profile-row"><span class="pdx-profile-label">Account Status</span><span class="pdx-profile-value">' + escHtml(accountStatusLabel()) + '</span></div>' +
+      '<div class="pdx-profile-row"><span class="pdx-profile-label">Login Status</span><span class="pdx-profile-value">' + (user.logged_in ? 'Signed in' : 'Signed out') + '</span></div>';
+    profileOverlay.classList.add('is-open');
+    document.body.classList.add('pdx-no-scroll');
+  }
+
+  function closeProfileOverlay() {
+    if (!profileOverlay) return;
+    profileOverlay.classList.remove('is-open');
+    document.body.classList.remove('pdx-no-scroll');
+  }
+
+  function doLogout() {
+    apiFetch('POST', '/auth/logout').then(function (data) {
+      if (data && data.nonce) {
+        applySession({
+          nonce: data.nonce,
+          user: data.user || { logged_in: false, verified: false, display_name: '', email: '', id: 0 },
+        });
+      } else {
+        user = { logged_in: false, verified: false };
+        C.isLoggedIn = false;
+        updateAuthBar();
+      }
+      notify('Logged out.', 'info');
+      if (window.PDXDock && window.PDXDock.closePanel) window.PDXDock.closePanel();
+    });
   }
 
   /* ─── Auth overlay ─────────────────────────────────────── */
@@ -325,8 +528,7 @@
           showFormMessage(data.message || 'Login failed.', 'error');
           return;
         }
-        user = data.user || user;
-        updateAuthBar();
+        applySession({ user: data.user || user, nonce: data.nonce });
         closeOverlay();
         notify(data.message || 'Logged in.', 'info');
         var mod = returnModule;
@@ -403,8 +605,8 @@
   function renderAuthGate(container, moduleId, reason) {
     var title = reason === 'verify' ? 'Verify your email' : 'Sign in required';
     var desc = reason === 'verify'
-      ? 'Please verify your email address to access ' + escHtml(moduleId) + ' and other premium tools.'
-      : 'Sign in to your PaxDesign account to access ' + escHtml(moduleId) + ' and unlock the full platform.';
+      ? 'Please verify your email address to continue using protected modules.'
+      : 'Sign in to access protected modules. Premium features still require purchase or subscription.';
     container.innerHTML =
       '<div class="pdx-auth-gate">' +
         '<div class="pdx-auth-gate-title">' + title + '</div>' +
@@ -604,15 +806,7 @@
   function bindLogout(container) {
     var btn = container.querySelector('.pdx-logout-btn');
     if (!btn) return;
-    btn.addEventListener('click', function () {
-      apiFetch('POST', '/auth/logout').then(function () {
-        user = { logged_in: false, verified: false };
-        C.isLoggedIn = false;
-        updateAuthBar();
-        notify('Logged out.', 'info');
-        if (window.PDXDock && window.PDXDock.closePanel) window.PDXDock.closePanel();
-      });
-    });
+    btn.addEventListener('click', doLogout);
   }
 
   /* ─── Public API ───────────────────────────────────────── */
@@ -631,7 +825,11 @@
     renderAuthGate: renderAuthGate,
     renderAccountDashboard: renderAccountDashboard,
     refreshUser: refreshUser,
+    refreshSessionNonce: refreshSessionNonce,
+    applySession: applySession,
+    getNonce: function () { return C.nonce || ''; },
     getUser: function () { return user; },
+    isRestNonceError: isRestNonceError,
   };
 
   if (document.readyState === 'loading') {

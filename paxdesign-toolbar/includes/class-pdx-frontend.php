@@ -235,6 +235,7 @@ class PDX_Frontend {
 			'workspaceEnabled' => (bool) $this->settings->get( 'workspace_enabled', true ),
 			'modules'          => $enabled,
 			'restUrl'          => esc_url( rest_url( 'pdx/v1' ) ),
+			'ajaxUrl'          => esc_url( admin_url( 'admin-ajax.php' ) ),
 			'nonce'            => wp_create_nonce( 'wp_rest' ),
 			'userId'           => get_current_user_id(),
 			'isLoggedIn'       => is_user_logged_in(),
