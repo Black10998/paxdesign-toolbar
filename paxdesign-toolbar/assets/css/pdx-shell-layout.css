@@ -1,0 +1,276 @@
+/**
+ * PaxDesign Shell Layout v2
+ * Single source of truth for dock/panel geometry across desktop/mobile.
+ */
+
+#pdx-root[data-shell-layout="v2"] {
+  position: fixed !important;
+  inset: 0 auto auto 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+  z-index: 99996 !important;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"] {
+  pointer-events: auto;
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+
+body > #pdx-backdrop[data-pdx-layout="shell-v2"] {
+  position: fixed;
+  inset: 0;
+  z-index: 99994;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"] {
+  position: fixed;
+  z-index: 99995;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"] * {
+  box-sizing: border-box;
+}
+
+#pdx-panel-inner[data-pdx-layout="shell-v2"] {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"] .pdx-ph {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"] .pdx-ph-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"] .pdx-ph-body > * {
+  max-width: 100%;
+}
+
+.pdx-panel-close,
+.pdx-mobile-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 30;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--pdx-border, rgba(255, 255, 255, 0.14));
+  border-radius: 10px;
+  background: var(--pdx-bg-elev, rgba(10, 10, 10, 0.9));
+  color: var(--pdx-text-muted, #8b8b8b);
+  cursor: pointer;
+}
+
+.pdx-panel-close:hover,
+.pdx-mobile-close:hover {
+  color: var(--pdx-text, #fff);
+  border-color: var(--pdx-text-subtle, #555);
+}
+
+.pdx-panel-close svg,
+.pdx-mobile-close svg {
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"]:not(.pdx-dock--mobile) {
+  --pdx-shell-left: max(12px, env(safe-area-inset-left, 12px));
+  --pdx-shell-dock-top: max(10px, var(--pdx-shell-top, 10px));
+  --pdx-shell-dock-w: clamp(180px, 18vw, 236px);
+  left: var(--pdx-shell-left);
+  top: var(--pdx-shell-dock-top);
+  right: auto;
+  bottom: auto;
+  width: var(--pdx-shell-dock-w);
+  height: calc(100dvh - var(--pdx-shell-dock-top) - 14px);
+  max-height: calc(100vh - var(--pdx-shell-dock-top) - 14px);
+  padding: 10px 8px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 14px;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"]:not(.pdx-dock--mobile) .pdx-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"]:not(.pdx-dock--mobile) .pdx-dock-btn-label {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"]:not(.pdx-dock--mobile) .pdx-sep {
+  width: 100%;
+  height: 1px;
+  margin: 3px 0;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"]:not(.pdx-panel--mobile) {
+  top: max(8px, var(--pdx-shell-top, 8px));
+  bottom: 8px;
+  width: clamp(340px, 34vw, 520px);
+  max-width: min(520px, calc(100vw - 280px));
+  max-height: none;
+  border-radius: 14px;
+  transition: transform 0.22s ease, opacity 0.2s ease;
+  left: calc(max(12px, env(safe-area-inset-left, 12px)) + clamp(180px, 18vw, 236px) + 12px);
+  right: auto;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"]:not(.pdx-panel--mobile):not(.is-open) {
+  transform: translateX(-108%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"]:not(.pdx-panel--mobile).is-open {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"].pdx-dock--mobile {
+  left: 0;
+  right: 0;
+  top: var(--pdx-dock-top, 0px);
+  bottom: auto;
+  width: 100%;
+  height: var(--pdx-dock-h, 48px);
+  padding: 4px max(8px, env(safe-area-inset-left, 8px));
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"].pdx-dock--mobile::-webkit-scrollbar {
+  display: none;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"].pdx-dock--mobile .pdx-btn {
+  min-width: 58px;
+  min-height: 40px;
+  padding: 5px 7px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"].pdx-dock--mobile .pdx-dock-btn-label {
+  font-size: 10px;
+  line-height: 1;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"].pdx-dock--mobile .pdx-sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 2px;
+  flex: 0 0 auto;
+}
+
+#pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"].pdx-dock--mobile.pdx-dock--panel-open {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+body > #pdx-backdrop[data-pdx-layout="shell-v2"].pdx-backdrop--mobile {
+  top: var(--pdx-panel-top, 48px);
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"].pdx-panel--mobile {
+  top: var(--pdx-panel-top, 48px);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: var(--pdx-panel-max-h, calc(100dvh - var(--pdx-panel-top, 48px)));
+  border-radius: 14px 14px 0 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  transform: translateY(102%);
+  transition: transform 0.22s ease, opacity 0.18s ease;
+}
+
+body > #pdx-panel[data-pdx-layout="shell-v2"].pdx-panel--mobile.is-open {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+@media (max-width: 360px) {
+  #pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"] .pdx-btn {
+    min-width: 52px;
+    min-height: 38px;
+    padding: 4px 6px;
+  }
+
+  #pdx-root[data-shell-layout="v2"] #pdx-dock[data-pdx-layout="shell-v2"] .pdx-dock-btn-label {
+    font-size: 9px;
+    max-width: 56px;
+  }
+
+  .pdx-panel-close,
+  .pdx-mobile-close {
+    top: 8px;
+    right: 8px;
+    width: 30px;
+    height: 30px;
+  }
+}

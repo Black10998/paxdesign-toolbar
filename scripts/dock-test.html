@@ -5,10 +5,10 @@
   <title>PDX Dock Test</title>
   <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-tokens.css" />
   <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/dock.css" />
-  <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-dock-ui.css" />
   <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-panel-scroll.css" />
   <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-intel-activity.css" />
   <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-module-chrome.css" />
+  <link rel="stylesheet" href="../paxdesign-toolbar/assets/css/pdx-shell-layout.css" />
   <style>body{margin:0;background:#111;color:#eee;font-family:system-ui;padding:2rem}</style>
 </head>
 <body>
@@ -48,7 +48,8 @@
   <script src="../paxdesign-toolbar/assets/js/pdx-module-icons.js"></script>
   <script src="../paxdesign-toolbar/assets/js/dock.js"></script>
   <script>
-    setTimeout(async () => {
+    const autoRun = new URLSearchParams(window.location.search).get('autorun') === '1';
+    if (autoRun) setTimeout(async () => {
       const log = document.getElementById('log');
       for (const id of modules) {
         const btn = document.querySelector('[data-module="' + id + '"]');
