@@ -1,5 +1,27 @@
 ﻿# Changelog
 
+## 9.1.1 — 2026-06-13
+
+**Dock button rendering stabilization (desktop/mobile)**
+
+- Fixed root render pipeline issues that could still cause missing/clipped dock buttons:
+  - Dock now always builds from the full module manifest (`allModules`) for deterministic button output.
+  - Added stronger dock mutation recovery (count + order/signature validation) to auto-rebuild when DOM is altered by theme/optimization layers.
+  - Server-rendered dock buttons now always include the full ordered module set.
+- Updated desktop dock layout to match requested compact visual direction:
+  - Vertical left dock
+  - Vertically centered
+  - Compact icon-only rail with stable overflow handling
+- Updated mobile dock layout for consistent under-header behavior:
+  - Compact horizontal dock directly below header/admin bar offset
+  - Scroll-safe row (no clipping/collapse)
+  - Reliable button sizing to keep all modules accessible
+- Added improved top-offset computation in JS to account for sticky/fixed theme headers plus WP admin bar.
+- Prevented dock-hiding behavior in under-header mode so buttons remain available and discoverable.
+- Added a stable panel geometry layer for desktop/mobile to avoid viewport/footer overlap artifacts and layout drift.
+
+**Install:** `releases/paxdesign-toolbar-9.1.1.zip` — tag `v9.1.1`
+
 ## 9.1.0 — 2026-06-13
 
 **Navigation architecture redesign + auth UX + settings cleanup**

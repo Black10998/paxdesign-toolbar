@@ -3176,228 +3176,250 @@ body.pdx-no-scroll { overflow: hidden !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════
-   v9.1 NAV ARCHITECTURE — theme/cache/plugin resilient dock
-   This layer intentionally hardens navigation against external
-   theme CSS collisions and enforces deterministic layout.
+   v9.2 NAV STABLE LAYER — deterministic dock + panel geometry
 ═══════════════════════════════════════════════════════════ */
-#pdx-root,
-#pdx-root #pdx-dock,
-#pdx-root #pdx-dock * {
+#pdx-root[data-dock-layout="stable-v3"],
+#pdx-root[data-dock-layout="stable-v3"] #pdx-dock,
+#pdx-root[data-dock-layout="stable-v3"] #pdx-dock * {
   box-sizing: border-box;
 }
 
-#pdx-root #pdx-dock {
+#pdx-root[data-dock-layout="stable-v3"] #pdx-dock {
   display: flex !important;
   visibility: visible !important;
+  opacity: 1 !important;
   pointer-events: auto;
   contain: layout paint style;
   isolation: isolate;
 }
 
-#pdx-root #pdx-dock .pdx-btn {
+#pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn {
   all: unset;
   box-sizing: border-box;
   display: flex !important;
   position: relative;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
   transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
 }
 
-#pdx-root #pdx-dock .pdx-dock-btn-icon {
+#pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-dock-btn-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
 }
 
-#pdx-root #pdx-dock .pdx-dock-btn-label {
-  display: inline-block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Desktop: compact left vertical SaaS rail */
+/* Desktop: compact vertical dock on left, centered vertically */
 @media (min-width: var(--pdx-mobile-min, 681px)) {
-  #pdx-root #pdx-dock {
-    position: fixed;
-    top: 12px;
-    left: 12px;
-    right: auto;
-    bottom: auto;
-    transform: none;
-    width: min(212px, calc(100vw - 24px));
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock {
+    position: fixed !important;
+    top: 50% !important;
+    left: 18px !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translateY(-50%) !important;
+    width: 54px !important;
+    min-width: 54px !important;
+    max-width: 54px !important;
     max-height: calc(100vh - 24px);
-    padding: 10px 8px;
-    gap: 6px;
-    flex-direction: column;
+    height: auto !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
     justify-content: flex-start;
-    align-items: stretch;
-    overflow-y: auto;
-    overflow-x: hidden;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    background: rgba(14, 14, 14, 0.92);
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 10px 6px !important;
+    margin: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    border-radius: 18px !important;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(14, 14, 14, 0.93);
     backdrop-filter: blur(8px);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.34);
-    scrollbar-width: thin;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    z-index: 99999 !important;
+    scrollbar-width: none;
   }
 
-  #pdx-root #pdx-dock .pdx-btn {
-    min-height: 40px;
-    padding: 8px 10px;
-    border-radius: 9px;
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock::-webkit-scrollbar {
+    display: none;
+  }
+
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 12px !important;
     border: 1px solid transparent;
     color: var(--pdx-mid);
-    background: rgba(255, 255, 255, 0.01);
-    gap: 10px;
-    justify-content: flex-start;
+    background: rgba(255, 255, 255, 0.03);
   }
 
-  #pdx-root #pdx-dock .pdx-btn:hover {
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn:hover {
     color: var(--pdx-hi);
-    background: rgba(255, 255, 255, 0.06);
     border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
   }
 
-  #pdx-root #pdx-dock .pdx-btn:focus-visible {
-    outline: 2px solid var(--pdx-accent);
-    outline-offset: 1px;
-  }
-
-  #pdx-root #pdx-dock .pdx-btn.is-active {
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn.is-active {
     color: #ffe0a6;
+    border-color: rgba(255, 224, 166, 0.28);
     background: rgba(255, 224, 166, 0.12);
-    border-color: rgba(255, 224, 166, 0.25);
   }
 
-  #pdx-root #pdx-dock .pdx-btn.is-active::before {
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn.is-active::before {
     content: '';
     position: absolute;
-    left: -8px;
+    left: -6px;
     top: 50%;
     transform: translateY(-50%);
-    width: 3px;
+    width: 2px;
     height: 18px;
     border-radius: 2px;
     background: #ffe0a6;
   }
 
-  #pdx-root #pdx-dock .pdx-dock-btn-icon {
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-dock-btn-icon {
     width: 16px;
     height: 16px;
   }
 
-  #pdx-root #pdx-dock .pdx-dock-btn-label {
-    font: 600 12px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-    color: inherit;
-    max-width: 100%;
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-dock-btn-label,
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn::after,
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-sep {
+    display: none !important;
+    content: none !important;
   }
 
-  #pdx-root #pdx-dock .pdx-sep {
-    width: calc(100% - 6px);
-    height: 1px;
-    margin: 2px auto;
-    background: rgba(255, 255, 255, 0.12);
-    border: 0;
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-panel {
+    top: 50% !important;
+    left: 86px !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 380px !important;
+    max-width: calc(100vw - 110px) !important;
+    max-height: calc(100vh - 24px) !important;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transform: translate(-8px, -50%) !important;
+    opacity: 0;
   }
 
-  #pdx-root #pdx-dock .pdx-btn::after {
-    content: none;
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-panel.is-open {
+    transform: translate(0, -50%) !important;
+    opacity: 1;
   }
 }
 
-/* Mobile: deterministic under-header horizontal bar */
+/* Mobile: compact horizontal dock below header */
 @media (max-width: var(--pdx-mobile-max, 680px)) {
-  #pdx-root #pdx-dock {
-    position: fixed;
-    top: var(--pdx-dock-top, 0px);
-    left: 0;
-    right: 0;
-    bottom: auto;
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock {
+    position: fixed !important;
+    top: var(--pdx-dock-top, 0px) !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
     transform: none !important;
-    width: 100%;
-    height: var(--pdx-dock-h, 48px);
-    padding: 4px max(10px, env(safe-area-inset-left, 10px)) 4px max(10px, env(safe-area-inset-right, 10px));
-    gap: 6px;
-    flex-direction: row;
-    justify-content: flex-start;
-    align-items: center;
-    overflow-x: auto;
-    overflow-y: hidden;
+    width: 100vw !important;
+    min-width: 100vw !important;
+    max-width: 100vw !important;
+    height: var(--pdx-dock-h, 42px) !important;
+    min-height: var(--pdx-dock-h, 42px) !important;
+    max-height: var(--pdx-dock-h, 42px) !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
+    padding: 4px 6px !important;
+    margin: 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    white-space: nowrap !important;
     -webkit-overflow-scrolling: touch;
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
-    border-top: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
-    background: rgba(14, 14, 14, 0.95);
-    scrollbar-width: none;
+    border-radius: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-top: 0 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    z-index: 99999 !important;
   }
 
-  #pdx-root #pdx-dock::-webkit-scrollbar {
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock::-webkit-scrollbar {
     display: none;
   }
 
-  #pdx-root #pdx-dock .pdx-btn {
-    width: 42px;
-    min-width: 42px;
-    height: 40px;
-    min-height: 40px;
-    border-radius: 9px;
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn {
+    width: 32px !important;
+    min-width: 32px !important;
+    max-width: 32px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    border-radius: 8px !important;
+    padding: 0 !important;
+    margin: 0 !important;
     border: 1px solid transparent;
     color: var(--pdx-mid);
-    background: rgba(255, 255, 255, 0.02);
-    gap: 0;
-    padding: 0;
-    justify-content: center;
+    background: rgba(255, 255, 255, 0.03);
   }
 
-  #pdx-root #pdx-dock .pdx-btn:hover {
-    color: var(--pdx-hi);
-    border-color: rgba(255, 255, 255, 0.14);
-  }
-
-  #pdx-root #pdx-dock .pdx-btn.is-active {
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn.is-active {
     color: #ffe0a6;
-    background: rgba(255, 224, 166, 0.12);
     border-color: rgba(255, 224, 166, 0.28);
+    background: rgba(255, 224, 166, 0.12);
   }
 
-  #pdx-root #pdx-dock .pdx-btn.is-active::before {
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn.is-active::before {
     content: '';
     position: absolute;
     left: 50%;
     bottom: 0;
     transform: translateX(-50%);
-    width: 18px;
+    width: 14px;
     height: 2px;
     border-radius: 2px 2px 0 0;
     background: #ffe0a6;
   }
 
-  #pdx-root #pdx-dock .pdx-dock-btn-icon {
-    width: 15px;
-    height: 15px;
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-dock-btn-icon {
+    width: 14px;
+    height: 14px;
   }
 
-  #pdx-root #pdx-dock .pdx-dock-btn-label,
-  #pdx-root #pdx-dock .pdx-btn::after {
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-dock-btn-label,
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-btn::after,
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-dock .pdx-sep {
     display: none !important;
-    content: none;
+    content: none !important;
   }
 
-  #pdx-root #pdx-dock .pdx-sep {
-    width: 1px;
-    height: 20px;
-    margin: 0 2px;
-    background: rgba(255, 255, 255, 0.12);
-    border: 0;
-    flex-shrink: 0;
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-panel {
+    top: calc(var(--pdx-panel-top, 108px) + 6px) !important;
+    left: 6px !important;
+    right: 6px !important;
+    bottom: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: calc(100dvh - var(--pdx-panel-top, 108px) - 12px) !important;
+    border-radius: 12px !important;
+    transform: translateY(-110%) !important;
+    opacity: 0;
+  }
+
+  #pdx-root[data-dock-layout="stable-v3"] #pdx-panel.is-open {
+    transform: translateY(0) !important;
+    opacity: 1;
   }
 }
 

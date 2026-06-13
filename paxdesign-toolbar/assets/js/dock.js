@@ -115,9 +115,34 @@
       return bar ? Math.round(bar.getBoundingClientRect().height) : 0;
     }
 
+    function getViewportTopOffset() {
+      var top = getAdminBarH();
+      var headerSelectors = [
+        'header',
+        '[role="banner"]',
+        '#masthead',
+        '.site-header',
+        '.main-header',
+        '[data-sticky-header]'
+      ];
+      headerSelectors.forEach(function (selector) {
+        document.querySelectorAll(selector).forEach(function (el) {
+          if (!el || !el.getBoundingClientRect) return;
+          var cs = window.getComputedStyle(el);
+          if (!cs) return;
+          if (cs.visibility === 'hidden' || cs.display === 'none') return;
+          if (cs.position !== 'fixed' && cs.position !== 'sticky') return;
+          var rect = el.getBoundingClientRect();
+          if (rect.height < 20 || rect.height > 220) return;
+          if (rect.top > top + 4) return;
+          top = Math.max(top, Math.round(rect.bottom));
+        });
+      });
+      return top;
+    }
+
     function stampLayoutVars() {
-      var abH      = getAdminBarH();
-      var dockTop  = abH;
+      var dockTop  = getViewportTopOffset();
       var panelTop = dockTop + dockH;
       var vh       = window.innerHeight * 0.01;
       document.documentElement.style.setProperty('--pdx-dock-top',  dockTop  + 'px');
@@ -173,11 +198,15 @@
     };
 
     function navModulesFromConfig() {
-      var source = (C.modules && Object.keys(C.modules).length) ? C.modules : (C.allModules || {});
+      // Always derive the dock from the full manifest to avoid
+      // missing buttons when enabled-state, cache, or theme rewrites drift.
+      var source = (C.allModules && Object.keys(C.allModules).length)
+        ? C.allModules
+        : (C.modules || {});
       var list = [];
       Object.keys(source || {}).forEach(function(id) {
         var mod = source[id];
-        if (!mod || mod.enabled === false) return;
+        if (!mod) return;
         list.push(Object.assign({ id: id }, mod));
       });
       list.sort(function(a, b) {
@@ -189,14 +218,22 @@
       return list;
     }
 
+    function moduleSignature(modules) {
+      return (modules || []).map(function (m) {
+        return [m.id, m.category || '', m.label || '', String(m.order || 999)].join(':');
+      }).join('|');
+    }
+
     function rebuildDockNavigation(force) {
       if (!dock) return;
       var modules = navModulesFromConfig();
       if (!modules.length) return;
+      var expectedSig = moduleSignature(modules);
+      var currentSig = dock.getAttribute('data-pdx-nav-sig') || '';
 
       if (!force) {
-        var existing = dock.querySelectorAll('.pdx-btn[data-module]');
-        if (existing.length >= modules.length) return;
+        var existing = dock.querySelectorAll('.pdx-btn[data-module]').length;
+        if (existing === modules.length && currentSig === expectedSig) return;
       }
 
       dock.innerHTML = '';
@@ -223,6 +260,7 @@
           '<span class="pdx-dock-btn-label">' + escHtml(mod.label || mod.id) + '</span>';
         dock.appendChild(btn);
       });
+      dock.setAttribute('data-pdx-nav-sig', expectedSig);
     }
 
     function normalizeModuleId(moduleId) {
@@ -230,6 +268,7 @@
       if (PDX_MODULE_ALIASES[id]) id = PDX_MODULE_ALIASES[id];
       if (PDX_KNOWN_MODULES.indexOf(id) >= 0) return id;
       if (C.modules && C.modules[id]) return id;
+      if (C.allModules && C.allModules[id]) return id;
       return 'trust';
     }
 
@@ -287,7 +326,15 @@
     // Guard against theme/plugin DOM rewrites that remove dock items.
     if (window.MutationObserver) {
       var dockObserver = new MutationObserver(function () {
-        if (!dock.querySelector('.pdx-btn[data-module]')) {
+        var expectedModules = navModulesFromConfig();
+        var expectedCount = expectedModules.length;
+        var currentCount = dock.querySelectorAll('.pdx-btn[data-module]').length;
+        var expectedIds = expectedModules.map(function (m) { return m.id; }).join('|');
+        var currentIds = Array.prototype.map.call(
+          dock.querySelectorAll('.pdx-btn[data-module]'),
+          function (el) { return el.getAttribute('data-module') || ''; }
+        ).join('|');
+        if (!currentCount || currentCount !== expectedCount || currentIds !== expectedIds) {
           rebuildDockNavigation(true);
           applyDockModuleIcons();
         }
@@ -4178,7 +4225,9 @@
       var root        = document.documentElement;
       var isMobile    = false;
 
-      if (!hideDock) dock.dataset.pdxHideDock = 'false';
+      if (!hideDock || dockPos === 'under-header') {
+        dock.dataset.pdxHideDock = 'false';
+      }
 
       // ── CSS var helpers ──────────────────────────────────
       function setProp(n, v) { root.style.setProperty(n, v); }
@@ -4188,8 +4237,7 @@
       // stampLayoutVars() was already called synchronously in init()
       // for the initial paint. We call it again on resize/orientation.
       function applyLayout() {
-        var abH      = getAdminBarH();
-        var dockTop  = abH;
+        var dockTop  = getViewportTopOffset();
         var panelTop = dockTop + dockHeight;
         var vh       = window.innerHeight * 0.01;
         setProp('--pdx-vh',          vh          + 'px');

@@ -219,6 +219,10 @@ class PDX_Frontend {
 			$enabled = $all;
 		}
 
+		// Navigation is always driven by the full manifest so buttons remain
+		// deterministic across auth/cache/theme/plugin states.
+		$nav_modules = $all;
+
 		return [
 			'version'          => PDX_VERSION,
 			'contact'          => $this->settings->contact_url(),
@@ -244,7 +248,8 @@ class PDX_Frontend {
 			'analytics'        => (bool) $this->settings->get( 'analytics_enabled', false ),
 			'aiMemory'         => (bool) $this->settings->get( 'ai_memory_enabled', true ),
 			'workspaceEnabled' => (bool) $this->settings->get( 'workspace_enabled', true ),
-			'modules'          => $enabled,
+			'modules'          => $nav_modules,
+			'enabledModules'   => $enabled,
 			'allModules'       => $all,
 			'restUrl'          => esc_url( rest_url( 'pdx/v1' ) ),
 			'nonce'            => wp_create_nonce( 'wp_rest' ),
@@ -271,6 +276,7 @@ class PDX_Frontend {
 			 data-theme="<?php echo $theme; ?>"
 			 data-size="<?php echo $size; ?>"
 			 data-mobile-dock="<?php echo $mobile_dock; ?>"
+			 data-dock-layout="stable-v3"
 			 data-pdx-version="<?php echo esc_attr( PDX_VERSION ); ?>"
 			 aria-label="PaxDesign Utility Dock"
 			 role="complementary">
@@ -293,16 +299,7 @@ class PDX_Frontend {
 			}
 			return strcmp( (string) ( $a['label'] ?? '' ), (string) ( $b['label'] ?? '' ) );
 		} );
-		$modules     = [];
-		foreach ( $all_modules as $id => $mod ) {
-			if ( $this->settings->module_enabled( $id ) ) {
-				$modules[ $id ] = $mod;
-			}
-		}
-		// Fail-safe: never render an empty dock.
-		if ( empty( $modules ) ) {
-			$modules = $all_modules;
-		}
+		$modules = $all_modules;
 
 		$prev_cat = null;
 
