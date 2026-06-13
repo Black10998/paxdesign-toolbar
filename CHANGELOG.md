@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## 9.0.3 — 2026-06-13
+
+**Root fix: login/register auth UI**
+
+- Fixed register form name field appearing hidden due to an oversized user SVG icon without width/height constraints.
+- Removed the large user icon from login/register overlay forms; auth bar button icon is unchanged.
+- Added visible field labels for all login, register, forgot, and reset forms.
+- Added client-side validation so errors only reference visible fields before API submission.
+- Unified register layout with login: consistent width, spacing, typography, and responsive behavior on desktop, tablet, and mobile.
+
+**Install:** `releases/paxdesign-toolbar-9.0.3.zip` — tag `v9.0.3`
+
 ## 9.0.2 — 2026-06-13
 
 **Root-cause fix: missing frontend navigation/modules**

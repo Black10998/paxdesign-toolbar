@@ -157,31 +157,40 @@
 
   function renderAuthForm() {
     var titles = { login: 'Login', register: 'Register', forgot: 'Forgot', reset: 'Reset' };
-    var html = '<form class="pdx-auth-form" novalidate>';
+    var html = '<form class="pdx-auth-form pdx-auth-form--' + currentView + '" novalidate>';
     html += '<span class="pdx-auth-title">' + (titles[currentView] || 'Login') + '</span>';
     html += '<div class="pdx-auth-msg-slot"></div>';
+    html += '<div class="pdx-auth-fields">';
 
     if (currentView === 'login') {
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email');
-      html += fieldInput('password', 'password', 'Password', SVG_LOCK);
+      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email', true);
+      html += fieldInput('password', 'password', 'Password', SVG_LOCK, 'current-password', true);
+    } else if (currentView === 'register') {
+      html += fieldInput('name', 'text', 'Full name', null, 'name', true);
+      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email', true);
+      html += fieldInput('password', 'password', 'Password (min 8 characters)', SVG_LOCK, 'new-password', true);
+    } else if (currentView === 'forgot') {
+      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email', true);
+    } else if (currentView === 'reset') {
+      html += fieldInput('password', 'password', 'New password', SVG_LOCK, 'new-password', true);
+      html += fieldInput('password2', 'password', 'Confirm password', SVG_LOCK, 'new-password', true);
+    }
+
+    html += '</div>';
+
+    if (currentView === 'login') {
       html += submitBtn('Login');
       html += links([
         { view: 'forgot', label: 'Forgot password?' },
         { view: 'register', label: 'Create account' },
       ]);
     } else if (currentView === 'register') {
-      html += fieldInput('name', 'text', 'Full name', SVG_USER.replace('aria-hidden="true"', ''));
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email');
-      html += fieldInput('password', 'password', 'Password (min 8 chars)', SVG_LOCK);
       html += submitBtn('Register');
       html += links([{ view: 'login', label: 'Already have an account? Log in' }]);
     } else if (currentView === 'forgot') {
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email');
       html += submitBtn('Send Reset Link');
       html += links([{ view: 'login', label: 'Back to login' }]);
     } else if (currentView === 'reset') {
-      html += fieldInput('password', 'password', 'New password', SVG_LOCK);
-      html += fieldInput('password2', 'password', 'Confirm password', SVG_LOCK);
       html += submitBtn('Reset Password');
       html += links([{ view: 'login', label: 'Back to login' }]);
     }
@@ -199,11 +208,79 @@
     });
   }
 
-  function fieldInput(name, type, placeholder, icon, autocomplete) {
-    return '<div class="pdx-auth-input-container">' + icon +
-      '<input class="pdx-auth-input" name="' + name + '" type="' + type + '" placeholder="' + escHtml(placeholder) + '"' +
-      (autocomplete ? ' autocomplete="' + autocomplete + '"' : '') + ' />' +
-    '</div>';
+  function fieldInput(name, type, label, icon, autocomplete, required) {
+    var id = 'pdx-auth-' + currentView + '-' + name;
+    var html = '<div class="pdx-auth-field" data-field="' + name + '">';
+    html += '<label class="pdx-auth-field-label" for="' + id + '">' + escHtml(label) + '</label>';
+    html += '<div class="pdx-auth-input-container">';
+    if (icon) html += icon;
+    html += '<input class="pdx-auth-input" id="' + id + '" name="' + name + '" type="' + type + '"';
+    html += ' placeholder="' + escHtml(label) + '"';
+    if (autocomplete) html += ' autocomplete="' + autocomplete + '"';
+    if (required) html += ' required aria-required="true"';
+    html += ' /></div></div>';
+    return html;
+  }
+
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
+  function validateAuthForm(view, fd) {
+    var name;
+    var email;
+    var password;
+    var password2;
+
+    if (view === 'login') {
+      email = String(fd.get('email') || '').trim();
+      password = String(fd.get('password') || '');
+      if (!email) return { message: 'Please enter your email address.', field: 'email' };
+      if (!isValidEmail(email)) return { message: 'Please enter a valid email address.', field: 'email' };
+      if (!password) return { message: 'Please enter your password.', field: 'password' };
+      return null;
+    }
+
+    if (view === 'register') {
+      name = String(fd.get('name') || '').trim();
+      email = String(fd.get('email') || '').trim();
+      password = String(fd.get('password') || '');
+      if (!name) return { message: 'Please enter your name.', field: 'name' };
+      if (!email) return { message: 'Please enter your email address.', field: 'email' };
+      if (!isValidEmail(email)) return { message: 'Please enter a valid email address.', field: 'email' };
+      if (password.length < 8) return { message: 'Password must be at least 8 characters.', field: 'password' };
+      return null;
+    }
+
+    if (view === 'forgot') {
+      email = String(fd.get('email') || '').trim();
+      if (!email) return { message: 'Please enter your email address.', field: 'email' };
+      if (!isValidEmail(email)) return { message: 'Please enter a valid email address.', field: 'email' };
+      return null;
+    }
+
+    if (view === 'reset') {
+      password = String(fd.get('password') || '');
+      password2 = String(fd.get('password2') || '');
+      if (password.length < 8) return { message: 'Password must be at least 8 characters.', field: 'password' };
+      if (password !== password2) return { message: 'Passwords do not match.', field: 'password2' };
+      return null;
+    }
+
+    return null;
+  }
+
+  function markFieldError(fieldName) {
+    formEl.querySelectorAll('.pdx-auth-field').forEach(function (el) {
+      el.classList.remove('pdx-auth-field--error');
+    });
+    if (!fieldName) return;
+    var field = formEl.querySelector('.pdx-auth-field[data-field="' + fieldName + '"]');
+    if (field) {
+      field.classList.add('pdx-auth-field--error');
+      var input = field.querySelector('input');
+      if (input) input.focus();
+    }
   }
 
   function submitBtn(label) {
@@ -229,6 +306,14 @@
     var form = e.target;
     var fd = new FormData(form);
     showFormMessage('', '');
+    markFieldError(null);
+
+    var validationError = validateAuthForm(currentView, fd);
+    if (validationError) {
+      showFormMessage(validationError.message, 'error');
+      markFieldError(validationError.field);
+      return;
+    }
 
     if (currentView === 'login') {
       apiFetch('POST', '/auth/login', {
@@ -271,8 +356,6 @@
       });
     } else if (currentView === 'reset') {
       var p1 = fd.get('password');
-      var p2 = fd.get('password2');
-      if (p1 !== p2) { showFormMessage('Passwords do not match.', 'error'); return; }
       var params = new URLSearchParams(window.location.search);
       apiFetch('POST', '/auth/reset-password', {
         token: params.get('token') || '',
