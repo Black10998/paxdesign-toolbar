@@ -593,6 +593,14 @@
       notify(decodeURIComponent(params.get('pdx_msg') || 'Verification failed.'), 'warn');
       cleanUrl();
     }
+    if (params.get('pdx_account') === '1') {
+      if (user.logged_in) {
+        openAccountPanel();
+      } else {
+        openOverlay('login');
+      }
+      cleanUrl();
+    }
   }
 
   function cleanUrl() {

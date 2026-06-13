@@ -20,16 +20,123 @@ class PDX_Auth {
 	const VERIFY_TTL_HOURS = 24;
 	const RESET_TTL_HOURS  = 1;
 
+	/** WordPress role slug for PaxDesign customer accounts (no dashboard access). */
+	const CUSTOMER_ROLE = 'pdx_customer';
+
+	/** Roles that must never be downgraded to customer. */
+	private const PRESERVED_ROLES = [ 'administrator' ];
+
 	/** Modules accessible without login (free tier). */
 	public static function public_modules(): array {
 		return apply_filters( 'pdx_public_modules', [ 'trust', 'create', 'workspace' ] );
 	}
 
 	public static function register_hooks(): void {
+		add_action( 'init', [ self::class, 'ensure_customer_role' ], 5 );
 		add_action( 'init', [ self::class, 'handle_email_verify_link' ] );
 		add_filter( 'authenticate', [ self::class, 'block_unverified_login' ], 30, 3 );
 		add_action( 'wp_ajax_pdx_rest_nonce', [ self::class, 'ajax_rest_nonce' ] );
 		add_action( 'wp_ajax_nopriv_pdx_rest_nonce', [ self::class, 'ajax_rest_nonce' ] );
+		add_filter( 'show_admin_bar', [ self::class, 'hide_admin_bar_for_customers' ] );
+		add_action( 'admin_init', [ self::class, 'block_wp_admin_for_customers' ], 1 );
+		add_action( 'login_init', [ self::class, 'redirect_logged_in_customers_from_wp_login' ] );
+		add_filter( 'login_redirect', [ self::class, 'customer_login_redirect' ], 10, 3 );
+		add_action( 'wp_head', [ self::class, 'admin_bar_hide_css_fallback' ], 100 );
+	}
+
+	/** Whether the user is a real WordPress site administrator. */
+	public static function is_site_admin( ?int $user_id = null ): bool {
+		$user_id = $user_id ?: get_current_user_id();
+		if ( ! $user_id ) {
+			return false;
+		}
+		return user_can( $user_id, PDX_CAP );
+	}
+
+	/** Role slug used for newly registered PaxDesign customers. */
+	public static function customer_role(): string {
+		if ( class_exists( 'WooCommerce' ) && get_role( 'customer' ) ) {
+			return 'customer';
+		}
+		return self::CUSTOMER_ROLE;
+	}
+
+	public static function ensure_customer_role(): void {
+		if ( get_role( self::CUSTOMER_ROLE ) ) {
+			return;
+		}
+		add_role(
+			self::CUSTOMER_ROLE,
+			__( 'PaxDesign Customer', 'paxdesign-toolbar' ),
+			[ 'read' => true ]
+		);
+	}
+
+	/** @param bool $show Default admin-bar visibility. */
+	public static function hide_admin_bar_for_customers( $show ): bool {
+		if ( self::is_site_admin() ) {
+			return (bool) $show;
+		}
+		if ( is_user_logged_in() ) {
+			return false;
+		}
+		return (bool) $show;
+	}
+
+	public static function admin_bar_hide_css_fallback(): void {
+		if ( ! is_user_logged_in() || self::is_site_admin() ) {
+			return;
+		}
+		echo "<style id=\"pdx-hide-wp-admin-bar\">#wpadminbar{display:none!important}html{margin-top:0!important}body.admin-bar{margin-top:0!important}@media screen and (max-width:782px){html{margin-top:0!important}body.admin-bar{margin-top:0!important}}</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		remove_action( 'wp_head', '_admin_bar_bump_cb' );
+	}
+
+	public static function block_wp_admin_for_customers(): void {
+		if ( self::is_site_admin() || ! is_user_logged_in() ) {
+			return;
+		}
+		if ( wp_doing_ajax() ) {
+			return;
+		}
+		wp_safe_redirect( add_query_arg( 'pdx_account', '1', home_url( '/' ) ) );
+		exit;
+	}
+
+	public static function redirect_logged_in_customers_from_wp_login(): void {
+		if ( ! is_user_logged_in() || self::is_site_admin() ) {
+			return;
+		}
+		wp_safe_redirect( add_query_arg( 'pdx_account', '1', home_url( '/' ) ) );
+		exit;
+	}
+
+	/**
+	 * @param string           $redirect_to Default redirect URL.
+	 * @param string           $requested   Requested redirect URL.
+	 * @param WP_User|WP_Error $user        Authenticated user.
+	 */
+	public static function customer_login_redirect( $redirect_to, $requested, $user ): string {
+		unset( $requested );
+		if ( $user instanceof WP_User && ! user_can( $user, PDX_CAP ) ) {
+			return add_query_arg( 'pdx_account', '1', home_url( '/' ) );
+		}
+		return (string) $redirect_to;
+	}
+
+	private static function assign_customer_role( int $user_id ): void {
+		if ( self::is_site_admin( $user_id ) ) {
+			return;
+		}
+		$user = get_userdata( $user_id );
+		if ( ! $user ) {
+			return;
+		}
+		$roles = (array) $user->roles;
+		if ( array_intersect( self::PRESERVED_ROLES, $roles ) ) {
+			return;
+		}
+		$user->set_role( self::customer_role() );
+		update_user_meta( $user_id, 'show_admin_bar_front', 'false' );
 	}
 
 	/** Fresh wp_rest nonce for the current cookie session (no REST nonce required). */
@@ -126,6 +233,8 @@ class PDX_Auth {
 			'first_name'   => $name,
 		] );
 
+		self::assign_customer_role( $user_id );
+
 		update_user_meta( $user_id, self::META_VERIFIED, 0 );
 		self::send_verification_email( $user_id );
 
@@ -187,6 +296,7 @@ class PDX_Auth {
 		self::clear_failed_logins( $email, $user->ID );
 		wp_set_current_user( $signed->ID );
 		wp_set_auth_cookie( $signed->ID, $remember, is_ssl() );
+		self::assign_customer_role( $signed->ID );
 
 		PDX_Audit::log( 'auth', 'user_login', [ 'user_id' => $signed->ID ] );
 

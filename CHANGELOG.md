@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## 9.0.5 — 2026-06-13
+
+**Critical: customer account isolation from WordPress admin**
+
+- Hide WordPress Admin Bar for all non-administrator users (customers only see PaxDesign account UI).
+- Block `/wp-admin` access for customers; redirect to frontend account entry (`/?pdx_account=1`).
+- Register new users as PaxDesign Customer role (`pdx_customer`, or WooCommerce `customer` when active) with read-only capability.
+- Normalize customer role and disable admin bar preference on login/register.
+- Redirect logged-in customers away from `wp-login.php` to the frontend account experience.
+
+**Install:** `releases/paxdesign-toolbar-9.0.5.zip` — tag `v9.0.5`
+
 ## 9.0.4 — 2026-06-13
 
 **Auth session, account menu, and premium access hardening**
