@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## 9.1.0 — 2026-06-13
+
+**Customer Experience System — unified premium redesign**
+
+- New `pdx-customer-ui.css` design system aligned with dock tokens (monochrome premium, Stripe/Linear-grade cohesion).
+- Pearl primary buttons across login, register, forgot/reset password, and account actions.
+- Unified stroke icon set (`pdx-customer-icons.js`) — lightweight, no external libraries.
+- Redesigned auth overlay, account dropdown, profile overlay, and account dashboard shell.
+- Customer tabs: Overview, Purchases, Billing, Subscription — with consistent cards, spacing, and mobile-first nav.
+- Auth gate, loading states, and form submit loading indicators.
+- Account panel copy adapts for customers vs administrators.
+
+**Install:** `releases/paxdesign-toolbar-9.1.0.zip` — tag `v9.1.0`
+
 ## 9.0.8 — 2026-06-13
 
 **PAXDesign Premium Verified Badge (original identity asset)**

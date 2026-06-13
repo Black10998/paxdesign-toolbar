@@ -9,7 +9,11 @@
 #pdx-backdrop,
 #pdx-notif,
 .pdx-cmd-overlay,
-.pdx-admin-wrap {
+.pdx-admin-wrap,
+#pdx-auth-bar,
+#pdx-auth-overlay,
+#pdx-profile-overlay,
+.pdx-cx-shell {
   --pdx-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
   --pdx-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --pdx-radius-sm: 10px;

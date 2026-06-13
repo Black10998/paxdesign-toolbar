@@ -45,6 +45,23 @@
     return escHtml(name || 'Account');
   }
 
+  function cxIcon(name, size) {
+    if (window.PDXCustomerIcons) return window.PDXCustomerIcons.svg(name, size || 18);
+    return '';
+  }
+
+  function pearlBtn(label, opts) {
+    opts = opts || {};
+    var cls = 'pdx-btn-pearl' + (opts.small ? ' pdx-btn-pearl--sm' : '') + (opts.inline ? ' pdx-btn-pearl--inline' : '');
+    var iconHtml = opts.icon ? cxIcon(opts.icon, 16) : '';
+    return '<button type="' + (opts.type || 'submit') + '" class="' + cls + '">' +
+      '<span class="pdx-btn-pearl__wrap">' + iconHtml + '<span>' + escHtml(label) + '</span></span></button>';
+  }
+
+  function cxLoading(label) {
+    return '<div class="pdx-cx-loading"><div class="pdx-cx-loading__spinner"></div><span>' + escHtml(label || 'Loading…') + '</span></div>';
+  }
+
   function isRestNonceError(data) {
     if (!data) return false;
     var code = data.code || data.error || '';
@@ -152,18 +169,19 @@
   function createAuthBar() {
     authBar = document.createElement('div');
     authBar.id = 'pdx-auth-bar';
+    authBar.className = 'pdx-cx-shell';
     authBar.innerHTML =
       '<div class="pdx-auth-bar-inner">' +
         '<button type="button" class="pdx-auth-trigger" aria-haspopup="true" aria-expanded="false">' +
-          '<span class="pdx-auth-trigger-icon">' + SVG_USER + '</span>' +
+          '<span class="pdx-auth-trigger-icon">' + cxIcon('user', 18) + '</span>' +
           '<span class="pdx-auth-trigger-label">Log In</span>' +
         '</button>' +
         '<div class="pdx-auth-menu" hidden>' +
           '<div class="pdx-auth-menu-head"></div>' +
           '<div class="pdx-auth-menu-actions">' +
-            '<button type="button" class="pdx-auth-menu-item" data-action="profile">My Profile</button>' +
-            '<button type="button" class="pdx-auth-menu-item" data-action="account">My Account</button>' +
-            '<button type="button" class="pdx-auth-menu-item pdx-auth-menu-item--logout" data-action="logout">Logout</button>' +
+            '<button type="button" class="pdx-auth-menu-item" data-action="profile">' + cxIcon('user', 16) + 'My Profile</button>' +
+            '<button type="button" class="pdx-auth-menu-item" data-action="account">' + cxIcon('settings', 16) + 'My Account</button>' +
+            '<button type="button" class="pdx-auth-menu-item pdx-auth-menu-item--logout" data-action="logout">' + cxIcon('logout', 16) + 'Logout</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -280,17 +298,18 @@
     if (!profileOverlay) {
       profileOverlay = document.createElement('div');
       profileOverlay.id = 'pdx-profile-overlay';
+      profileOverlay.className = 'pdx-cx-shell';
       profileOverlay.setAttribute('role', 'dialog');
       profileOverlay.setAttribute('aria-modal', 'true');
       profileOverlay.setAttribute('aria-label', 'My Profile');
       profileOverlay.innerHTML =
         '<div class="pdx-profile-card">' +
           '<button type="button" class="pdx-auth-close" aria-label="Close">&times;</button>' +
-          '<div class="pdx-profile-card-title">My Profile</div>' +
+          '<div class="pdx-profile-card-title">' + cxIcon('user', 18) + 'My Profile</div>' +
           '<div class="pdx-profile-card-body"></div>' +
           '<div class="pdx-profile-card-actions">' +
-            '<button type="button" class="pdx-account-btn pdx-profile-open-account">My Account</button>' +
-            '<button type="button" class="pdx-account-btn pdx-account-btn--ghost pdx-profile-logout">Logout</button>' +
+            '<button type="button" class="pdx-cx-btn pdx-profile-open-account">' + cxIcon('settings', 16) + 'My Account</button>' +
+            '<button type="button" class="pdx-cx-btn pdx-cx-btn--ghost pdx-profile-logout">' + cxIcon('logout', 16) + 'Logout</button>' +
           '</div>' +
         '</div>';
       document.body.appendChild(profileOverlay);
@@ -347,6 +366,7 @@
   function createOverlay() {
     overlay = document.createElement('div');
     overlay.id = 'pdx-auth-overlay';
+    overlay.className = 'pdx-cx-shell';
     overlay.setAttribute('role', 'dialog');
     overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', 'Authentication');
@@ -379,46 +399,57 @@
   }
 
   function renderAuthForm() {
-    var titles = { login: 'Login', register: 'Register', forgot: 'Forgot', reset: 'Reset' };
+    var titles = { login: 'Sign In', register: 'Create Account', forgot: 'Forgot Password', reset: 'Reset Password' };
+    var subtitles = {
+      login: 'Welcome back. Sign in to your PAXDesign account.',
+      register: 'Create your account to access modules and billing.',
+      forgot: 'Enter your email and we will send a secure reset link.',
+      reset: 'Choose a strong new password for your account.',
+    };
+    var headIcons = { login: 'login', register: 'register', forgot: 'mail', reset: 'lock' };
     var html = '<form class="pdx-auth-form pdx-auth-form--' + currentView + '" novalidate>';
-    html += '<span class="pdx-auth-title">' + (titles[currentView] || 'Login') + '</span>';
+    html += '<div class="pdx-cx-auth-head">';
+    html += '<div class="pdx-cx-icon-wrap">' + cxIcon(headIcons[currentView] || 'login', 22) + '</div>';
+    html += '<span class="pdx-auth-title">' + escHtml(titles[currentView] || 'Sign In') + '</span>';
+    html += '<p class="pdx-cx-auth-subtitle">' + escHtml(subtitles[currentView] || '') + '</p>';
+    html += '</div>';
     html += '<div class="pdx-auth-msg-slot"></div>';
     html += '<div class="pdx-auth-fields">';
 
     if (currentView === 'login') {
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email', true);
-      html += fieldInput('password', 'password', 'Password', SVG_LOCK, 'current-password', true);
+      html += fieldInput('email', 'email', 'Email', 'mail', 'email', true);
+      html += fieldInput('password', 'password', 'Password', 'lock', 'current-password', true);
     } else if (currentView === 'register') {
-      html += fieldInput('name', 'text', 'Full name', null, 'name', true);
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email', true);
-      html += fieldInput('password', 'password', 'Password (min 8 characters)', SVG_LOCK, 'new-password', true);
+      html += fieldInput('name', 'text', 'Full name', 'user', 'name', true);
+      html += fieldInput('email', 'email', 'Email', 'mail', 'email', true);
+      html += fieldInput('password', 'password', 'Password (min 8 characters)', 'lock', 'new-password', true);
     } else if (currentView === 'forgot') {
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email', true);
+      html += fieldInput('email', 'email', 'Email', 'mail', 'email', true);
     } else if (currentView === 'reset') {
-      html += fieldInput('password', 'password', 'New password', SVG_LOCK, 'new-password', true);
-      html += fieldInput('password2', 'password', 'Confirm password', SVG_LOCK, 'new-password', true);
+      html += fieldInput('password', 'password', 'New password', 'lock', 'new-password', true);
+      html += fieldInput('password2', 'password', 'Confirm password', 'lock', 'new-password', true);
     }
 
     html += '</div>';
 
     if (currentView === 'login') {
-      html += submitBtn('Login');
+      html += submitBtn('Sign In', 'login');
       html += links([
         { view: 'forgot', label: 'Forgot password?' },
         { view: 'register', label: 'Create account' },
       ]);
     } else if (currentView === 'register') {
-      html += submitBtn('Register');
-      html += links([{ view: 'login', label: 'Already have an account? Log in' }]);
+      html += submitBtn('Create Account', 'register');
+      html += links([{ view: 'login', label: 'Already have an account? Sign in' }]);
     } else if (currentView === 'forgot') {
-      html += submitBtn('Send Reset Link');
-      html += links([{ view: 'login', label: 'Back to login' }]);
+      html += submitBtn('Send Reset Link', 'mail');
+      html += links([{ view: 'login', label: 'Back to sign in' }]);
     } else if (currentView === 'reset') {
-      html += submitBtn('Reset Password');
-      html += links([{ view: 'login', label: 'Back to login' }]);
+      html += submitBtn('Reset Password', 'lock');
+      html += links([{ view: 'login', label: 'Back to sign in' }]);
     }
 
-    html += '<div class="pdx-auth-texture"></div></form>';
+    html += '</form>';
     formEl.innerHTML = html;
 
     var form = formEl.querySelector('.pdx-auth-form');
@@ -431,12 +462,12 @@
     });
   }
 
-  function fieldInput(name, type, label, icon, autocomplete, required) {
+  function fieldInput(name, type, label, iconName, autocomplete, required) {
     var id = 'pdx-auth-' + currentView + '-' + name;
     var html = '<div class="pdx-auth-field" data-field="' + name + '">';
     html += '<label class="pdx-auth-field-label" for="' + id + '">' + escHtml(label) + '</label>';
     html += '<div class="pdx-auth-input-container">';
-    if (icon) html += icon;
+    if (iconName) html += cxIcon(iconName, 18);
     html += '<input class="pdx-auth-input" id="' + id + '" name="' + name + '" type="' + type + '"';
     html += ' placeholder="' + escHtml(label) + '"';
     if (autocomplete) html += ' autocomplete="' + autocomplete + '"';
@@ -506,8 +537,16 @@
     }
   }
 
-  function submitBtn(label) {
-    return '<div class="pdx-auth-submit-wrap"><input class="pdx-auth-submit" type="submit" value="' + escHtml(label) + '" /></div>';
+  function submitBtn(label, iconName) {
+    return '<div class="pdx-auth-submit-wrap">' + pearlBtn(label, { icon: iconName || 'check' }) + '</div>';
+  }
+
+  function setFormLoading(loading) {
+    var btn = formEl && formEl.querySelector('.pdx-btn-pearl');
+    if (btn) {
+      btn.disabled = !!loading;
+      btn.classList.toggle('is-loading', !!loading);
+    }
   }
 
   function links(items) {
@@ -538,12 +577,17 @@
       return;
     }
 
+    setFormLoading(true);
+
+    function done() { setFormLoading(false); }
+
     if (currentView === 'login') {
       apiFetch('POST', '/auth/login', {
         email: fd.get('email'),
         password: fd.get('password'),
         remember: true,
       }).then(function (data) {
+        done();
         if (!data.success) {
           showFormMessage(data.message || 'Login failed.', 'error');
           return;
@@ -558,24 +602,26 @@
             window.PDXDock.openPanel(mod);
           }
         });
-      });
+      }).catch(done);
     } else if (currentView === 'register') {
       apiFetch('POST', '/auth/register', {
         name: fd.get('name'),
         email: fd.get('email'),
         password: fd.get('password'),
       }).then(function (data) {
+        done();
         if (!data.success) {
           showFormMessage(data.message || 'Registration failed.', 'error');
           return;
         }
         showFormMessage(data.message, 'success');
-        setTimeout(function () { currentView = 'login'; renderAuthForm(); showFormMessage('Account created. Log in after verifying your email.', 'success'); }, 2000);
-      });
+        setTimeout(function () { currentView = 'login'; renderAuthForm(); showFormMessage('Account created. Sign in after verifying your email.', 'success'); }, 2000);
+      }).catch(done);
     } else if (currentView === 'forgot') {
       apiFetch('POST', '/auth/forgot-password', { email: fd.get('email') }).then(function (data) {
+        done();
         showFormMessage(data.message || 'Check your email.', 'success');
-      });
+      }).catch(done);
     } else if (currentView === 'reset') {
       var p1 = fd.get('password');
       var params = new URLSearchParams(window.location.search);
@@ -584,10 +630,11 @@
         uid: parseInt(params.get('uid') || '0', 10),
         password: p1,
       }).then(function (data) {
+        done();
         if (!data.success) { showFormMessage(data.message, 'error'); return; }
         showFormMessage(data.message, 'success');
         setTimeout(function () { currentView = 'login'; renderAuthForm(); }, 2000);
-      });
+      }).catch(done);
     }
   }
 
@@ -634,13 +681,22 @@
     var title = reason === 'verify' ? 'Verify your email' : 'Sign in required';
     var desc = reason === 'verify'
       ? 'Please verify your email address to continue using protected modules.'
-      : 'Sign in to access protected modules. Premium features still require purchase or subscription.';
+      : 'Sign in to access your account, purchases, and subscription.';
+    var gateIcon = reason === 'verify' ? 'mail' : 'shield';
+    var actions =
+      '<button type="button" class="pdx-btn-pearl pdx-btn-pearl--sm pdx-btn-pearl--inline pdx-auth-gate-login">' +
+        '<span class="pdx-btn-pearl__wrap">' + cxIcon(reason === 'verify' ? 'mail' : 'login', 16) +
+        '<span>' + escHtml(reason === 'verify' ? 'Resend verification' : 'Sign In') + '</span></span></button>';
+    if (reason !== 'verify') {
+      actions += '<button type="button" class="pdx-cx-btn pdx-cx-btn--ghost pdx-auth-gate-register">' +
+        cxIcon('register', 16) + escHtml('Create Account') + '</button>';
+    }
     container.innerHTML =
-      '<div class="pdx-auth-gate">' +
-        '<div class="pdx-auth-gate-title">' + title + '</div>' +
-        '<div class="pdx-auth-gate-desc">' + desc + '</div>' +
-        '<button type="button" class="pdx-account-btn pdx-auth-gate-login">' + (reason === 'verify' ? 'Resend verification' : 'Log In') + '</button>' +
-        (reason !== 'verify' ? '<button type="button" class="pdx-account-btn pdx-account-btn--ghost pdx-auth-gate-register" style="margin-left:8px">Register</button>' : '') +
+      '<div class="pdx-auth-gate pdx-cx-shell">' +
+        '<div class="pdx-auth-gate-icon">' + cxIcon(gateIcon, 24) + '</div>' +
+        '<div class="pdx-auth-gate-title">' + escHtml(title) + '</div>' +
+        '<div class="pdx-auth-gate-desc">' + escHtml(desc) + '</div>' +
+        '<div class="pdx-auth-gate-actions">' + actions + '</div>' +
       '</div>';
     container.querySelector('.pdx-auth-gate-login').addEventListener('click', function () {
       if (reason === 'verify') {
@@ -659,7 +715,7 @@
 
   /* ─── Account dashboard ────────────────────────────────── */
   function renderAccountDashboard(container) {
-    container.innerHTML = '<div class="pdx-loading">Loading account…</div>';
+    container.innerHTML = cxLoading('Loading your account…');
     apiFetch('GET', '/account/dashboard').then(function (data) {
       if (data.error || !data.profile) {
         container.innerHTML = '<div class="pdx-error">Could not load account. Please log in again.</div>';
@@ -681,14 +737,14 @@
   function renderAdminDashboardUI(container, data) {
     var p = data.profile;
     var html =
-      '<div class="pdx-account-dash">' +
+      '<div class="pdx-account-dash pdx-cx-shell">' +
         '<div class="pdx-account-nav">' +
-          navBtn('profile', 'Profile', true) +
-          navBtn('api-keys', 'API Keys') +
-          navBtn('integrations', 'Integrations') +
-          navBtn('license', 'License') +
+          navBtn('profile', 'Profile', true, 'user') +
+          navBtn('api-keys', 'API Keys', false, 'key') +
+          navBtn('integrations', 'Integrations', false, 'settings') +
+          navBtn('license', 'License', false, 'shield') +
         '</div>' +
-        '<div class="pdx-ph-body" style="flex:1;overflow-y:auto">' +
+        '<div class="pdx-ph-body">' +
           sectionProfile(p) +
           sectionApiKeys(data.api_keys || []) +
           sectionIntegrations(data.integrations || []) +
@@ -705,14 +761,14 @@
   function renderCustomerDashboardUI(container, data) {
     var p = data.profile;
     var html =
-      '<div class="pdx-account-dash pdx-account-dash--customer">' +
+      '<div class="pdx-account-dash pdx-account-dash--customer pdx-cx-shell">' +
         '<div class="pdx-account-nav">' +
-          navBtn('profile', 'Profile', true) +
-          navBtn('purchases', 'Purchases') +
-          navBtn('invoices', 'Invoices / Payments') +
-          navBtn('subscription', 'Subscription') +
+          navBtn('profile', 'Overview', true, 'user') +
+          navBtn('purchases', 'Purchases', false, 'package') +
+          navBtn('invoices', 'Billing', false, 'receipt') +
+          navBtn('subscription', 'Subscription', false, 'subscription') +
         '</div>' +
-        '<div class="pdx-ph-body" style="flex:1;overflow-y:auto">' +
+        '<div class="pdx-ph-body">' +
           sectionProfile(p) +
           sectionPurchases(data.purchases || []) +
           sectionInvoices(data.orders || []) +
@@ -738,8 +794,9 @@
     });
   }
 
-  function navBtn(id, label, active) {
-    return '<button type="button" class="pdx-account-nav-btn' + (active ? ' is-active' : '') + '" data-section="' + id + '">' + escHtml(label) + '</button>';
+  function navBtn(id, label, active, iconName) {
+    return '<button type="button" class="pdx-account-nav-btn' + (active ? ' is-active' : '') + '" data-section="' + id + '">' +
+      cxIcon(iconName || 'user', 15) + escHtml(label) + '</button>';
   }
 
   function sectionProfile(p) {
@@ -747,24 +804,25 @@
     var statusLabel = p.verified ? 'Verified' : 'Pending verification';
     return '<div id="pdx-acc-profile" class="pdx-account-section is-active">' +
       '<div class="pdx-account-card">' +
-        '<div class="pdx-account-card-title">Account</div>' +
+        '<div class="pdx-account-card-title">' + cxIcon('user', 16) + 'Account Overview</div>' +
+        '<p class="pdx-cx-card__sub">Your profile, verification status, and account security.</p>' +
         '<div class="pdx-account-profile-head">' + nameWithBadge(p.display_name || 'Account', p.verified, { size: 16, context: 'account' }) + '</div>' +
         '<div class="pdx-account-status-row">' +
           '<span class="pdx-account-status pdx-account-status--' + statusCls + '">' + statusLabel + verifiedBadgeHtml(p.verified, { size: 13, inline: true, context: 'email' }) + '</span>' +
-          (!p.verified ? '<button type="button" class="pdx-account-btn pdx-resend-verify">Resend email</button>' : '') +
+          (!p.verified ? '<button type="button" class="pdx-cx-btn pdx-cx-btn--ghost pdx-resend-verify">' + cxIcon('mail', 16) + 'Resend email</button>' : '') +
         '</div>' +
       '</div>' +
       '<div class="pdx-account-card">' +
-        '<div class="pdx-account-card-title">Profile</div>' +
+        '<div class="pdx-account-card-title">' + cxIcon('settings', 16) + 'Profile & Security</div>' +
         '<form id="pdx-profile-form">' +
           field('display_name', 'Display name', p.display_name) +
           field('email', 'Email', p.email, 'email') +
           field('current_password', 'Current password (to change password)', '', 'password') +
           field('new_password', 'New password', '', 'password') +
-          '<button type="submit" class="pdx-account-btn">Save changes</button>' +
+          '<div style="margin-top:12px">' + pearlBtn('Save changes', { type: 'submit', icon: 'check', small: true, inline: true }) + '</div>' +
         '</form>' +
       '</div>' +
-      '<button type="button" class="pdx-account-btn pdx-account-btn--ghost pdx-logout-btn">Log out</button>' +
+      '<button type="button" class="pdx-cx-btn pdx-cx-btn--ghost pdx-logout-btn">' + cxIcon('logout', 16) + 'Log out</button>' +
     '</div>';
   }
 
@@ -821,7 +879,7 @@
   }
 
   function sectionPurchases(items) {
-    var html = '<div id="pdx-acc-purchases" class="pdx-account-section"><div class="pdx-account-card"><div class="pdx-account-card-title">My Purchases</div>';
+    var html = '<div id="pdx-acc-purchases" class="pdx-account-section"><div class="pdx-account-card"><div class="pdx-account-card-title">' + cxIcon('package', 16) + 'My Purchases</div>';
     if (!items.length) {
       html += '<p class="pdx-account-empty">No active purchases yet. Premium modules unlock after payment.</p>';
     } else {
@@ -841,7 +899,7 @@
   }
 
   function sectionInvoices(orders) {
-    var html = '<div id="pdx-acc-invoices" class="pdx-account-section"><div class="pdx-account-card"><div class="pdx-account-card-title">Invoices / Payments</div>';
+    var html = '<div id="pdx-acc-invoices" class="pdx-account-section"><div class="pdx-account-card"><div class="pdx-account-card-title">' + cxIcon('receipt', 16) + 'Invoices & Payments</div>';
     if (!orders.length) {
       html += '<p class="pdx-account-empty">No payment records yet.</p>';
     } else {
@@ -870,7 +928,8 @@
   function sectionCustomerSubscription(sub) {
     var modules = sub.active_modules || [];
     var html = '<div id="pdx-acc-subscription" class="pdx-account-section"><div class="pdx-account-card">' +
-      '<div class="pdx-account-card-title">Subscription & License Status</div>' +
+      '<div class="pdx-account-card-title">' + cxIcon('subscription', 16) + 'Subscription & License</div>' +
+      '<p class="pdx-cx-card__sub">Your plan status and licensed modules.</p>' +
       '<div class="pdx-sub-summary">' +
         '<div class="pdx-profile-row"><span class="pdx-profile-label">Plan</span><span class="pdx-profile-value">' + escHtml(sub.plan || 'free') + '</span></div>' +
         '<div class="pdx-profile-row"><span class="pdx-profile-label">Status</span><span class="pdx-profile-value">' + escHtml(sub.status || 'inactive') + '</span></div>' +

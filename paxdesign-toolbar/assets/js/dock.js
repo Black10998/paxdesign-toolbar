@@ -687,11 +687,15 @@
     }
 
     function renderAccount() {
+      var isLoggedIn = window.PDXAuth && window.PDXAuth.isLoggedIn();
+      var desc = isLoggedIn && window.PDXAuth.getUser && window.PDXAuth.getUser().is_admin
+        ? 'Manage profile, API keys, integrations, and license.'
+        : 'Your profile, purchases, billing, and subscription in one place.';
       panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--account">' +
           '<div class="pdx-ph-hd">' +
             '<div class="pdx-ph-title"><span>Account</span></div>' +
-            '<div class="pdx-ph-desc">Manage your profile, API keys, integrations, and subscription.</div>' +
+            '<div class="pdx-ph-desc">' + escHtml(desc) + '</div>' +
           '</div>' +
           '<div class="pdx-ph-body" id="pdx-account-body"></div>' +
         '</div>';

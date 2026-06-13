@@ -107,9 +107,16 @@ class PDX_Frontend {
 		);
 
 		wp_enqueue_style(
+			'pdx-customer-ui',
+			PDX_URL . 'assets/css/pdx-customer-ui.css',
+			[ 'pdx-unified-ui', 'pdx-verified-badge' ],
+			$this->asset_version( 'assets/css/pdx-customer-ui.css' )
+		);
+
+		wp_enqueue_style(
 			'pdx-auth',
 			PDX_URL . 'assets/css/pdx-auth.css',
-			[ 'pdx-unified-ui', 'pdx-verified-badge' ],
+			[ 'pdx-unified-ui', 'pdx-verified-badge', 'pdx-customer-ui' ],
 			$this->asset_version( 'assets/css/pdx-auth.css' )
 		);
 
@@ -149,6 +156,14 @@ class PDX_Frontend {
 		);
 
 		wp_enqueue_script(
+			'pdx-customer-icons',
+			PDX_URL . 'assets/js/pdx-customer-icons.js',
+			[],
+			$this->asset_version( 'assets/js/pdx-customer-icons.js' ),
+			$script_args
+		);
+
+		wp_enqueue_script(
 			'pdx-verified-badge',
 			PDX_URL . 'assets/js/pdx-verified-badge.js',
 			[],
@@ -159,7 +174,7 @@ class PDX_Frontend {
 		wp_enqueue_script(
 			'pdx-auth',
 			PDX_URL . 'assets/js/pdx-auth.js',
-			[ 'pdx-dock', 'pdx-verified-badge' ],
+			[ 'pdx-dock', 'pdx-verified-badge', 'pdx-customer-icons' ],
 			$this->asset_version( 'assets/js/pdx-auth.js' ),
 			$script_args
 		);
