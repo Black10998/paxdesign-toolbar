@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## 9.0.6 — 2026-06-13
+
+**Critical: customer account panel permissions and billing UI**
+
+- Hide API Keys, Integrations, and admin License tools from customer accounts (UI + server).
+- Block `/account/api-keys` and validate endpoints for non-administrators (403).
+- Customer account panel now shows: Profile, Purchases, Invoices/Payments, Subscription, Logout.
+- Added customer orders/invoices with order ID, transaction ID, payment status, amount, product, and invoice download.
+- Premium access remains tied to payment/subscription records, not login alone.
+
+**Install:** `releases/paxdesign-toolbar-9.0.6.zip` — tag `v9.0.6`
+
 ## 9.0.5 — 2026-06-13
 
 **Critical: customer account isolation from WordPress admin**

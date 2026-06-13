@@ -129,6 +129,23 @@ class PDX_REST_API {
 		return null;
 	}
 
+	private function require_site_admin(): ?WP_REST_Response {
+		$deny = $this->require_logged_in();
+		if ( $deny ) {
+			return $deny;
+		}
+		if ( ! PDX_Auth::is_site_admin() ) {
+			return new WP_REST_Response(
+				[
+					'error'   => 'forbidden',
+					'message' => 'Administrator access required.',
+				],
+				403
+			);
+		}
+		return null;
+	}
+
 	private function require_actor(): ?WP_REST_Response {
 		if ( ! PDX_Security::require_actor() ) {
 			return new WP_REST_Response( [ 'error' => 'Session required. Reload the page and try again.' ], 401 );
@@ -351,6 +368,7 @@ class PDX_REST_API {
 		register_rest_route( $ns, '/account/profile',        [ 'methods' => 'POST', 'callback' => [ $this, 'account_update_profile' ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/account/api-keys',       [ 'methods' => 'POST', 'callback' => [ $this, 'account_update_api_key' ], 'permission_callback' => $pub ] );
 		register_rest_route( $ns, '/account/api-keys/validate', [ 'methods' => 'POST', 'callback' => [ $this, 'account_validate_api_key' ], 'permission_callback' => $pub ] );
+		register_rest_route( $ns, '/account/invoice/(?P<order_ref>[a-zA-Z0-9\\-_]+)', [ 'methods' => 'GET', 'callback' => [ $this, 'account_invoice' ], 'permission_callback' => $pub ] );
 	}
 
 	/**
@@ -1967,7 +1985,7 @@ class PDX_REST_API {
 	}
 
 	public function account_update_api_key( WP_REST_Request $req ): WP_REST_Response {
-		$deny = $this->require_logged_in();
+		$deny = $this->require_site_admin();
 		if ( $deny ) {
 			return $deny;
 		}
@@ -1980,7 +1998,7 @@ class PDX_REST_API {
 	}
 
 	public function account_validate_api_key( WP_REST_Request $req ): WP_REST_Response {
-		$deny = $this->require_logged_in();
+		$deny = $this->require_site_admin();
 		if ( $deny ) {
 			return $deny;
 		}
@@ -1989,5 +2007,17 @@ class PDX_REST_API {
 			sanitize_key( (string) $req->get_param( 'provider' ) )
 		);
 		return new WP_REST_Response( $result, 200 );
+	}
+
+	public function account_invoice( WP_REST_Request $req ): WP_REST_Response {
+		$deny = $this->require_logged_in();
+		if ( $deny ) {
+			return $deny;
+		}
+		$result = PDX_Account::invoice_document(
+			get_current_user_id(),
+			sanitize_text_field( (string) $req->get_param( 'order_ref' ) )
+		);
+		return new WP_REST_Response( $result, $result['success'] ? 200 : 404 );
 	}
 }

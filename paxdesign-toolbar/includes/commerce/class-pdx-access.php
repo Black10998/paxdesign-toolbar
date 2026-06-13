@@ -182,6 +182,54 @@ class PDX_Access {
 		) ?: [];
 	}
 
+	/** All payment/order rows for a customer account. */
+	public static function get_user_orders( int $user_id ): array {
+		global $wpdb;
+		if ( ! $user_id ) {
+			return [];
+		}
+
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}" . self::TABLE . " WHERE user_id = %d ORDER BY created_at DESC",
+				$user_id
+			),
+			ARRAY_A
+		) ?: [];
+	}
+
+	/** Fetch one order owned by the user (by PayPal order id or internal PDX id). */
+	public static function get_order_for_user( int $user_id, string $order_ref ): ?array {
+		global $wpdb;
+		if ( ! $user_id || '' === $order_ref ) {
+			return null;
+		}
+
+		if ( str_starts_with( $order_ref, 'PDX-' ) ) {
+			$id = (int) substr( $order_ref, 4 );
+			$row = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT * FROM {$wpdb->prefix}" . self::TABLE . " WHERE id = %d AND user_id = %d LIMIT 1",
+					$id,
+					$user_id
+				),
+				ARRAY_A
+			);
+			return $row ?: null;
+		}
+
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}" . self::TABLE . " WHERE paypal_order = %s AND user_id = %d LIMIT 1",
+				sanitize_text_field( $order_ref ),
+				$user_id
+			),
+			ARRAY_A
+		);
+
+		return $row ?: null;
+	}
+
 	/**
 	 * Get a single access record by PayPal order ID.
 	 */

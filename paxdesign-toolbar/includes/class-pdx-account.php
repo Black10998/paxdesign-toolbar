@@ -17,7 +17,15 @@ class PDX_Account {
 		return [ 'openai', 'virustotal', 'shodan', 'hunter', 'nvd', 'abuseipdb', 'abusech', 'ipapi' ];
 	}
 
+	/** Site administrators only — API keys, integrations, license admin tools. */
+	public static function can_manage_technical( ?int $user_id = null ): bool {
+		return PDX_Auth::is_site_admin( $user_id );
+	}
+
 	public static function get_user_api_key( int $user_id, string $provider ): string {
+		if ( ! self::can_manage_technical( $user_id ) ) {
+			return '';
+		}
 		if ( ! $user_id || ! in_array( $provider, self::allowed_providers(), true ) ) {
 			return '';
 		}
@@ -29,6 +37,9 @@ class PDX_Account {
 	}
 
 	public static function get_api_keys_masked( int $user_id ): array {
+		if ( ! self::can_manage_technical( $user_id ) ) {
+			return [];
+		}
 		$keys    = get_user_meta( $user_id, self::META_API_KEYS, true );
 		$keys    = is_array( $keys ) ? $keys : [];
 		$result  = [];
@@ -48,6 +59,9 @@ class PDX_Account {
 	}
 
 	public static function update_api_key( int $user_id, string $provider, string $value ): array {
+		if ( ! self::can_manage_technical( $user_id ) ) {
+			return [ 'success' => false, 'message' => 'Access denied.' ];
+		}
 		if ( ! in_array( $provider, self::allowed_providers(), true ) ) {
 			return [ 'success' => false, 'message' => 'Unknown provider.' ];
 		}
@@ -65,6 +79,9 @@ class PDX_Account {
 	}
 
 	public static function validate_api_key( int $user_id, string $provider ): array {
+		if ( ! self::can_manage_technical( $user_id ) ) {
+			return [ 'success' => false, 'status' => 'forbidden', 'message' => 'Access denied.' ];
+		}
 		$key = self::get_user_api_key( $user_id, $provider );
 		if ( '' === $key ) {
 			return [ 'success' => false, 'status' => 'disconnected', 'message' => 'No key configured.' ];
@@ -84,27 +101,191 @@ class PDX_Account {
 			return [];
 		}
 
-		$billing = [];
-		if ( class_exists( 'PDX_Billing', false ) && $user_id ) {
-			$billing = [
-				'plan'         => PDX_Billing::get_plan_for_user( $user_id ),
-				'subscription' => PDX_Billing::get_subscription( $user_id ),
-				'credits'      => PDX_Billing::credit_balance( $user_id ),
-			];
-		}
+		$is_admin = self::can_manage_technical( $user_id );
 
-		return [
-			'profile' => [
+		$payload = [
+			'is_admin' => $is_admin,
+			'profile'  => [
 				'id'           => $user_id,
 				'display_name' => $user->display_name,
 				'email'        => $user->user_email,
 				'verified'     => PDX_Auth::is_email_verified( $user_id ),
 			],
-			'api_keys'     => self::get_api_keys_masked( $user_id ),
-			'integrations' => self::integration_status( $user_id ),
-			'license'      => self::license_info( $user_id ),
-			'billing'      => $billing,
 		];
+
+		if ( $is_admin ) {
+			$billing = [];
+			if ( class_exists( 'PDX_Billing', false ) ) {
+				$billing = [
+					'plan'         => PDX_Billing::get_plan_for_user( $user_id ),
+					'subscription' => PDX_Billing::get_subscription( $user_id ),
+					'credits'      => PDX_Billing::credit_balance( $user_id ),
+				];
+			}
+
+			return array_merge( $payload, [
+				'api_keys'     => self::get_api_keys_masked( $user_id ),
+				'integrations' => self::integration_status( $user_id ),
+				'license'      => self::license_info( $user_id ),
+				'billing'      => $billing,
+			] );
+		}
+
+		return array_merge( $payload, [
+			'purchases'    => self::customer_purchases( $user_id ),
+			'orders'       => self::customer_orders( $user_id ),
+			'subscription' => self::customer_subscription( $user_id ),
+		] );
+	}
+
+	/** @return list<array<string,mixed>> */
+	public static function customer_purchases( int $user_id ): array {
+		$rows    = PDX_Access::get_user_orders( $user_id );
+		$items   = [];
+		$seen    = [];
+
+		foreach ( $rows as $row ) {
+			if ( 'active' !== ( $row['status'] ?? '' ) ) {
+				continue;
+			}
+			$module_id = (string) ( $row['module_id'] ?? '' );
+			if ( isset( $seen[ $module_id ] ) ) {
+				continue;
+			}
+			$seen[ $module_id ] = true;
+			$items[]            = [
+				'module_id'   => $module_id,
+				'label'       => self::module_label( $module_id ),
+				'status'      => 'active',
+				'purchased_at'=> $row['created_at'] ?? '',
+				'expires_at'  => $row['expires_at'] ?? null,
+				'amount'      => (float) ( $row['amount'] ?? 0 ),
+				'currency'    => (string) ( $row['currency'] ?? 'USD' ),
+			];
+		}
+
+		return $items;
+	}
+
+	/** @return list<array<string,mixed>> */
+	public static function customer_orders( int $user_id ): array {
+		$rows   = PDX_Access::get_user_orders( $user_id );
+		$orders = [];
+
+		foreach ( $rows as $row ) {
+			$status = (string) ( $row['status'] ?? 'pending' );
+			$orders[] = [
+				'id'               => (int) ( $row['id'] ?? 0 ),
+				'order_id'         => (string) ( $row['paypal_order'] ?: 'PDX-' . ( $row['id'] ?? 0 ) ),
+				'transaction_id'   => (string) ( $row['paypal_order'] ?? '' ),
+				'paid_at'          => (string) ( $row['created_at'] ?? '' ),
+				'payment_status'   => self::payment_status_label( $status ),
+				'amount'           => (float) ( $row['amount'] ?? 0 ),
+				'currency'         => (string) ( $row['currency'] ?? 'USD' ),
+				'product'          => self::module_label( (string) ( $row['module_id'] ?? '' ) ),
+				'module_id'        => (string) ( $row['module_id'] ?? '' ),
+				'access_status'    => $status,
+				'expires_at'       => $row['expires_at'] ?? null,
+				'invoice_available'=> 'active' === $status && ! empty( $row['paypal_order'] ),
+			];
+		}
+
+		return $orders;
+	}
+
+	/** @return array<string,mixed> */
+	public static function customer_subscription( int $user_id ): array {
+		$plan   = 'free';
+		$status = 'inactive';
+		$renew  = null;
+
+		if ( class_exists( 'PDX_Billing', false ) ) {
+			$sub    = PDX_Billing::get_subscription( $user_id );
+			$plan   = (string) ( $sub['plan_id'] ?? 'free' );
+			$status = (string) ( $sub['status'] ?? 'inactive' );
+			$renew  = $sub['current_period_end'] ?? null;
+		}
+
+		$active_modules = array_values( array_filter(
+			PDX_Access::get_user_access( $user_id ),
+			static fn( $row ) => 'active' === ( $row['status'] ?? '' )
+		) );
+
+		return [
+			'plan'            => $plan,
+			'status'          => $status,
+			'renewal_at'      => $renew,
+			'active_modules'  => array_map(
+				static fn( $row ) => [
+					'module_id' => (string) ( $row['module_id'] ?? '' ),
+					'label'     => self::module_label( (string) ( $row['module_id'] ?? '' ) ),
+					'expires_at'=> $row['expires_at'] ?? null,
+				],
+				$active_modules
+			),
+		];
+	}
+
+	/**
+	 * @return array{success:bool,html?:string,filename?:string,message?:string}
+	 */
+	public static function invoice_document( int $user_id, string $order_ref ): array {
+		$record = PDX_Access::get_order_for_user( $user_id, $order_ref );
+		if ( ! $record ) {
+			return [ 'success' => false, 'message' => 'Invoice not found.' ];
+		}
+		if ( 'active' !== ( $record['status'] ?? '' ) ) {
+			return [ 'success' => false, 'message' => 'Invoice is only available for completed payments.' ];
+		}
+
+		$user  = get_userdata( $user_id );
+		$site  = get_bloginfo( 'name' );
+		$order = (string) ( $record['paypal_order'] ?: 'PDX-' . ( $record['id'] ?? 0 ) );
+
+		$html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ' . esc_html( $order ) . '</title>' .
+			'<style>body{font-family:sans-serif;padding:32px;color:#111}h1{font-size:20px}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{padding:8px;border-bottom:1px solid #ddd;text-align:left}th{width:180px;color:#555}</style></head><body>' .
+			'<h1>' . esc_html( $site ) . ' — Invoice</h1>' .
+			'<table>' .
+			'<tr><th>Order ID</th><td>' . esc_html( $order ) . '</td></tr>' .
+			'<tr><th>Transaction ID</th><td>' . esc_html( (string) ( $record['paypal_order'] ?? '' ) ) . '</td></tr>' .
+			'<tr><th>Customer</th><td>' . esc_html( $user ? $user->user_email : '' ) . '</td></tr>' .
+			'<tr><th>Product</th><td>' . esc_html( self::module_label( (string) ( $record['module_id'] ?? '' ) ) ) . '</td></tr>' .
+			'<tr><th>Amount</th><td>' . esc_html( (string) ( $record['currency'] ?? 'USD' ) . ' ' . number_format( (float) ( $record['amount'] ?? 0 ), 2 ) ) . '</td></tr>' .
+			'<tr><th>Payment status</th><td>Paid</td></tr>' .
+			'<tr><th>Date</th><td>' . esc_html( (string) ( $record['created_at'] ?? '' ) ) . '</td></tr>' .
+			'</table></body></html>';
+
+		return [
+			'success'  => true,
+			'html'     => $html,
+			'filename' => 'invoice-' . sanitize_file_name( $order ) . '.html',
+		];
+	}
+
+	private static function payment_status_label( string $status ): string {
+		return match ( $status ) {
+			'active'   => 'Paid',
+			'pending'  => 'Pending',
+			'refunded' => 'Refunded',
+			'expired'  => 'Failed',
+			default    => ucfirst( $status ),
+		};
+	}
+
+	private static function module_label( string $module_id ): string {
+		if ( '' === $module_id ) {
+			return 'Unknown';
+		}
+		if ( function_exists( 'pdx' ) ) {
+			$registry = pdx( 'modules' );
+			if ( $registry instanceof PDX_Module_Registry ) {
+				$mod = $registry->get( $module_id );
+				if ( is_array( $mod ) && ! empty( $mod['label'] ) ) {
+					return (string) $mod['label'];
+				}
+			}
+		}
+		return ucwords( str_replace( [ '-', '_' ], ' ', $module_id ) );
 	}
 
 	/**

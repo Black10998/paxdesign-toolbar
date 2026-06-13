@@ -651,6 +651,14 @@
   }
 
   function renderDashboardUI(container, data) {
+    if (data.is_admin) {
+      renderAdminDashboardUI(container, data);
+    } else {
+      renderCustomerDashboardUI(container, data);
+    }
+  }
+
+  function renderAdminDashboardUI(container, data) {
     var p = data.profile;
     var html =
       '<div class="pdx-account-dash">' +
@@ -664,11 +672,41 @@
           sectionProfile(p) +
           sectionApiKeys(data.api_keys || []) +
           sectionIntegrations(data.integrations || []) +
-          sectionLicense(data.license || {}) +
+          sectionLicense(data.license || {}, true) +
         '</div>' +
       '</div>';
     container.innerHTML = html;
+    bindDashboardNav(container);
+    bindProfileForm(container);
+    bindApiKeyForms(container);
+    bindLogout(container);
+  }
 
+  function renderCustomerDashboardUI(container, data) {
+    var p = data.profile;
+    var html =
+      '<div class="pdx-account-dash pdx-account-dash--customer">' +
+        '<div class="pdx-account-nav">' +
+          navBtn('profile', 'Profile', true) +
+          navBtn('purchases', 'Purchases') +
+          navBtn('invoices', 'Invoices / Payments') +
+          navBtn('subscription', 'Subscription') +
+        '</div>' +
+        '<div class="pdx-ph-body" style="flex:1;overflow-y:auto">' +
+          sectionProfile(p) +
+          sectionPurchases(data.purchases || []) +
+          sectionInvoices(data.orders || []) +
+          sectionCustomerSubscription(data.subscription || {}) +
+        '</div>' +
+      '</div>';
+    container.innerHTML = html;
+    bindDashboardNav(container);
+    bindProfileForm(container);
+    bindInvoiceActions(container);
+    bindLogout(container);
+  }
+
+  function bindDashboardNav(container) {
     container.querySelectorAll('.pdx-account-nav-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         container.querySelectorAll('.pdx-account-nav-btn').forEach(function (b) { b.classList.remove('is-active'); });
@@ -678,10 +716,6 @@
         if (sec) sec.classList.add('is-active');
       });
     });
-
-    bindProfileForm(container);
-    bindApiKeyForms(container);
-    bindLogout(container);
   }
 
   function navBtn(id, label, active) {
@@ -752,13 +786,132 @@
     return html + '</div></div>';
   }
 
-  function sectionLicense(lic) {
+  function sectionLicense(lic, isAdmin) {
     return '<div id="pdx-acc-license" class="pdx-account-section">' +
       '<div class="pdx-license-placeholder">' +
         '<strong>License & Subscription</strong>' +
         'Plan: ' + escHtml(lic.plan || 'free') + ' · Status: ' + escHtml(lic.status || 'inactive') + '<br><br>' +
-        'Subscription management and license keys will be available here. Connect your billing plan to unlock premium modules across the platform.' +
+        (isAdmin
+          ? 'Subscription management and license keys will be available here. Connect your billing plan to unlock premium modules across the platform.'
+          : 'Your subscription and license status is shown in the Subscription tab.') +
       '</div></div>';
+  }
+
+  function sectionPurchases(items) {
+    var html = '<div id="pdx-acc-purchases" class="pdx-account-section"><div class="pdx-account-card"><div class="pdx-account-card-title">My Purchases</div>';
+    if (!items.length) {
+      html += '<p class="pdx-account-empty">No active purchases yet. Premium modules unlock after payment.</p>';
+    } else {
+      html += '<div class="pdx-order-list">';
+      items.forEach(function (item) {
+        html += '<div class="pdx-order-row">' +
+          '<div class="pdx-order-row-main">' +
+            '<div class="pdx-order-product">' + escHtml(item.label || item.module_id) + '</div>' +
+            '<div class="pdx-order-meta">Purchased: ' + escHtml(formatDate(item.purchased_at)) + '</div>' +
+          '</div>' +
+          '<span class="pdx-account-status pdx-account-status--verified">Active</span>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
+    return html + '</div></div>';
+  }
+
+  function sectionInvoices(orders) {
+    var html = '<div id="pdx-acc-invoices" class="pdx-account-section"><div class="pdx-account-card"><div class="pdx-account-card-title">Invoices / Payments</div>';
+    if (!orders.length) {
+      html += '<p class="pdx-account-empty">No payment records yet.</p>';
+    } else {
+      html += '<div class="pdx-invoice-table-wrap"><table class="pdx-invoice-table"><thead><tr>' +
+        '<th>Order</th><th>Date</th><th>Product</th><th>Amount</th><th>Status</th><th></th>' +
+        '</tr></thead><tbody>';
+      orders.forEach(function (o) {
+        html += '<tr data-order-ref="' + escHtml(o.order_id) + '">' +
+          '<td>' + escHtml(o.order_id) + '</td>' +
+          '<td>' + escHtml(formatDate(o.paid_at)) + '</td>' +
+          '<td>' + escHtml(o.product) + '</td>' +
+          '<td>' + escHtml(o.currency + ' ' + Number(o.amount || 0).toFixed(2)) + '</td>' +
+          '<td><span class="pdx-pay-status pdx-pay-status--' + escHtml(String(o.payment_status || '').toLowerCase()) + '">' + escHtml(o.payment_status) + '</span></td>' +
+          '<td class="pdx-invoice-actions">' +
+            '<button type="button" class="pdx-account-btn pdx-account-btn--ghost pdx-view-order">Details</button>' +
+            (o.invoice_available ? ' <button type="button" class="pdx-account-btn pdx-download-invoice">Invoice</button>' : '') +
+          '</td>' +
+        '</tr>' +
+        '<tr class="pdx-order-detail-row" hidden><td colspan="6"><div class="pdx-order-detail"></div></td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    return html + '</div></div>';
+  }
+
+  function sectionCustomerSubscription(sub) {
+    var modules = sub.active_modules || [];
+    var html = '<div id="pdx-acc-subscription" class="pdx-account-section"><div class="pdx-account-card">' +
+      '<div class="pdx-account-card-title">Subscription & License Status</div>' +
+      '<div class="pdx-sub-summary">' +
+        '<div class="pdx-profile-row"><span class="pdx-profile-label">Plan</span><span class="pdx-profile-value">' + escHtml(sub.plan || 'free') + '</span></div>' +
+        '<div class="pdx-profile-row"><span class="pdx-profile-label">Status</span><span class="pdx-profile-value">' + escHtml(sub.status || 'inactive') + '</span></div>' +
+        (sub.renewal_at ? '<div class="pdx-profile-row"><span class="pdx-profile-label">Renewal</span><span class="pdx-profile-value">' + escHtml(formatDate(sub.renewal_at)) + '</span></div>' : '') +
+      '</div>';
+    if (modules.length) {
+      html += '<div class="pdx-account-card-title" style="margin-top:16px">Licensed Modules</div><div class="pdx-order-list">';
+      modules.forEach(function (m) {
+        html += '<div class="pdx-order-row"><div class="pdx-order-product">' + escHtml(m.label || m.module_id) + '</div><span class="pdx-account-status pdx-account-status--verified">Licensed</span></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<p class="pdx-account-empty">No active subscription or license modules. Purchase a module to unlock premium features.</p>';
+    }
+    return html + '</div></div>';
+  }
+
+  function formatDate(value) {
+    if (!value) return '—';
+    var d = new Date(value);
+    if (isNaN(d.getTime())) return String(value);
+    return d.toLocaleString();
+  }
+
+  function bindInvoiceActions(container) {
+    container.querySelectorAll('.pdx-invoice-table tbody tr[data-order-ref]').forEach(function (row) {
+      var ref = row.dataset.orderRef;
+      var detailRow = row.nextElementSibling;
+      var viewBtn = row.querySelector('.pdx-view-order');
+      var dlBtn = row.querySelector('.pdx-download-invoice');
+      if (viewBtn && detailRow) {
+        viewBtn.addEventListener('click', function () {
+          var open = !detailRow.hidden;
+          container.querySelectorAll('.pdx-order-detail-row').forEach(function (r) { r.hidden = true; });
+          if (open) return;
+          var order = (dashboardData && dashboardData.orders || []).find(function (o) { return o.order_id === ref; });
+          if (!order) return;
+          detailRow.querySelector('.pdx-order-detail').innerHTML =
+            '<strong>Transaction ID:</strong> ' + escHtml(order.transaction_id || '—') + '<br>' +
+            '<strong>Access status:</strong> ' + escHtml(order.access_status || '—') + '<br>' +
+            (order.expires_at ? '<strong>Expires:</strong> ' + escHtml(formatDate(order.expires_at)) + '<br>' : '');
+          detailRow.hidden = false;
+        });
+      }
+      if (dlBtn) {
+        dlBtn.addEventListener('click', function () {
+          apiFetch('GET', '/account/invoice/' + encodeURIComponent(ref)).then(function (data) {
+            if (!data || !data.success || !data.html) {
+              notify((data && data.message) || 'Invoice unavailable.', 'warn');
+              return;
+            }
+            var blob = new Blob([data.html], { type: 'text/html' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = data.filename || 'invoice.html';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+          });
+        });
+      }
+    });
   }
 
   function bindProfileForm(container) {

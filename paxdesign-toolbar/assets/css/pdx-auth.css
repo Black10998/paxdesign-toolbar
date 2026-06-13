@@ -865,3 +865,115 @@ body.admin-bar #pdx-auth-bar:not(.pdx-auth-bar--header) {
   line-height: 1.5;
   margin-bottom: 20px;
 }
+
+/* Customer account — purchases, invoices, subscription */
+.pdx-account-empty {
+  font-size: 13px;
+  color: #8b8b8b;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.pdx-order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pdx-order-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pdx-order-row:last-child {
+  border-bottom: none;
+}
+
+.pdx-order-product {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.pdx-order-meta {
+  font-size: 11px;
+  color: #777;
+  margin-top: 2px;
+}
+
+.pdx-invoice-table-wrap {
+  overflow-x: auto;
+}
+
+.pdx-invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.pdx-invoice-table th,
+.pdx-invoice-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.pdx-invoice-table th {
+  color: #888;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
+.pdx-invoice-actions {
+  white-space: nowrap;
+}
+
+.pdx-pay-status {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.pdx-pay-status--paid {
+  background: rgba(255, 224, 166, 0.12);
+  color: #ffe0a6;
+}
+
+.pdx-pay-status--pending {
+  background: rgba(126, 126, 126, 0.15);
+  color: #aaa;
+}
+
+.pdx-pay-status--failed,
+.pdx-pay-status--refunded {
+  background: rgba(85, 85, 85, 0.2);
+  color: #999;
+}
+
+.pdx-order-detail {
+  font-size: 12px;
+  color: #bbb;
+  line-height: 1.6;
+  padding: 8px 0;
+}
+
+.pdx-sub-summary {
+  margin-top: 4px;
+}
+
+@media (max-width: 680px) {
+  .pdx-invoice-table th:nth-child(2),
+  .pdx-invoice-table td:nth-child(2) {
+    display: none;
+  }
+}
