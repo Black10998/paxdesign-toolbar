@@ -49,7 +49,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
   z-index: 99990;
   display: flex;
   align-items: center;
-  background: var(--pdx-bg);
+  background: rgba(12, 12, 12, 0.96);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--pdx-border);
 
   /* Mobile layout — horizontal bar */
@@ -57,12 +58,12 @@ body.pdx-no-scroll { overflow: hidden !important; }
   left: 0;
   right: 0;
   width: 100%;
-  height: var(--pdx-dock-h, 48px);
+  height: var(--pdx-dock-h, 56px);
   flex-direction: row;
-  justify-content: center;
+  justify-content: flex-start;
   flex-wrap: nowrap;
-  gap: 0;
-  padding: 0 max(8px, env(safe-area-inset-left, 8px));
+  gap: 6px;
+  padding: 4px max(10px, env(safe-area-inset-left, 10px));
   border-radius: 0;
   border-top: none;
   border-left: none;
@@ -72,6 +73,8 @@ body.pdx-no-scroll { overflow: hidden !important; }
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
 }
 #pdx-dock::-webkit-scrollbar { display: none; }
 
@@ -81,45 +84,66 @@ body.pdx-no-scroll { overflow: hidden !important; }
   #pdx-dock {
     /* Reset mobile geometry */
     top: 50%;
-    left: auto;
+    left: 14px;
     right: auto;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    /* Desktop pill */
+    width: min(230px, calc(100vw - 32px));
+    max-height: calc(100vh - 28px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* Desktop SaaS rail */
     transform: translateY(-50%);
     flex-direction: column;
     justify-content: flex-start;
     flex-wrap: nowrap;
-    gap: 2px;
-    border-radius: var(--pdx-r-lg);
-    padding: 6px 5px;
+    gap: 6px;
+    border-radius: 16px;
+    padding: 10px 8px;
     border: 1px solid var(--pdx-border);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    scrollbar-width: thin;
+    overscroll-behavior: contain;
   }
-  #pdx-root[data-position="left"]  #pdx-dock { left: 12px; }
-  #pdx-root[data-position="right"] #pdx-dock { right: 12px; }
 }
 
 /* ─── Dock buttons ───────────────────────────────────────── */
 .pdx-btn {
   position: relative;
-  width: var(--pdx-btn);
-  height: var(--pdx-btn);
+  width: auto;
+  min-width: 68px;
+  min-height: 44px;
+  padding: 6px 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--pdx-r-sm);
+  gap: 3px;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid transparent;
+  border-radius: 10px;
   color: var(--pdx-lo);
   cursor: pointer;
-  transition: background var(--pdx-ease), color var(--pdx-ease);
+  transition: background var(--pdx-ease), color var(--pdx-ease), border-color var(--pdx-ease), transform var(--pdx-ease);
   outline: none;
   flex-shrink: 0;
 }
-.pdx-btn:hover         { background: transparent; color: var(--pdx-hi); }
+.pdx-btn:hover         { background: rgba(255, 255, 255, 0.06); color: var(--pdx-hi); border-color: rgba(255, 255, 255, 0.12); }
 .pdx-btn:focus-visible { outline: 2px solid var(--pdx-accent); outline-offset: 1px; }
-.pdx-btn.is-active     { background: transparent; color: var(--pdx-hi); }
+.pdx-btn.is-active     { background: rgba(255, 255, 255, 0.08); color: var(--pdx-hi); border-color: rgba(255, 224, 166, 0.25); }
+.pdx-dock-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+.pdx-dock-btn-label {
+  font: 600 10px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  color: inherit;
+  max-width: 74px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* Mobile default: bottom edge indicator */
 .pdx-btn.is-active::before {
   content: '';
@@ -135,18 +159,32 @@ body.pdx-no-scroll { overflow: hidden !important; }
 }
 /* Desktop: left/right edge indicator */
 @media (min-width: var(--pdx-mobile-min, 681px)) {
+  .pdx-btn {
+    width: 100%;
+    min-height: 42px;
+    padding: 8px 10px;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    flex-direction: row;
+    border-radius: 9px;
+  }
+  .pdx-dock-btn-icon {
+    width: 16px;
+    height: 16px;
+  }
+  .pdx-dock-btn-label {
+    font-size: 12px;
+    max-width: none;
+  }
   .pdx-btn.is-active::before {
-    left: -5px;
+    left: -8px;
     bottom: auto;
     top: 50%;
     transform: translateY(-50%);
-    width: 2px;
-    height: 16px;
+    width: 3px;
+    height: 20px;
     border-radius: 2px;
-  }
-  #pdx-root[data-position="right"] .pdx-btn.is-active::before {
-    left: auto;
-    right: -5px;
   }
 }
 .pdx-btn svg {
@@ -166,23 +204,23 @@ body.pdx-no-scroll { overflow: hidden !important; }
 }
 #pdx-root[data-position="left"]  .pdx-btn::after { left: calc(100% + 10px); }
 #pdx-root[data-position="right"] .pdx-btn::after { right: calc(100% + 10px); left: auto; }
-.pdx-btn:hover::after { opacity: 1; }
+.pdx-btn:hover::after { opacity: 0; }
 
 /* Mobile default: vertical divider between button groups */
 .pdx-sep {
   display: block;
   width: 1px;
-  height: 18px;
+  height: 28px;
   background: var(--pdx-border);
-  margin: 0 4px;
+  margin: 0 2px;
   flex-shrink: 0;
 }
 /* Desktop: horizontal divider */
 @media (min-width: var(--pdx-mobile-min, 681px)) {
   .pdx-sep {
-    width: 18px;
+    width: calc(100% - 4px);
     height: 1px;
-    margin: 3px 0;
+    margin: 2px auto;
   }
 }
 

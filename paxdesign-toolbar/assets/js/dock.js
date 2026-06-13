@@ -210,7 +210,10 @@
       if (typeof win.pdxModuleIcon !== 'function') return;
       dock.querySelectorAll('.pdx-btn[data-module]').forEach(function (btn) {
         var mid = normalizeModuleId(btn.dataset.module || '');
-        btn.innerHTML = win.pdxModuleIcon(mid);
+        var label = btn.getAttribute('data-label') || btn.getAttribute('data-tip') || mid;
+        btn.innerHTML =
+          '<span class="pdx-dock-btn-icon">' + win.pdxModuleIcon(mid) + '</span>' +
+          '<span class="pdx-dock-btn-label">' + escHtml(label) + '</span>';
         btn.className = 'pdx-btn pdx-btn--mod-' + mid + ' pdx-btn--' + mid;
         btn.setAttribute('data-module', mid);
         btn.setAttribute('type', 'button');

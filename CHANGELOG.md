@@ -1,5 +1,18 @@
 ﻿# Changelog
 
+## 9.0.1 — 2026-06-13
+
+**Navigation and authentication UI refinement release**
+
+- Redesigned desktop module navigation into a clean, vertical left-side SaaS-style rail with consistent icon/label alignment and smoother hover/active states.
+- Improved mobile navigation behavior under the header with cleaner horizontal spacing, better button readability, and smooth scrolling.
+- Kept all modules visible when logged out; protected modules now continue to trigger auth flow on click and return users to the requested module after login.
+- Refined top-right login/account button with more premium spacing, typography, gradients, and hover/focus interaction polish.
+- Cleaned login/register screen visuals by reducing texture/noise and improving hierarchy/readability while preserving the core provided design language.
+- Locked frontend dock position to left-side desktop layout and under-header mobile nav for consistent UX.
+
+**Install:** `releases/paxdesign-toolbar-9.0.1.zip` — tag `v9.0.1`
+
 ## 9.0.0 — 2026-06-13
 
 **Enterprise authentication, account dashboard, and UI polish**

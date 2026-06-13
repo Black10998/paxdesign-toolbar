@@ -196,13 +196,13 @@ class PDX_Frontend {
 			'contact'          => $this->settings->contact_url(),
 			'ctaPrimary'       => esc_html( $this->settings->get( 'cta_primary_label', 'Start a project' ) ),
 			'ctaSecondary'     => esc_html( $this->settings->get( 'cta_secondary_label', 'Learn more' ) ),
-			'position'         => esc_attr( $this->settings->get( 'dock_position', 'left' ) ),
+			'position'         => 'left',
 			'theme'            => esc_attr( $this->settings->get( 'dock_theme', 'dark' ) ),
 			'size'             => esc_attr( $this->settings->get( 'dock_size', 'default' ) ),
 			'accentColor'      => esc_attr( $this->settings->get( 'accent_color', '#ffffff' ) ),
 			'mobileEnabled'      => (bool)   $this->settings->get( 'mobile_enabled',       true ),
 			'mobileBreakpoint'   => (int)    $this->settings->get( 'mobile_breakpoint',    680 ),
-			'mobileDockPosition' => (string) $this->settings->get( 'mobile_dock_position', 'under-header' ),
+			'mobileDockPosition' => 'under-header',
 			'mobileDockHeight'   => (int)    $this->settings->get( 'mobile_dock_height',   48 ),
 			'mobilePanelHeight'  => (int)    $this->settings->get( 'mobile_panel_height',  90 ),
 			'mobileIconSize'     => (int)    $this->settings->get( 'mobile_icon_size',     0 ),
@@ -231,10 +231,10 @@ class PDX_Frontend {
 	public function render(): void {
 		if ( ! $this->settings->should_render() ) return;
 
-		$position      = esc_attr( $this->settings->get( 'dock_position',      'left' ) );
+		$position      = 'left';
 		$theme         = esc_attr( $this->settings->get( 'dock_theme',          'dark' ) );
 		$size          = esc_attr( $this->settings->get( 'dock_size',           'default' ) );
-		$mobile_dock   = esc_attr( $this->settings->get( 'mobile_dock_position','under-header' ) );
+		$mobile_dock   = 'under-header';
 		?>
 		<div id="pdx-root"
 			 data-position="<?php echo $position; ?>"
@@ -267,10 +267,11 @@ class PDX_Frontend {
 			$prev_cat = $mod['category'];
 
 			printf(
-				'<button class="pdx-btn pdx-btn--mod-%1$s" data-module="%1$s" data-tip="%2$s" type="button" aria-label="%2$s" aria-expanded="false">%3$s</button>',
+				'<button class="pdx-btn pdx-btn--mod-%1$s" data-module="%1$s" data-tip="%2$s" data-label="%2$s" type="button" aria-label="%2$s" aria-expanded="false"><span class="pdx-dock-btn-icon">%3$s</span><span class="pdx-dock-btn-label">%4$s</span></button>',
 				esc_attr( $id ),
 				esc_attr( $mod['label'] ),
-				PDX_Icons::module_html( $id )
+				PDX_Icons::module_html( $id ),
+				esc_html( $mod['label'] )
 			);
 		}
 	}
