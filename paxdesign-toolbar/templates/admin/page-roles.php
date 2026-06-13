@@ -6,7 +6,7 @@ include __DIR__ . '/partials/header.php';
 ?>
 <div class="pdx-page-header">
   <h1>Roles & Permissions</h1>
-  <p>Control which visitors and user roles see the dock.</p>
+  <p>Visibility toggles are deprecated in v9.1. Navigation is always rendered; module access is enforced by authentication and licensing.</p>
 </div>
 
 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="pdx-form">
@@ -15,30 +15,9 @@ include __DIR__ . '/partials/header.php';
   <input type="hidden" name="pdx_tab" value="roles">
 
   <section class="pdx-section">
-    <header class="pdx-section__head"><h2>Visibility</h2></header>
-    <div class="pdx-section__body">
-      <div class="pdx-settings-stack">
-        <?php
-        $name        = 'hide_for_logged_out';
-        $label       = 'Hide for logged-out visitors';
-        $description = '';
-        $checked     = $s['hide_for_logged_out'];
-        include __DIR__ . '/partials/settings-toggle.php';
-
-        $name        = 'hide_for_logged_in';
-        $label       = 'Hide for logged-in users';
-        $description = '';
-        $checked     = $s['hide_for_logged_in'];
-        include __DIR__ . '/partials/settings-toggle.php';
-        ?>
-      </div>
-    </div>
-  </section>
-
-  <section class="pdx-section">
     <header class="pdx-section__head"><h2>Role Access</h2></header>
     <div class="pdx-section__body">
-      <p class="pdx-field-hint" style="margin:0 0 var(--pdx-space-4)">Select which roles can see the dock. Select "All visitors" to show to everyone regardless of role.</p>
+      <p class="pdx-field-hint" style="margin:0 0 var(--pdx-space-4)">This panel is retained for backwards compatibility. The dock now renders for all visitors so authentication gates remain reachable.</p>
       <div class="pdx-role-grid">
         <label class="pdx-role-card <?php echo in_array( 'all', $show_to, true ) ? 'is-selected' : ''; ?>">
           <input type="checkbox" name="show_to_roles[]" value="all" <?php checked( in_array( 'all', $show_to, true ) ); ?>>

@@ -172,6 +172,59 @@
       team: '#ffffff', connectors: '#8b8b8b', create: '#7e7e7e', workspace: '#555555'
     };
 
+    function navModulesFromConfig() {
+      var source = (C.modules && Object.keys(C.modules).length) ? C.modules : (C.allModules || {});
+      var list = [];
+      Object.keys(source || {}).forEach(function(id) {
+        var mod = source[id];
+        if (!mod || mod.enabled === false) return;
+        list.push(Object.assign({ id: id }, mod));
+      });
+      list.sort(function(a, b) {
+        var ao = typeof a.order === 'number' ? a.order : 999;
+        var bo = typeof b.order === 'number' ? b.order : 999;
+        if (ao !== bo) return ao - bo;
+        return String(a.label || a.id).localeCompare(String(b.label || b.id));
+      });
+      return list;
+    }
+
+    function rebuildDockNavigation(force) {
+      if (!dock) return;
+      var modules = navModulesFromConfig();
+      if (!modules.length) return;
+
+      if (!force) {
+        var existing = dock.querySelectorAll('.pdx-btn[data-module]');
+        if (existing.length >= modules.length) return;
+      }
+
+      dock.innerHTML = '';
+      var prevCat = null;
+      modules.forEach(function(mod) {
+        if (prevCat !== null && prevCat !== mod.category) {
+          var sep = document.createElement('span');
+          sep.className = 'pdx-sep';
+          sep.setAttribute('aria-hidden', 'true');
+          dock.appendChild(sep);
+        }
+        prevCat = mod.category;
+
+        var btn = document.createElement('button');
+        btn.className = 'pdx-btn pdx-btn--mod-' + mod.id;
+        btn.setAttribute('data-module', mod.id);
+        btn.setAttribute('data-tip', mod.label || mod.id);
+        btn.setAttribute('data-label', mod.label || mod.id);
+        btn.setAttribute('aria-label', mod.label || mod.id);
+        btn.setAttribute('aria-expanded', 'false');
+        btn.setAttribute('type', 'button');
+        btn.innerHTML =
+          '<span class="pdx-dock-btn-icon"></span>' +
+          '<span class="pdx-dock-btn-label">' + escHtml(mod.label || mod.id) + '</span>';
+        dock.appendChild(btn);
+      });
+    }
+
     function normalizeModuleId(moduleId) {
       var id = ((moduleId && String(moduleId)) || '').toLowerCase();
       if (PDX_MODULE_ALIASES[id]) id = PDX_MODULE_ALIASES[id];
@@ -220,7 +273,28 @@
       });
     }
 
+    function enforceDockVisibility() {
+      if (!dock) return;
+      dock.style.setProperty('display', 'flex', 'important');
+      dock.style.setProperty('visibility', 'visible', 'important');
+      dock.style.removeProperty('opacity');
+    }
+
+    rebuildDockNavigation(true);
     applyDockModuleIcons();
+    enforceDockVisibility();
+
+    // Guard against theme/plugin DOM rewrites that remove dock items.
+    if (window.MutationObserver) {
+      var dockObserver = new MutationObserver(function () {
+        if (!dock.querySelector('.pdx-btn[data-module]')) {
+          rebuildDockNavigation(true);
+          applyDockModuleIcons();
+        }
+        enforceDockVisibility();
+      });
+      dockObserver.observe(dock, { childList: true, attributes: true, attributeFilter: ['class', 'style'] });
+    }
 
     /* ── Notification container ───────────────────────────── */
     var notifContainer = document.createElement('div');
@@ -280,14 +354,18 @@
     function openPanel(moduleId) {
       var mid = normalizeModuleId(moduleId);
 
-      /* Access control — redirect to login/verify gate for protected modules */
-      if (mid !== 'account' && window.PDXAuth) {
-        if (window.PDXAuth.moduleRequiresAuth(mid) && !window.PDXAuth.isLoggedIn()) {
-          window.PDXAuth.openLogin(mid);
+      /* Access control — deterministic fallback even if auth bundle isn't ready */
+      var publicModules = Array.isArray(C.publicModules) ? C.publicModules : ['trust', 'create', 'workspace'];
+      var needsAuth = mid !== 'account' && publicModules.indexOf(mid) < 0;
+      if (needsAuth) {
+        var loggedIn = window.PDXAuth ? window.PDXAuth.isLoggedIn() : !!C.isLoggedIn;
+        if (!loggedIn) {
+          if (window.PDXAuth && window.PDXAuth.openLogin) {
+            window.PDXAuth.openLogin(mid);
+          } else {
+            showNotif('Please log in to access this module.', 'warn');
+          }
           return;
-        }
-        if (window.PDXAuth.moduleRequiresAuth(mid) && window.PDXAuth.isLoggedIn() && !window.PDXAuth.isVerified()) {
-          /* Allow panel open — renderPanel shows verify gate */
         }
       }
 
@@ -646,7 +724,7 @@
         return;
       }
 
-      var mod = (C.modules && C.modules[mid]) || null;
+      var mod = (C.modules && C.modules[mid]) || (C.allModules && C.allModules[mid]) || null;
       if (!mod) { panelInner.innerHTML = '<div class="pdx-empty">Module not found.</div>'; return; }
 
       // access comes from /pay/status — always live, never stale.
@@ -706,8 +784,30 @@
     }
 
     function renderAuthGateIfNeeded(mid, mod) {
-      if (!window.PDXAuth || !window.PDXAuth.moduleRequiresAuth(mid)) return false;
-      if (window.PDXAuth.canAccessModule(mid)) return false;
+      var publicModules = Array.isArray(C.publicModules) ? C.publicModules : ['trust', 'create', 'workspace'];
+      var requiresAuth = publicModules.indexOf(mid) < 0;
+      if (!requiresAuth) return false;
+
+      var loggedIn = window.PDXAuth ? window.PDXAuth.isLoggedIn() : !!C.isLoggedIn;
+      var verified = window.PDXAuth ? window.PDXAuth.isVerified() : (!!C.emailVerified || !!C.isAdmin);
+      if (loggedIn && verified) return false;
+
+      if (!window.PDXAuth) {
+        panelInner.innerHTML =
+          '<div class="pdx-ph pdx-ph--' + mid + '">' +
+            '<div class="pdx-ph-hd">' +
+              '<div class="pdx-ph-title"><span>' + escHtml(mod.label || mid) + '</span></div>' +
+            '</div>' +
+            '<div class="pdx-ph-body">' +
+              '<div class="pdx-auth-gate">' +
+                '<div class="pdx-auth-gate-title">Sign in required</div>' +
+                '<div class="pdx-auth-gate-desc">Please refresh the page and sign in to access this module.</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        return true;
+      }
+
       panelInner.innerHTML =
         '<div class="pdx-ph pdx-ph--' + mid + '">' +
           '<div class="pdx-ph-hd">' +

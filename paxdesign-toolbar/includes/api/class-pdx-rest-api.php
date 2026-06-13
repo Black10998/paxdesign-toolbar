@@ -1871,9 +1871,20 @@ class PDX_REST_API {
 		if ( $rl ) {
 			return $rl;
 		}
+
+		$password         = (string) $req->get_param( 'password' );
+		$password_confirm = (string) $req->get_param( 'password_confirm' );
+		if ( '' !== $password_confirm && ! hash_equals( $password, $password_confirm ) ) {
+			return new WP_REST_Response( [
+				'success' => false,
+				'error'   => 'password_mismatch',
+				'message' => 'Password and Confirm Password must match.',
+			], 400 );
+		}
+
 		$result = PDX_Auth::register(
 			sanitize_email( (string) $req->get_param( 'email' ) ),
-			(string) $req->get_param( 'password' ),
+			$password,
 			sanitize_text_field( (string) $req->get_param( 'name' ) )
 		);
 		return new WP_REST_Response( $result, $result['success'] ? 201 : 400 );

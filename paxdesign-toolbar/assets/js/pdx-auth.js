@@ -17,6 +17,7 @@
   var returnModule = null;
   var currentView = 'login';
   var dashboardData = null;
+  var authFieldUid = 0;
 
   var SVG_GRADIENT = '<defs><linearGradient id="pdx-gradient-stroke" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="black"></stop><stop offset="100%" stop-color="white"></stop></linearGradient></defs>';
   var SVG_EMAIL = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">' + SVG_GRADIENT + '<g stroke="url(#pdx-gradient-stroke)" fill="none" stroke-width="1"><path d="M21.6365 5H3L12.2275 12.3636L21.6365 5Z"></path><path d="M16.5 11.5L22.5 6.5V17L16.5 11.5Z"></path><path d="M8 11.5L2 6.5V17L8 11.5Z"></path><path d="M9.5 12.5L2.81805 18.5002H21.6362L15 12.5L12 15L9.5 12.5Z"></path></g></svg>';
@@ -162,26 +163,27 @@
     html += '<div class="pdx-auth-msg-slot"></div>';
 
     if (currentView === 'login') {
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email');
-      html += fieldInput('password', 'password', 'Password', SVG_LOCK);
+      html += fieldInput('email', 'email', 'Email Address', SVG_EMAIL, 'email');
+      html += fieldInput('password', 'password', 'Password', SVG_LOCK, 'current-password');
       html += submitBtn('Login');
       html += links([
         { view: 'forgot', label: 'Forgot password?' },
         { view: 'register', label: 'Create account' },
       ]);
     } else if (currentView === 'register') {
-      html += fieldInput('name', 'text', 'Full name', SVG_USER.replace('aria-hidden="true"', ''));
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email');
-      html += fieldInput('password', 'password', 'Password (min 8 chars)', SVG_LOCK);
+      html += fieldInput('name', 'text', 'Full Name', SVG_USER.replace('aria-hidden="true"', ''), 'name');
+      html += fieldInput('email', 'email', 'Email Address', SVG_EMAIL, 'email');
+      html += fieldInput('password', 'password', 'Password (minimum 8 characters)', SVG_LOCK, 'new-password');
+      html += fieldInput('password_confirm', 'password', 'Confirm Password', SVG_LOCK, 'new-password');
       html += submitBtn('Register');
       html += links([{ view: 'login', label: 'Already have an account? Log in' }]);
     } else if (currentView === 'forgot') {
-      html += fieldInput('email', 'email', 'Email', SVG_EMAIL, 'email');
+      html += fieldInput('email', 'email', 'Email Address', SVG_EMAIL, 'email');
       html += submitBtn('Send Reset Link');
       html += links([{ view: 'login', label: 'Back to login' }]);
     } else if (currentView === 'reset') {
-      html += fieldInput('password', 'password', 'New password', SVG_LOCK);
-      html += fieldInput('password2', 'password', 'Confirm password', SVG_LOCK);
+      html += fieldInput('password', 'password', 'New Password', SVG_LOCK, 'new-password');
+      html += fieldInput('password2', 'password', 'Confirm Password', SVG_LOCK, 'new-password');
       html += submitBtn('Reset Password');
       html += links([{ view: 'login', label: 'Back to login' }]);
     }
@@ -199,10 +201,15 @@
     });
   }
 
-  function fieldInput(name, type, placeholder, icon, autocomplete) {
-    return '<div class="pdx-auth-input-container">' + icon +
-      '<input class="pdx-auth-input" name="' + name + '" type="' + type + '" placeholder="' + escHtml(placeholder) + '"' +
-      (autocomplete ? ' autocomplete="' + autocomplete + '"' : '') + ' />' +
+  function fieldInput(name, type, label, icon, autocomplete) {
+    authFieldUid += 1;
+    var id = 'pdx-auth-field-' + authFieldUid;
+    return '<div class="pdx-auth-field">' +
+      '<label class="pdx-auth-label" for="' + id + '">' + escHtml(label) + '</label>' +
+      '<div class="pdx-auth-input-container">' + icon +
+        '<input id="' + id + '" class="pdx-auth-input" name="' + name + '" type="' + type + '" placeholder="' + escHtml(label) + '"' +
+        (autocomplete ? ' autocomplete="' + autocomplete + '"' : '') + ' />' +
+      '</div>' +
     '</div>';
   }
 
@@ -253,10 +260,20 @@
         });
       });
     } else if (currentView === 'register') {
+      var name = String(fd.get('name') || '').trim();
+      var email = String(fd.get('email') || '').trim();
+      var password = String(fd.get('password') || '');
+      var passwordConfirm = String(fd.get('password_confirm') || '');
+      if (!name) { showFormMessage('Full Name is required.', 'error'); return; }
+      if (!email) { showFormMessage('Email Address is required.', 'error'); return; }
+      if (password.length < 8) { showFormMessage('Password must be at least 8 characters.', 'error'); return; }
+      if (password !== passwordConfirm) { showFormMessage('Password and Confirm Password must match.', 'error'); return; }
+
       apiFetch('POST', '/auth/register', {
-        name: fd.get('name'),
-        email: fd.get('email'),
-        password: fd.get('password'),
+        name: name,
+        email: email,
+        password: password,
+        password_confirm: passwordConfirm,
       }).then(function (data) {
         if (!data.success) {
           showFormMessage(data.message || 'Registration failed.', 'error');
